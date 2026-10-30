@@ -369,6 +369,30 @@ th {
   color: var(--superficie);
   margin-top: 1px;
 }
+.aviso > div {
+  flex: 1;
+  min-width: 0;
+}
+.aviso-cerrar-formulario {
+  display: contents;
+}
+.aviso-cerrar {
+  flex: none;
+  margin: -4px -6px -4px 4px;
+  width: 28px;
+  height: 28px;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--tinta-suave);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+.aviso-cerrar:hover {
+  background: color-mix(in srgb, var(--tinta) 10%, transparent);
+  color: var(--tinta);
+}
 .aviso-logro {
   background: var(--bien-suave);
   border-color: color-mix(in srgb, var(--bien) 30%, transparent);

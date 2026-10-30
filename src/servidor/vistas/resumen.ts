@@ -1,18 +1,26 @@
 import { html } from "hono/html";
 import { formatoFecha, nombreMes } from "../../dominio/fechas.ts";
 import type { Contexto } from "../../servicios/situacion.ts";
-import { aviso, cifra, eur, eurR, grafico, vacio, type Html } from "./comun.ts";
+import { aviso, cifra, claveAviso, eur, eurR, grafico, vacio, type Html } from "./comun.ts";
 import { listaAvisos, tarjetaEtapa } from "./escalera.ts";
 
 interface DatosResumen {
   ctx: Contexto;
   cierrePendiente: string | null;
+  ocultos: ReadonlySet<string>;
   proximos: { nombre: string; fecha: string; importe: number }[];
   cierres: { etiqueta: string; plan: number; real: number | null; patrimonio: number }[];
   porCategoria: [string, number][];
 }
 
-export function vistaResumen({ ctx, cierrePendiente, proximos, cierres, porCategoria }: DatosResumen): Html {
+function avisoCierre(mes: string | null, ocultos: ReadonlySet<string>): Html | string {
+  if (!mes) return "";
+  const texto = `Aún no has cerrado ${nombreMes(mes)}. Actualizar los saldos una vez al mes permite comparar lo que ahorras de verdad con lo previsto.`;
+  const clave = claveAviso(texto);
+  return ocultos.has(clave) ? "" : aviso("info", texto, { ruta: `/cierre?mes=${mes}`, texto: "Cerrar el mes" }, { clave });
+}
+
+export function vistaResumen({ ctx, cierrePendiente, ocultos, proximos, cierres, porCategoria }: DatosResumen): Html {
   const r = ctx.resultado;
   const p = r.presupuesto;
   const sinDatos = ctx.recurrentes.length === 0 && ctx.cuentas.length === 0;
@@ -31,13 +39,7 @@ export function vistaResumen({ ctx, cierrePendiente, proximos, cierres, porCateg
   }
 
   return html`
-    ${cierrePendiente
-      ? aviso("info", html`Aún no has cerrado ${nombreMes(cierrePendiente)}. Actualizar los saldos una vez al mes permite comparar lo que ahorras de verdad con lo previsto.`, {
-          ruta: `/cierre?mes=${cierrePendiente}`,
-          texto: "Cerrar el mes",
-        })
-      : ""}
-    ${listaAvisos(r)}
+    ${avisoCierre(cierrePendiente, ocultos)} ${listaAvisos(r, ocultos)}
 
     <div class="cifras">
       ${cifra("Ingresos al mes", eurR(p.ingresos))} ${cifra("Gastos esenciales", eurR(p.esenciales), "con préstamos y la parte mensual de los anuales")}

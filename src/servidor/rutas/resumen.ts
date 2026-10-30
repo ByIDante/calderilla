@@ -3,9 +3,21 @@ import { mesDe, nombreMes, nombreMesCorto, sumarDias, sumarMesesAMes } from "../
 import { importeEn, ocurrencias } from "../../dominio/recurrencia.ts";
 import { contexto } from "../../servicios/situacion.ts";
 import { bd, render, type Estado } from "../app.ts";
+import { Formulario, redirigir } from "../formulario.ts";
 import { vistaResumen } from "../vistas/resumen.ts";
 
 export function rutasResumen(app: Hono, estado: Estado) {
+  app.post("/avisos/ocultar", async (c) => {
+    const clave = (await Formulario.de(c)).texto("clave");
+    if (/^[0-9a-f]{16}$/.test(clave)) {
+      const base = bd(estado);
+      base.ejecutar("INSERT OR REPLACE INTO avisos_ocultos (clave, ocultado) VALUES (?, ?)", clave, estado.hoy());
+      // Los cerrados hace más de medio año ya no hace falta recordarlos
+      base.ejecutar("DELETE FROM avisos_ocultos WHERE ocultado < ?", sumarDias(estado.hoy(), -180));
+    }
+    return redirigir(c, "/");
+  });
+
   app.get("/", (c) => {
     const base = bd(estado);
     const hoy = estado.hoy();
@@ -18,7 +30,11 @@ export function rutasResumen(app: Hono, estado: Estado) {
       )
       .reverse();
     const mesAnterior = sumarMesesAMes(mes, -1);
-    const cierrePendiente = ctx.cuentas.length > 0 && !base.uno("SELECT 1 FROM cierres_mes WHERE mes = ?", mesAnterior) ? mesAnterior : null;
+    // Solo se pide cerrar meses en los que ya usabas la app (desde el primer saldo apuntado)
+    const primerSaldo = base.uno<{ fecha: string | null }>("SELECT min(fecha) AS fecha FROM saldos")?.fecha ?? null;
+    const empezado = primerSaldo !== null && mesAnterior >= mesDe(primerSaldo);
+    const cierrePendiente = empezado && !base.uno("SELECT 1 FROM cierres_mes WHERE mes = ?", mesAnterior) ? mesAnterior : null;
+    const ocultos = new Set(base.todos<{ clave: string }>("SELECT clave FROM avisos_ocultos").map((f) => f.clave));
 
     const proximos = ctx.recurrentes
       .filter((r) => r.frecuencia !== "mensual" && r.tipo === "gasto")
@@ -38,6 +54,7 @@ export function rutasResumen(app: Hono, estado: Estado) {
       vistaResumen({
         ctx,
         cierrePendiente,
+        ocultos,
         proximos,
         cierres: cierres.map((cierre) => ({
           etiqueta: nombreMesCorto(cierre.mes),

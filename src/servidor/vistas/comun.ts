@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { html, raw } from "hono/html";
 import type { HtmlEscapedString } from "hono/utils/html";
 import { euros, eurosRedondos, importeEditable, porcentaje } from "../../dominio/dinero.ts";
@@ -37,10 +38,27 @@ const LOGO = raw(`<svg class="logo" viewBox="0 0 32 32" aria-hidden="true"><circ
 const ICONO: Record<Banda["nivel"], string> = { logro: "✓", info: "i", atencion: "!", error: "×" };
 const ETIQUETA: Record<Banda["nivel"], string> = { logro: "Bien", info: "Aviso", atencion: "Atención", error: "Error" };
 
-export function aviso(nivel: Banda["nivel"], contenido: string | Html, enlace?: Banda["enlace"]): Html {
+/** Identificador de un aviso a partir de su texto: si la situación cambia, el texto cambia y el aviso vuelve. */
+export function claveAviso(texto: string): string {
+  return createHash("sha1").update(texto).digest("hex").slice(0, 16);
+}
+
+/**
+ * Un aviso con su ✕. `cerrar: "local"` solo lo esconde hasta recargar (mensajes tras guardar, errores);
+ * con `{ clave }` se recuerda cerrado en los datos y no vuelve a salir en ningún ordenador.
+ */
+export function aviso(nivel: Banda["nivel"], contenido: string | Html, enlace?: Banda["enlace"], cerrar: "local" | { clave: string } = "local"): Html {
+  const boton =
+    cerrar === "local"
+      ? html`<button type="button" class="aviso-cerrar" data-cerrar-aviso aria-label="Cerrar aviso">✕</button>`
+      : html`<form method="post" action="/avisos/ocultar" class="aviso-cerrar-formulario">
+          <input type="hidden" name="clave" value="${cerrar.clave}" />
+          <button type="submit" class="aviso-cerrar" aria-label="Cerrar aviso" title="No volver a mostrar">✕</button>
+        </form>`;
   return html`<div class="aviso aviso-${nivel}" role="${nivel === "error" ? "alert" : "status"}">
     <span class="aviso-icono" aria-hidden="true">${ICONO[nivel]}</span><span class="sr">${ETIQUETA[nivel]}:</span>
     <div>${contenido}${enlace ? html` <a href="${enlace.ruta}">${enlace.texto}</a>` : ""}</div>
+    ${boton}
   </div>`;
 }
 

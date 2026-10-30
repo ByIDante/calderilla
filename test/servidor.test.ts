@@ -97,6 +97,7 @@ describe("recorrido básico", () => {
 
     const resumen = await (await pedir("/")).text();
     assert.match(resumen, /Tu escalera de inversión/);
+    assert.doesNotMatch(resumen, /Aún no has cerrado/, "no pide cerrar meses en los que aún no usabas la app");
     assert.match(resumen, /Colchón mínimo|Fondo de emergencia/);
   });
 

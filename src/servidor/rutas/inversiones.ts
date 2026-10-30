@@ -11,7 +11,7 @@ import { buscarCoingecko, buscarYahoo, type ResultadoBusqueda } from "../../prec
 import { bd, render, type Estado } from "../app.ts";
 import { Formulario, idDe, redirigir } from "../formulario.ts";
 import { botonAccion, campo, casilla, cifra, eur, eurR, grafico, pct, porque, selector, vacio, type Html } from "../vistas/comun.ts";
-import { listaAvisos, listaDesbloqueos, tarjetaEtapa } from "../vistas/escalera.ts";
+import { listaDesbloqueos, tarjetaEtapa } from "../vistas/escalera.ts";
 
 const TIPOS = Object.entries(NOMBRE_TIPO_ACTIVO) as [TipoActivo, string][];
 const RENTAS = Object.entries(NOMBRE_RENTA) as [Renta, string][];
@@ -72,7 +72,7 @@ export function rutasInversiones(app: Hono, estado: Estado) {
       estado,
       { titulo: "Inversiones", seccion: "inversiones" },
       html`
-        ${listaAvisos(r)} ${tarjetaEtapa(r)}
+        ${tarjetaEtapa(r)}
 
         <div class="cifras">
           ${cifra("Liquidez libre", eurR(r.liquidezLibre), "sin lo apartado para gastos anuales y metas")}

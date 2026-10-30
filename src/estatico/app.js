@@ -84,5 +84,10 @@ function preparar(raiz) {
 }
 
 document.addEventListener("change", () => actualizarDependientes(document));
+// ✕ de los avisos que solo se esconden hasta recargar
+document.addEventListener("click", (evento) => {
+  const boton = evento.target.closest?.("[data-cerrar-aviso]");
+  if (boton) boton.closest(".aviso")?.remove();
+});
 document.addEventListener("DOMContentLoaded", () => preparar(document));
 document.addEventListener("htmx:load", (evento) => preparar(evento.target));

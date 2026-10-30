@@ -1,6 +1,6 @@
 import { html } from "hono/html";
 import { ETAPAS, NOMBRE_ETAPA, type Resultado } from "../../reglas/tipos.ts";
-import { aviso, barra, eurR, porque, type Html } from "./comun.ts";
+import { aviso, barra, claveAviso, eurR, porque, type Html } from "./comun.ts";
 
 const CORTO: Record<(typeof ETAPAS)[number], string> = {
   deficit: "Cuadrar gastos",
@@ -66,6 +66,10 @@ export function listaDesbloqueos(r: Resultado): Html {
   </div>`;
 }
 
-export function listaAvisos(r: Resultado): Html {
-  return html`${r.avisos.map((a) => aviso(a.nivel, a.texto))}`;
+/** Avisos de la escalera, sin los que has cerrado. Cada uno se puede cerrar con su ✕. */
+export function listaAvisos(r: Resultado, ocultos: ReadonlySet<string>): Html {
+  return html`${r.avisos
+    .map((a) => ({ ...a, clave: claveAviso(a.texto) }))
+    .filter((a) => !ocultos.has(a.clave))
+    .map((a) => aviso(a.nivel, a.texto, undefined, { clave: a.clave }))}`;
 }
