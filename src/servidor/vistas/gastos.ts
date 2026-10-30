@@ -72,6 +72,10 @@ export function vistaLista(recurrentes: RecurrenteCompleto[], hoy: Fecha, mensua
       Los gastos que no son mensuales (seguros, IBI, ITV…) se reparten entre los meses anteriores a cada cargo: así el «al mes» refleja lo que deberías ir apartando.
       Cuando un gasto llega a su fecha de fin pasa solo a «Finalizados».
     </p>
+    <p class="apagado">
+      Lo que traspasas cada mes a tu cuenta de ahorro (Trade Republic, por ejemplo) o a un fondo <b>no es un gasto</b>: es ahorro. Apúntalo en
+      <a href="/cuentas#ahorro-automatico">Cuentas → Ahorro automático</a>.
+    </p>
     <section class="tarjeta">
       <h2>Ingresos</h2>
       ${ingresos.length ? tabla("Ingresos", ingresos, hoy, mensual, suma(ingresos)) : vacio("Sin ingresos apuntados.", html`<a href="/gastos/nuevo?tipo=ingreso">Apuntar la nómina</a>`)}

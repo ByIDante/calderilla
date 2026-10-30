@@ -2,6 +2,7 @@ import type { Hono } from "hono";
 import { html } from "hono/html";
 import { formatoFecha, mesDe, nombreMes, primerDia, ultimoDia } from "../../dominio/fechas.ts";
 import { NOMBRE_ETAPA } from "../../reglas/tipos.ts";
+import { leerAportaciones, totalMensual } from "../../servicios/aportaciones.ts";
 import { contexto } from "../../servicios/situacion.ts";
 import { bd, render, type Estado } from "../app.ts";
 import { Formulario, idDe, redirigir } from "../formulario.ts";
@@ -30,6 +31,7 @@ export function rutasOcio(app: Hono, estado: Estado) {
       ultimoDia(mes),
     );
     const categorias = base.todos<{ id: number; nombre: string; tipo: string }>("SELECT id, nombre, tipo FROM categorias WHERE archivada = 0 AND tipo != 'ingreso' ORDER BY tipo != 'ocio', nombre");
+    const automatico = totalMensual(leerAportaciones(base), mes);
     const proporcion = p.sobrante > 0 ? Math.round(((p.objetivoAhorro - p.cuotaLiberada) / Math.max(p.sobrante - p.cuotaLiberada, 1)) * 100) : 0;
 
     const filasCalculo: [string, number, string?][] = [
@@ -37,7 +39,7 @@ export function rutasOcio(app: Hono, estado: Estado) {
       ["− Gastos esenciales", -p.esenciales],
       ["− Gastos no esenciales", -p.noEsenciales],
       ["= Te sobra", p.sobrante],
-      [`− Ahorro de la etapa «${NOMBRE_ETAPA[ctx.resultado.etapa]}»`, -(p.objetivoAhorro - p.paraMetas), `un ${proporcion} % de lo que sobra${p.cuotaLiberada ? `, más la cuota liberada de ${eurR(p.cuotaLiberada)}` : ""}`],
+      [`− Ahorro de la etapa «${NOMBRE_ETAPA[ctx.resultado.etapa]}»`, -(p.objetivoAhorro - p.paraMetas), [`un ${proporcion} % de lo que sobra`, p.cuotaLiberada ? `más la cuota liberada de ${eurR(p.cuotaLiberada)}` : "", automatico ? `tu ahorro automático cubre ${eurR(automatico)}` : ""].filter(Boolean).join(", ")],
       ...(p.paraMetas ? [["− Para tus metas", -p.paraMetas] as [string, number]] : []),
       ["= Ocio previsto", p.ocioPlan],
       ...(p.correccion ? [["− Corrección por los cierres", -p.correccion, "ahorraste menos de lo previsto en 2 de los 3 últimos cierres"] as [string, number, string]] : []),
@@ -74,7 +76,7 @@ export function rutasOcio(app: Hono, estado: Estado) {
           </section>
           <section class="tarjeta">
             <h2>Cómo se calcula</h2>
-            <table>
+            <div class="tabla-contenedor"><table>
               <tbody>
                 ${filasCalculo.map(
                   ([texto, valor, nota]) => html`<tr>
@@ -83,7 +85,7 @@ export function rutasOcio(app: Hono, estado: Estado) {
                   </tr>`,
                 )}
               </tbody>
-            </table>
+            </table></div>
             ${porque(
               "Primero se cubren los gastos y el ahorro que pide tu etapa de la escalera; lo que queda es para disfrutarlo sin culpa. Al subir de etapa se ahorra una parte menor de lo que sobra, así que el ocio crece. Si en los cierres de mes ahorras menos de lo previsto, es que hay gastos sin apuntar: el ocio baja hasta que cuadre. De lo que no gastes, la mitad pasa al mes siguiente.",
             )}

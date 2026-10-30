@@ -45,6 +45,13 @@ export function tarjetaEtapa(r: Resultado, enlace?: { ruta: string; texto: strin
         : html`<p class="apagado">Apunta tus ingresos, gastos y saldos para que la regla pueda sugerirte algo.</p>`}
     </div>
     <p class="apagado pequeno">${r.siguiente}</p>
+    <details class="porque">
+      <summary>¿Y si un mes no puedo ahorrar lo previsto?</summary>
+      <p>
+        No pasa nada. La escalera mira tus saldos reales cada vez que los actualizas: el objetivo sigue igual y la fecha estimada se retrasa. No hace falta recuperarlo
+        al mes siguiente. Solo si en 2 de los 3 últimos cierres de mes ahorras menos de lo previsto, la app baja tu presupuesto de ocio hasta que cuadre.
+      </p>
+    </details>
   </section>`;
 }
 

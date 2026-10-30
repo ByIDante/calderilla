@@ -131,6 +131,17 @@ describe("recorrido básico", () => {
     const deuda = deudas(leerRecurrentes(estado.sync!.bd), "2026-09-30").reduce((suma, d) => suma + d.pendiente, 0);
     assert.ok(deuda > 0);
     assert.equal(cierre?.patrimonio, 120000 - deuda, "el préstamo del coche resta del patrimonio");
+  });
+
+  it("el ahorro automático no es un gasto y el cierre avisa si un mes no se hizo", async () => {
+    assert.equal((await pedir("/aportaciones", { metodo: "POST", cuerpo: { nombre: "Traspaso a Trade Republic", destino: "c:1", importe: "300", dia: "1", inicio: "2026-01-01" } })).status, 303);
+    const cuentas = await (await pedir("/cuentas")).text();
+    assert.match(cuentas, /Ahorro automático/);
+    assert.match(cuentas, /Traspaso a Trade Republic/);
+    assert.doesNotMatch(await (await pedir("/gastos")).text(), /Traspaso a Trade Republic/, "no aparece entre los gastos");
+    assert.match(await (await pedir("/cierre?mes=2026-10")).text(), /name="aporte_1"/);
+    const cierre = await pedir("/cierre", { metodo: "POST", cuerpo: { mes: "2026-10", saldo_1: "1.500", aporte_1: "0" } });
+    assert.match(decodeURIComponent(cierre.headers.get("location") ?? "").replace(/\+/g, " "), /no hiciste: Traspaso a Trade Republic/);
     estado.sync!.cerrar();
   });
 });
