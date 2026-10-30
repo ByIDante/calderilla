@@ -135,8 +135,36 @@ function recordarPlegado(raiz) {
   }
 }
 
+// Tablas que en el móvil se ven como fichas: cada celda lleva el nombre de su columna
+function etiquetarTablas(raiz) {
+  for (const tabla of raiz.querySelectorAll?.("table.tabla-apilable") ?? []) {
+    const nombres = [...tabla.querySelectorAll("thead th")].map((th) => th.textContent.trim());
+    for (const fila of tabla.querySelectorAll("tbody tr, tfoot tr")) {
+      // Cuenta las columnas que ocupa cada celda (colspan) para dar a cada una el nombre de la suya
+      let columna = 0;
+      for (const celda of fila.children) {
+        const ocupa = Number(celda.getAttribute("colspan") ?? 1);
+        if (ocupa === 1 && nombres[columna] && !celda.hasAttribute("data-etiqueta")) celda.setAttribute("data-etiqueta", nombres[columna]);
+        columna += ocupa;
+      }
+    }
+  }
+}
+
+// En pantallas estrechas el menú es una fila que se desliza: que se vea la sección en la que estás
+function menuALaVista(raiz) {
+  const actual = raiz.querySelector?.('.menu a[aria-current="page"]');
+  const fila = actual?.closest("ul");
+  if (!fila || fila.scrollWidth <= fila.clientWidth) return;
+  const caja = fila.getBoundingClientRect();
+  const enlace = actual.getBoundingClientRect();
+  fila.scrollLeft += enlace.left - caja.left - (caja.width - enlace.width) / 2;
+}
+
 function preparar(raiz) {
+  menuALaVista(raiz);
   recordarPlegado(raiz);
+  etiquetarTablas(raiz);
   pintarGraficos(raiz);
   actualizarDependientes(document);
   enlacesExternos(raiz);

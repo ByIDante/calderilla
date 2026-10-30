@@ -185,7 +185,7 @@ export function rutasOcio(app: Hono, estado: Estado) {
           <div class="tarjeta-cabecera"><h2>Movimientos de este mes</h2><span><a href="/movimientos">Ver y editar todos</a> · <a href="/importar">Importar un extracto</a></span></div>
           ${apuntes.length
             ? html`<div class="tabla-contenedor">
-                <table>
+                <table class="tabla-apilable tabla-acciones">
                   <thead><tr><th>Fecha</th><th>Concepto</th><th>Categoría</th><th class="numero">Importe</th><th></th></tr></thead>
                   <tbody>
                     ${apuntes.map(

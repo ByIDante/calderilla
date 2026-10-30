@@ -40,7 +40,7 @@ function filas(lista: RecurrenteCompleto[], hoy: Fecha, mensual: Map<number, num
 
 function tabla(titulo: string, lista: RecurrenteCompleto[], hoy: Fecha, mensual: Map<number, number>, total: number | null): Html {
   return html`<div class="tabla-contenedor">
-    <table class="tabla-fija">
+    <table class="tabla-fija tabla-apilable">
       <caption class="sr">${titulo}</caption>
       <colgroup><col /><col class="col-importe" /><col class="col-mes" /><col class="col-fin" /></colgroup>
       <thead>
@@ -248,7 +248,7 @@ export function vistaCuadro(r: RecurrenteCompleto, hoy: Fecha): Html {
   const cuadro = cuadroAmortizacion(r.prestamo);
   return html`<section class="tarjeta">
     <p><a href="/gastos/${r.id}">← Volver a «${r.nombre}»</a></p>
-    <div class="tabla-contenedor">
+    <div class="tabla-contenedor desplazable">
       <table>
         <thead>
           <tr><th>Nº</th><th>Fecha</th><th class="numero">Anticipado</th><th class="numero">Cuota</th><th class="numero">Intereses</th><th class="numero">Amortizado</th><th class="numero">Pendiente</th></tr>

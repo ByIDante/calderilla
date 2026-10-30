@@ -300,7 +300,7 @@ export function rutasAjustes(app: Hono, estado: Estado) {
     const recientes = [...copias].sort((a, b) => b.marca.localeCompare(a.marca)).slice(0, 40);
     const apartadas = rastros.filter((r) => r.marca && r.archivo.endsWith(".db")).sort((a, b) => b.marca!.localeCompare(a.marca!));
     const tabla = (filas: Html[]) => html`<div class="tabla-contenedor">
-      <table>
+      <table class="tabla-apilable tabla-acciones">
         <thead><tr><th>Guardada</th><th>Ordenador</th><th>Contenido</th><th></th></tr></thead>
         <tbody>${filas}</tbody>
       </table>

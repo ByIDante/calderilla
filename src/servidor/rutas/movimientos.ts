@@ -224,18 +224,18 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
           </form>
           ${movimientos.length
             ? html`<div class="tabla-contenedor">
-                <table class="tabla-acciones">
+                <table class="tabla-acciones tabla-apilable tabla-movimientos">
                   <thead><tr><th>Fecha</th><th>Concepto</th><th class="numero">Importe</th><th>Categoría</th><th></th></tr></thead>
                   <tbody>
                     ${movimientos.map(
                       (m) => html`<tr>
-                        <td>${formatoFecha(m.fecha)}</td>
-                        <td>
+                        <td class="m-fecha">${formatoFecha(m.fecha)}</td>
+                        <td class="m-concepto">
                           <a href="/movimientos/${m.id}?volver=${encodeURIComponent(aqui)}">${m.concepto}</a>
                           <div class="apagado pequeno">${[m.cuenta, ORIGEN[m.origen] ?? m.origen, m.recurrente ? `es «${m.recurrente}» (gasto fijo, ya contado)` : null].filter(Boolean).join(" · ")}</div>
                         </td>
-                        <td class="numero ${m.importe > 0 ? "positivo" : ""}">${eur(m.importe)}</td>
-                        <td>
+                        <td class="numero m-importe ${m.importe > 0 ? "positivo" : ""}">${eur(m.importe)}</td>
+                        <td class="m-categoria">
                           <form method="post" action="/movimientos/${m.id}/categoria" data-mantener-posicion>
                             <input type="hidden" name="volver" value="${aqui}" />
                             <select name="categoria" data-enviar-al-cambiar aria-label="Categoría de ${m.concepto}">
@@ -244,7 +244,7 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
                             <noscript><button class="boton boton-pequeno" type="submit">Guardar</button></noscript>
                           </form>
                         </td>
-                        <td class="celda-boton">
+                        <td class="celda-boton m-borrar">
                           ${botonAccion(`/movimientos/${m.id}/borrar`, "Borrar", { estilo: "peligro", pequeno: true, mantenerPosicion: true, confirmar: "¿Borrar este movimiento?", campos: { volver: aqui } })}
                         </td>
                       </tr>`,

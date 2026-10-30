@@ -108,7 +108,7 @@ export function rutasInversiones(app: Hono, estado: Estado) {
           </div>
           ${cartera.length
             ? html`<div class="tabla-contenedor">
-                <table>
+                <table class="tabla-apilable">
                   <thead><tr><th>Activo</th><th class="numero">Unidades</th><th class="numero">Precio</th><th class="numero">Valor</th><th class="numero">Ganancia</th></tr></thead>
                   <tbody>
                     ${cartera.map((p) => {
@@ -308,7 +308,7 @@ export function rutasInversiones(app: Hono, estado: Estado) {
         <section class="tarjeta" style="margin-top:16px">
           <h2>Movimientos</h2>
           ${movimientos.length
-            ? html`<div class="tabla-contenedor"><table>
+            ? html`<div class="tabla-contenedor"><table class="tabla-apilable tabla-acciones">
                 <thead><tr><th>Fecha</th><th>Operación</th><th class="numero">Unidades</th><th class="numero">Euros</th><th></th></tr></thead>
                 <tbody>
                   ${movimientos.map(

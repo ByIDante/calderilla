@@ -192,7 +192,7 @@ export function rutasImportar(app: Hono, estado: Estado) {
           </div>
           ${propuestas.length
             ? html`<div class="tabla-contenedor">
-                <table>
+                <table class="tabla-apilable">
                   <thead><tr><th>Fecha</th><th>Concepto</th><th class="numero">Importe</th><th>Categoría</th><th>Nota</th></tr></thead>
                   <tbody>
                     ${propuestas.slice(0, 200).map((p) => {

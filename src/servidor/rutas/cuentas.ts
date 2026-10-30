@@ -85,7 +85,7 @@ function tarjetaAportaciones(aportaciones: Aportacion[], hechas: Map<number, Map
     <p>${comparacion}</p>
     ${vivas.length
       ? html`<div class="tabla-contenedor">
-          <table>
+          <table class="tabla-apilable">
             <thead><tr><th>Aportación</th><th class="numero">Al mes</th><th>Últimos meses</th><th></th></tr></thead>
             <tbody>
               ${vivas.map(
@@ -159,7 +159,7 @@ export function rutasCuentas(app: Hono, estado: Estado) {
           <h2>Tus cuentas</h2>
           ${activas.length
             ? html`<div class="tabla-contenedor">
-                <table>
+                <table class="tabla-apilable tabla-acciones">
                   <thead><tr><th>Cuenta</th><th>Tipo</th><th class="numero">Saldo</th><th>Actualizar saldo</th></tr></thead>
                   <tbody>
                     ${grupos.map(
@@ -221,7 +221,7 @@ export function rutasCuentas(app: Hono, estado: Estado) {
           <h2>Cierres de mes</h2>
           ${cierres.length
             ? html`<div class="tabla-contenedor">
-                <table>
+                <table class="tabla-apilable">
                   <thead>
                     <tr><th>Mes</th><th class="numero">Ahorro previsto</th><th class="numero">Ahorro real</th><th class="numero">Ocio</th><th>Etapa</th></tr>
                   </thead>

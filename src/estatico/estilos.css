@@ -184,16 +184,11 @@ a:hover {
   font-weight: 600;
 }
 
-/* Todo el ancho de la pantalla (con un tope para monitores muy anchos); los textos largos, a una medida cómoda */
+/* Todo el ancho de la pantalla, también en monitores grandes */
 main {
   padding: 28px 32px 40px;
-  max-width: 1800px;
   width: 100%;
   min-width: 0;
-}
-main > p,
-.tarjeta > p {
-  max-width: 120ch;
 }
 
 h1 {
@@ -237,6 +232,12 @@ h3 {
     gap: 4px;
     overflow-x: auto;
     padding-bottom: 4px;
+    /* El borde derecho se difumina para que se note que hay más secciones deslizando */
+    mask-image: linear-gradient(to right, #000 calc(100% - 28px), transparent);
+  }
+  .menu ul::after {
+    content: "";
+    flex: 0 0 24px;
   }
   .menu li a {
     white-space: nowrap;
@@ -266,8 +267,9 @@ fieldset {
 code {
   overflow-wrap: anywhere;
 }
+table,
 th {
-  overflow-wrap: normal;
+  overflow-wrap: break-word;
 }
 
 .tarjeta {
@@ -523,7 +525,6 @@ th {
   color: var(--tinta-suave);
   font-size: 13.5px;
   margin: 6px 0 0;
-  max-width: 75ch;
 }
 
 .opciones {
@@ -819,6 +820,9 @@ input[type="checkbox"] {
   height: 18px;
   accent-color: var(--acento);
 }
+input[type="file"] {
+  max-width: 100%;
+}
 .entrada.con-sufijo {
   position: relative;
 }
@@ -964,4 +968,161 @@ button {
   border-radius: var(--radio);
   padding: 14px 16px;
   background: var(--superficie);
+}
+
+/* ── Móvil: tablas como fichas apiladas y controles fáciles de pulsar ── */
+@media (max-width: 700px) {
+  table.tabla-apilable thead {
+    display: none;
+  }
+  table.tabla-apilable,
+  table.tabla-apilable tbody,
+  table.tabla-apilable tfoot,
+  table.tabla-apilable tr {
+    display: block;
+    width: 100%;
+  }
+  table.tabla-apilable tr {
+    padding: 10px 0;
+    border-bottom: 1px solid var(--linea);
+  }
+  table.tabla-apilable td {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-between;
+    align-items: center;
+    gap: 4px 12px;
+    border: 0;
+    padding: 3px 0;
+    text-align: right;
+  }
+  /* El nombre de la columna (lo pone app.js a partir de la cabecera) a la izquierda de cada dato */
+  table.tabla-apilable td[data-etiqueta]::before {
+    content: attr(data-etiqueta);
+    color: var(--apagado);
+    font-size: 13px;
+    text-align: left;
+    flex: none;
+  }
+  table.tabla-apilable td:first-child {
+    display: block;
+    text-align: left;
+    font-weight: 600;
+  }
+  table.tabla-apilable td:first-child::before,
+  table.tabla-apilable td:empty {
+    display: none;
+  }
+  table.tabla-apilable tr.grupo {
+    border-bottom: 0;
+    padding-bottom: 0;
+  }
+  table.tabla-apilable tr.grupo td {
+    background: none;
+  }
+  table.tabla-apilable .numero {
+    text-align: right;
+  }
+  /* Movimientos: concepto e importe arriba, la categoría ocupando el ancho y «Borrar» al lado */
+  table.tabla-movimientos tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 2px 12px;
+    align-items: center;
+  }
+  table.tabla-movimientos td {
+    display: block;
+    padding: 0;
+    text-align: left;
+  }
+  table.tabla-movimientos td::before {
+    display: none;
+  }
+  table.tabla-movimientos .m-fecha {
+    grid-column: 1;
+    font-size: 12.5px;
+    color: var(--apagado);
+    font-weight: normal;
+  }
+  table.tabla-movimientos .m-concepto {
+    grid-column: 1;
+  }
+  table.tabla-movimientos .m-importe {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+    text-align: right;
+    font-weight: 650;
+  }
+  table.tabla-movimientos .m-categoria {
+    grid-column: 1;
+    margin-top: 6px;
+  }
+  table.tabla-movimientos .m-categoria select {
+    width: 100%;
+  }
+  table.tabla-movimientos .m-borrar {
+    grid-column: 2;
+    margin-top: 6px;
+  }
+
+  /* Los botones largos pueden partir línea en el móvil; los pequeños, no */
+  .boton {
+    white-space: normal;
+  }
+  .boton-pequeno {
+    padding: 8px 12px;
+    font-size: 14px;
+    white-space: nowrap;
+  }
+  /* Enlaces y botones con forma de enlace: más área para el dedo sin cambiar cómo se ven */
+  .boton-enlace,
+  table.tabla-apilable td a,
+  .tarjeta a.pequeno,
+  .tarjeta-cabecera a,
+  .aviso a {
+    display: inline-block;
+    padding: 7px 0;
+  }
+  input[type="file"] {
+    padding: 8px 0;
+  }
+  .aviso-cerrar {
+    width: 36px;
+    height: 36px;
+  }
+  /* Tablas largas de números (cuadro de amortización): se desplazan de lado, con aviso */
+  .tabla-contenedor.desplazable::before {
+    content: "Desliza la tabla a los lados →";
+    display: block;
+    color: var(--apagado);
+    font-size: 12.5px;
+    margin-bottom: 4px;
+  }
+  .pestanas a {
+    padding: 8px 14px;
+  }
+  .porque summary,
+  .como-tabla summary,
+  details > summary {
+    padding: 6px 0;
+  }
+  input[type="checkbox"],
+  input[type="radio"] {
+    width: 22px;
+    height: 22px;
+  }
+  input[type="text"],
+  input[type="date"],
+  input[type="number"],
+  input[type="password"],
+  select {
+    min-height: 42px;
+    font-size: 16px;
+  }
+  .menu li a {
+    padding: 10px 12px;
+  }
+  h1 {
+    font-size: 22px;
+  }
 }
