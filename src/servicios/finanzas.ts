@@ -1,6 +1,6 @@
 import type { BaseDatos } from "../datos/db.ts";
 import type { Centimos } from "../dominio/dinero.ts";
-import { diasEntre, sumarMeses, type Fecha, type Mes } from "../dominio/fechas.ts";
+import { diasEntre, mesDe, sumarMeses, type Fecha, type Mes } from "../dominio/fechas.ts";
 import { cuadroAmortizacion, cuotaMensual, cuotasRestantesPrestamo, finPrestamo, interesesTotales, pendienteEn, taeDe, type Amortizacion, type Prestamo } from "../dominio/prestamo.ts";
 import { estadoEn, importeEn, mensualEn, provisionAcumulada, type Frecuencia, type Recurrente, type VersionImporte } from "../dominio/recurrencia.ts";
 import type { Deuda } from "../reglas/deuda.ts";
@@ -285,7 +285,8 @@ export function finesProximos(recurrentes: readonly RecurrenteCompleto[], fecha:
   const conFin = recurrentes.filter((r) => r.tipo === "gasto" && r.prestamo && r.fin);
   const aFin = (r: RecurrenteCompleto): PrestamoFin => ({ nombre: r.nombre, cuota: importeEn(r.versiones, r.fin!), fin: r.fin! });
   return {
-    terminados: conFin.filter((r) => r.fin! < fecha && diasEntre(r.fin!, fecha) <= 366).map(aFin),
-    porTerminar: conFin.filter((r) => r.fin! >= fecha && r.fin! <= sumarMeses(fecha, 12)).map(aFin),
+    // El mes del último cargo aún cuenta como «por terminar»: la cuota sigue en los gastos de ese mes
+    terminados: conFin.filter((r) => mesDe(r.fin!) < mesDe(fecha) && diasEntre(r.fin!, fecha) <= 366).map(aFin),
+    porTerminar: conFin.filter((r) => mesDe(r.fin!) >= mesDe(fecha) && r.fin! <= sumarMeses(fecha, 12)).map(aFin),
   };
 }

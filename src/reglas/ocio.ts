@@ -1,4 +1,4 @@
-import { diasEntre } from "../dominio/fechas.ts";
+import { diferenciaMeses } from "../dominio/fechas.ts";
 import type { Parametros } from "./parametros.ts";
 import type { Etapa, Presupuesto, Situacion } from "./tipos.ts";
 
@@ -11,9 +11,17 @@ const PROPORCION: Record<Etapa, (p: Parametros) => number> = {
   invertir: (p) => p.proporcionInvertir,
 };
 
-/** Cuotas de préstamos terminados hace poco: durante unos meses van enteras a ahorro, para no gastarlas sin darse cuenta. */
+/**
+ * Cuotas de préstamos terminados hace poco: durante unos meses van enteras a ahorro, para no gastarlas sin
+ * darse cuenta. Cuentan desde el mes siguiente al último cargo (ese mes la cuota aún está en los gastos).
+ */
 export function cuotaLiberada(s: Situacion, p: Parametros): number {
-  return s.prestamosTerminados.filter((prestamo) => diasEntre(prestamo.fin, s.hoy) <= p.cuotaLiberadaMeses * 30.5).reduce((suma, prestamo) => suma + prestamo.cuota, 0);
+  return s.prestamosTerminados
+    .filter((prestamo) => {
+      const meses = diferenciaMeses(prestamo.fin, s.hoy);
+      return meses >= 1 && meses <= p.cuotaLiberadaMeses;
+    })
+    .reduce((suma, prestamo) => suma + prestamo.cuota, 0);
 }
 
 /**
