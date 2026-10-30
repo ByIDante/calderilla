@@ -143,6 +143,8 @@ export function rutasCuentas(app: Hono, estado: Estado) {
     const cierres = leerCierres(bd(estado), 12);
     const ctx = contexto(bd(estado), hoy);
     const intereses = activas.reduce((s, cuenta) => s + interesesAlMes(cuenta), 0);
+    // Cuentas agrupadas por banco, con el total de cada uno
+    const grupos = [...Map.groupBy(activas, (cuenta) => cuenta.entidad || "Sin banco")].sort(([a], [b]) => (a === "Sin banco" ? 1 : b === "Sin banco" ? -1 : a.localeCompare(b, "es")));
     return render(
       c,
       estado,
@@ -160,8 +162,16 @@ export function rutasCuentas(app: Hono, estado: Estado) {
                 <table>
                   <thead><tr><th>Cuenta</th><th>Tipo</th><th class="numero">Saldo</th><th>Actualizar saldo</th></tr></thead>
                   <tbody>
-                    ${activas.map(
-                      (cuenta) => html`<tr>
+                    ${grupos.map(
+                      ([entidad, lista]) => html`${grupos.length > 1
+                          ? html`<tr class="grupo">
+                              <td colspan="2">${entidad}${entidad !== "Sin banco" ? html` · <a class="pequeno" href="/movimientos?banco=${encodeURIComponent(entidad)}">ver movimientos</a>` : ""}</td>
+                              <td class="numero">${eur(lista.reduce((suma, x) => suma + x.saldo, 0))}</td>
+                              <td></td>
+                            </tr>`
+                          : ""}
+                        ${lista.map(
+                          (cuenta) => html`<tr>
                         <td>
                           <details>
                             <summary>${cuenta.nombre}</summary>
@@ -177,12 +187,13 @@ export function rutasCuentas(app: Hono, estado: Estado) {
                           ${interesesAlMes(cuenta) > 0 ? html`<div class="positivo pequeno">≈ +${eur(interesesAlMes(cuenta))} al mes</div>` : ""}
                         </td>
                         <td>
-                          <form method="post" action="/cuentas/${cuenta.id}/saldo" class="botones">
+                          <form method="post" action="/cuentas/${cuenta.id}/saldo" class="botones" data-mantener-posicion>
                             <input type="text" inputmode="decimal" name="saldo" value="${importeEditable(cuenta.saldo)}" aria-label="Saldo de ${cuenta.nombre}" style="max-width:130px" />
                             <button class="boton boton-pequeno" type="submit">Guardar</button>
                           </form>
                         </td>
                       </tr>`,
+                        )}`,
                     )}
                   </tbody>
                 </table>

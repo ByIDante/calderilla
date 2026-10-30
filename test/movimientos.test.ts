@@ -72,3 +72,21 @@ it("meses anteriores y gasto por categoría mes a mes", async () => {
   assert.match(actual, /href="\/\?mes=2026-09"/);
   assert.match(await (await pedir("/?mes=2027-01")).text(), /Resumen de octubre de 2026/, "un mes futuro muestra el actual");
 });
+
+it("pestañas por banco: cada una muestra solo sus movimientos y su saldo", async () => {
+  const bbva = bd.ejecutar("INSERT INTO cuentas (nombre, tipo, entidad) VALUES ('Nómina', 'corriente', 'BBVA')").id;
+  const tr = bd.ejecutar("INSERT INTO cuentas (nombre, tipo, entidad) VALUES ('Ahorro', 'remunerada', 'Trade Republic')").id;
+  bd.ejecutar("INSERT INTO apuntes (fecha, importe, concepto, cuenta_id) VALUES ('2026-10-21', -1111, 'SOLO BBVA', ?), ('2026-10-22', 2222, 'SOLO TR', ?)", bbva, tr);
+  const todos = await (await pedir("/movimientos?mes=2026-10")).text();
+  assert.match(todos, /aria-label="Elegir banco"/);
+  assert.match(todos, /SOLO BBVA/);
+  assert.match(todos, /SOLO TR/);
+  const soloBbva = await (await pedir("/movimientos?mes=2026-10&banco=BBVA")).text();
+  assert.match(soloBbva, /SOLO BBVA/);
+  assert.doesNotMatch(soloBbva, /SOLO TR/);
+  assert.match(soloBbva, /Saldo en BBVA/);
+  assert.match(soloBbva, /href="\/movimientos\?mes=2026-09&amp;banco=BBVA"/, "al cambiar de mes se mantiene el banco elegido");
+  const sinBanco = await (await pedir("/movimientos?mes=2026-10&banco=sin")).text();
+  assert.doesNotMatch(sinBanco, /SOLO BBVA/);
+  assert.match(sinBanco, /CINE|MERCADONA|Cena con amigos/);
+});

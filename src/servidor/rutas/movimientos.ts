@@ -89,8 +89,20 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
     const mes = /^\d{4}-(0[1-9]|1[0-2])$/.test(pedido) ? pedido : mesDe(hoy);
     const filtroCategoria = c.req.query("categoria") ?? "";
     const buscar = (c.req.query("buscar") ?? "").trim();
+    // Banco (entidad de la cuenta) y, dentro de él, una cuenta concreta
+    const banco = c.req.query("banco") ?? "";
+    const filtroCuenta = c.req.query("cuenta") ?? "";
     const condiciones = ["a.fecha BETWEEN ? AND ?"];
     const parametros: (string | number)[] = [primerDia(mes), ultimoDia(mes)];
+    if (banco === "sin") condiciones.push("(a.cuenta_id IS NULL OR coalesce(cu.entidad, '') = '')");
+    else if (banco) {
+      condiciones.push("cu.entidad = ?");
+      parametros.push(banco);
+    }
+    if (/^\d+$/.test(filtroCuenta)) {
+      condiciones.push("a.cuenta_id = ?");
+      parametros.push(Number(filtroCuenta));
+    }
     if (filtroCategoria === "sin") condiciones.push("a.categoria_id IS NULL");
     else if (/^\d+$/.test(filtroCategoria)) {
       condiciones.push("a.categoria_id = ?");
@@ -100,6 +112,7 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
       condiciones.push("a.concepto LIKE ?");
       parametros.push(`%${buscar}%`);
     }
+    const cuentas = leerCuentas(base, hoy);
     const movimientos = base.todos<Movimiento>(
       `SELECT a.id, a.fecha, a.importe, a.concepto, a.categoria_id, a.cuenta_id, a.origen, c.nombre AS categoria, c.tipo AS tipo_categoria,
               cu.nombre AS cuenta, r.nombre AS recurrente
@@ -108,14 +121,34 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
       ...parametros,
     );
     const lista = categorias();
-    const cuentas = leerCuentas(base, hoy);
     const ingresos = movimientos.filter((m) => m.importe > 0).reduce((s, m) => s + m.importe, 0);
     const gastos = movimientos.filter((m) => m.importe < 0).reduce((s, m) => s - m.importe, 0);
     const porCategoria = new Map<string, number>();
     for (const m of movimientos.filter((x) => x.importe < 0)) porCategoria.set(m.categoria ?? "Sin categoría", (porCategoria.get(m.categoria ?? "Sin categoría") ?? 0) - m.importe);
     const sinCategoria = movimientos.filter((m) => !m.categoria_id).length;
-    const consulta = new URLSearchParams({ mes, ...(filtroCategoria ? { categoria: filtroCategoria } : {}), ...(buscar ? { buscar } : {}) }).toString();
-    const aqui = `/movimientos?${consulta}`;
+    const filtros = { ...(banco ? { banco } : {}), ...(/^\d+$/.test(filtroCuenta) ? { cuenta: filtroCuenta } : {}), ...(filtroCategoria ? { categoria: filtroCategoria } : {}), ...(buscar ? { buscar } : {}) };
+    const enlace = (cambios: Record<string, string>) => {
+      const p = new URLSearchParams({ mes, ...filtros, ...cambios });
+      for (const [k, v] of [...p]) if (!v) p.delete(k);
+      return `/movimientos?${p}`;
+    };
+    const aqui = enlace({});
+
+    // Pestañas de bancos: cuántos movimientos tiene cada uno este mes
+    const porBanco = new Map(
+      base
+        .todos<{ entidad: string; n: number }>(
+          `SELECT coalesce(nullif(cu.entidad, ''), '') AS entidad, count(*) AS n FROM apuntes a LEFT JOIN cuentas cu ON cu.id = a.cuenta_id
+           WHERE a.fecha BETWEEN ? AND ? GROUP BY 1`,
+          primerDia(mes),
+          ultimoDia(mes),
+        )
+        .map((f) => [f.entidad, f.n]),
+    );
+    const bancos = [...new Set(cuentas.map((x) => x.entidad).filter((e): e is string => Boolean(e)))].sort((a, b) => a.localeCompare(b, "es"));
+    const totalMes = [...porBanco.values()].reduce((s, n) => s + n, 0);
+    const cuentasDelBanco = banco && banco !== "sin" ? cuentas.filter((x) => x.entidad === banco) : [];
+    const saldoBanco = cuentasDelBanco.reduce((s, x) => s + x.saldo, 0);
 
     return render(
       c,
@@ -123,30 +156,48 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
       { titulo: `Movimientos de ${nombreMes(mes)}`, seccion: "movimientos" },
       html`
         <div class="botones bloque">
-          <a class="boton" href="/movimientos?mes=${sumarMesesAMes(mes, -1)}">← ${nombreMes(sumarMesesAMes(mes, -1))}</a>
-          ${mes < mesDe(hoy) ? html`<a class="boton" href="/movimientos?mes=${sumarMesesAMes(mes, 1)}">${nombreMes(sumarMesesAMes(mes, 1))} →</a>` : ""}
+          <a class="boton" href="${enlace({ mes: sumarMesesAMes(mes, -1) })}">← ${nombreMes(sumarMesesAMes(mes, -1))}</a>
+          ${mes < mesDe(hoy) ? html`<a class="boton" href="${enlace({ mes: sumarMesesAMes(mes, 1) })}">${nombreMes(sumarMesesAMes(mes, 1))} →</a>` : ""}
           <a class="boton" href="/importar">Importar un extracto</a>
         </div>
         <p class="apagado">
           Aquí está todo lo que has apuntado, importado o traído del banco. Si un movimiento está en la categoría equivocada, cámbiala en su desplegable. Si se repite (el
           mismo comercio cada mes), entra en él y crea una regla para que la próxima vez se categorice solo.
         </p>
+        ${bancos.length
+          ? html`<nav class="pestanas" aria-label="Elegir banco">
+              <a href="${enlace({ banco: "", cuenta: "" })}" aria-current="${banco ? "false" : "true"}">Todos<span class="numero-pestana">${totalMes}</span></a>
+              ${bancos.map(
+                (b) => html`<a href="${enlace({ banco: b, cuenta: "" })}" aria-current="${banco === b ? "true" : "false"}">${b}<span class="numero-pestana">${porBanco.get(b) ?? 0}</span></a>`,
+              )}
+              ${porBanco.get("") ? html`<a href="${enlace({ banco: "sin", cuenta: "" })}" aria-current="${banco === "sin" ? "true" : "false"}">Sin banco<span class="numero-pestana">${porBanco.get("")}</span></a>` : ""}
+            </nav>
+            ${cuentasDelBanco.length > 1
+              ? html`<nav class="pestanas pestanas-secundarias" aria-label="Elegir cuenta">
+                  <a href="${enlace({ cuenta: "" })}" aria-current="${filtroCuenta ? "false" : "true"}">Todas sus cuentas</a>
+                  ${cuentasDelBanco.map((x) => html`<a href="${enlace({ cuenta: String(x.id) })}" aria-current="${filtroCuenta === String(x.id) ? "true" : "false"}">${x.nombre}</a>`)}
+                </nav>`
+              : ""}`
+          : ""}
         <div class="cifras">
+          ${cuentasDelBanco.length ? html`<div class="cifra"><div class="cifra-etiqueta">Saldo en ${banco}</div><div class="cifra-valor">${eur(saldoBanco)}</div></div>` : ""}
           <div class="cifra"><div class="cifra-etiqueta">Entradas</div><div class="cifra-valor positivo">${eur(ingresos)}</div></div>
           <div class="cifra"><div class="cifra-etiqueta">Salidas</div><div class="cifra-valor">${eur(gastos)}</div></div>
           <div class="cifra"><div class="cifra-etiqueta">Sin categoría</div><div class="cifra-valor">${sinCategoria}</div></div>
         </div>
-        ${tarjetaPresupuesto(presupuestoPorCategoria(base, mes, hoy), aqui)}
+        ${banco || filtroCuenta ? "" : tarjetaPresupuesto(presupuestoPorCategoria(base, mes, hoy), aqui)}
         <section class="tarjeta">
           <form method="get" action="/movimientos" class="fila-campos">
             <input type="hidden" name="mes" value="${mes}" />
+            ${banco ? html`<input type="hidden" name="banco" value="${banco}" />` : ""}
+            ${/^\d+$/.test(filtroCuenta) ? html`<input type="hidden" name="cuenta" value="${filtroCuenta}" />` : ""}
             ${selector("Categoría", "categoria", [["", "Todas"], ["sin", "Sin categoría"], ...lista.map((x) => [String(x.id), x.nombre] as const)], filtroCategoria)}
             ${campo({ etiqueta: "Buscar en el concepto", nombre: "buscar", valor: buscar, marcador: "mercadona, bizum…" })}
             <div class="campo"><label>&nbsp;</label><button class="boton" type="submit">Filtrar</button></div>
           </form>
           ${movimientos.length
             ? html`<div class="tabla-contenedor">
-                <table>
+                <table class="tabla-acciones">
                   <thead><tr><th>Fecha</th><th>Concepto</th><th class="numero">Importe</th><th>Categoría</th><th></th></tr></thead>
                   <tbody>
                     ${movimientos.map(
@@ -158,7 +209,7 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
                         </td>
                         <td class="numero ${m.importe > 0 ? "positivo" : ""}">${eur(m.importe)}</td>
                         <td>
-                          <form method="post" action="/movimientos/${m.id}/categoria">
+                          <form method="post" action="/movimientos/${m.id}/categoria" data-mantener-posicion>
                             <input type="hidden" name="volver" value="${aqui}" />
                             <select name="categoria" data-enviar-al-cambiar aria-label="Categoría de ${m.concepto}">
                               ${opcionesCategoria(lista).map(([v, t]) => html`<option value="${v}" ${v === (m.categoria_id ? String(m.categoria_id) : "") ? html`selected` : ""}>${t}</option>`)}
@@ -166,7 +217,9 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
                             <noscript><button class="boton boton-pequeno" type="submit">Guardar</button></noscript>
                           </form>
                         </td>
-                        <td>${botonAccion(`/movimientos/${m.id}/borrar`, "Borrar", { estilo: "enlace", confirmar: "¿Borrar este movimiento?", campos: { volver: aqui } })}</td>
+                        <td class="celda-boton">
+                          ${botonAccion(`/movimientos/${m.id}/borrar`, "Borrar", { estilo: "peligro", pequeno: true, mantenerPosicion: true, confirmar: "¿Borrar este movimiento?", campos: { volver: aqui } })}
+                        </td>
                       </tr>`,
                     )}
                   </tbody>
