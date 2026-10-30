@@ -44,7 +44,7 @@ export function vistaResumen({ ctx, cierrePendiente, proximos, cierres, porCateg
       ${cifra("Gastos no esenciales", eurR(p.noEsenciales))}
       ${cifra("Te sobra", eurR(p.sobrante), p.sobrante < 0 ? "gastas más de lo que ingresas" : `ahorro propuesto: ${eurR(p.objetivoAhorro)}`, p.sobrante < 0 ? "mal" : undefined)}
       ${cifra("Ocio: te queda este mes", eurR(p.ocioQueda), `de ${eurR(p.ocio + p.ocioRemanente)} · llevas ${eurR(p.ocioGastado)}`, "acento")}
-      ${cifra("Patrimonio", eurR(ctx.patrimonio), "cuentas, inversión y planes de pensiones")}
+      ${cifra("Patrimonio", eurR(ctx.patrimonio), ctx.deuda ? `menos ${eurR(ctx.deuda)} de préstamos` : "cuentas, inversión y planes de pensiones")}
     </div>
 
     ${tarjetaEtapa(r, { ruta: "/inversiones", texto: "Ver opciones de inversión" })}

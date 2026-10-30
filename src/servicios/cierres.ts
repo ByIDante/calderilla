@@ -28,8 +28,11 @@ export function leerCierres(bd: BaseDatos, limite = 24): Cierre[] {
 
 /**
  * Cierra un mes: guarda los saldos a final de mes y congela lo previsto y lo real. El ahorro real es lo que
- * ha crecido tu patrimonio (con la inversión a precio de compra, para que las subidas y bajadas de la bolsa
- * no cuenten como ahorro) respecto al cierre anterior.
+ * ha crecido tu patrimonio respecto al cierre anterior, medido:
+ * - con la inversión a precio de compra, para que las subidas y bajadas de la bolsa no cuenten como ahorro;
+ * - restando las deudas, para que devolver un préstamo cuente como ahorro;
+ * - sin lo apartado para gastos anuales, que el presupuesto ya reparte mes a mes (si no, el mes del seguro
+ *   parecería que no ahorras y los demás que ahorras de más).
  */
 export function cerrarMes(bd: BaseDatos, mes: Mes, saldos: { cuentaId: number; saldo: Centimos }[]): Cierre {
   const fecha = ultimoDia(mes);
@@ -39,6 +42,7 @@ export function cerrarMes(bd: BaseDatos, mes: Mes, saldos: { cuentaId: number; s
     const p = ctx.resultado.presupuesto;
     const anterior = bd.uno<Cierre>("SELECT * FROM cierres_mes WHERE mes = ?", sumarMesesAMes(mes, -1));
     const gastado = ocioGastadoEn(bd, fecha);
+    const patrimonio = ctx.patrimonioACoste - ctx.situacion.provisiones;
     const cierre: Cierre = {
       mes,
       cerrado: new Date().toISOString(),
@@ -46,8 +50,8 @@ export function cerrarMes(bd: BaseDatos, mes: Mes, saldos: { cuentaId: number; s
       gastos_esenciales: p.esenciales,
       gastos_no_esenciales: p.noEsenciales,
       ahorro_plan: p.objetivoAhorro,
-      ahorro_real: anterior ? ctx.patrimonioACoste - anterior.patrimonio : null,
-      patrimonio: ctx.patrimonioACoste,
+      ahorro_real: anterior ? patrimonio - anterior.patrimonio : null,
+      patrimonio,
       liquidez_libre: ctx.resultado.liquidezLibre,
       fondo_objetivo: ctx.resultado.fondoObjetivo,
       ocio_plan: p.ocio + p.ocioRemanente,

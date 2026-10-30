@@ -18,17 +18,20 @@ export interface Contexto {
   presupuesto: PresupuestoMes;
   cuentas: Cuenta[];
   cartera: Posicion[];
-  /** Lo que tienes: liquidez + inversión a precio de mercado + planes de pensiones. */
+  /** Lo que queda por devolver de tus préstamos. */
+  deuda: number;
+  /** Lo que tienes: liquidez + inversión a precio de mercado + planes de pensiones − deudas. */
   patrimonio: number;
   /** Lo mismo, con la inversión a precio de compra: se usa para medir el ahorro real de cada mes. */
   patrimonioACoste: number;
 }
 
-/** Gasto en ocio de un mes: apuntes con categoría de ocio (los gastos son importes negativos). */
+/** Gasto en ocio de un mes: apuntes con categoría de ocio (los gastos son importes negativos). Los que son el
+ * cargo de un gasto fijo no cuentan: ese gasto ya está en el presupuesto. */
 export function ocioGastadoEn(bd: BaseDatos, mes: string): number {
   return -(
     bd.uno<{ total: number | null }>(
-      "SELECT sum(a.importe) AS total FROM apuntes a JOIN categorias c ON c.id = a.categoria_id WHERE c.tipo = 'ocio' AND a.fecha BETWEEN ? AND ?",
+      "SELECT sum(a.importe) AS total FROM apuntes a JOIN categorias c ON c.id = a.categoria_id WHERE c.tipo = 'ocio' AND a.recurrente_id IS NULL AND a.fecha BETWEEN ? AND ?",
       primerDia(mesDe(mes)),
       ultimoDia(mesDe(mes)),
     )?.total ?? 0
@@ -96,6 +99,8 @@ export function construir(bd: BaseDatos, hoy: Fecha): Omit<Contexto, "resultado"
     limiteFgd: limiteFgd(mercado),
   };
 
+  // Devolver capital de un préstamo también es ahorrar: la deuda resta del patrimonio
+  const deuda = situacion.deudas.reduce((s, d) => s + d.pendiente, 0);
   const invertidoMercado = cartera.reduce((s, p) => s + p.valor, 0) - liquidezCartera;
   const invertidoCoste = cartera.reduce((s, p) => s + p.coste, 0);
   const ahorroTotal = cuentas.filter(esAhorro).reduce((s, c) => s + c.saldo, 0);
@@ -108,8 +113,9 @@ export function construir(bd: BaseDatos, hoy: Fecha): Omit<Contexto, "resultado"
     presupuesto,
     cuentas,
     cartera,
-    patrimonio: ahorroTotal + liquidezCartera + invertidoMercado + pensiones,
-    patrimonioACoste: ahorroTotal + invertidoCoste + pensiones,
+    deuda,
+    patrimonio: ahorroTotal + liquidezCartera + invertidoMercado + pensiones - deuda,
+    patrimonioACoste: ahorroTotal + invertidoCoste + pensiones - deuda,
   };
 }
 

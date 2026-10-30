@@ -6,6 +6,7 @@ import { after, describe, it } from "node:test";
 import type { Ajustes } from "../src/config/ajustes.ts";
 import { Sincronizador } from "../src/datos/sync.ts";
 import { crearApp, type Estado } from "../src/servidor/app.ts";
+import { deudas, leerRecurrentes } from "../src/servicios/finanzas.ts";
 import { prepararBase } from "../src/servicios/semillas.ts";
 
 const carpeta = mkdtempSync(path.join(os.tmpdir(), "calderilla-servidor-"));
@@ -127,7 +128,9 @@ describe("recorrido básico", () => {
     const cierre = estado.sync!.bd.uno<{ mes: string; ahorro_real: number | null; patrimonio: number }>("SELECT * FROM cierres_mes");
     assert.equal(cierre?.mes, "2026-09");
     assert.equal(cierre?.ahorro_real, null, "el primer cierre no tiene con qué compararse");
-    assert.equal(cierre?.patrimonio, 120000);
+    const deuda = deudas(leerRecurrentes(estado.sync!.bd), "2026-09-30").reduce((suma, d) => suma + d.pendiente, 0);
+    assert.ok(deuda > 0);
+    assert.equal(cierre?.patrimonio, 120000 - deuda, "el préstamo del coche resta del patrimonio");
     estado.sync!.cerrar();
   });
 });
