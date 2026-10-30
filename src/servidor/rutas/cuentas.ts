@@ -214,7 +214,7 @@ export function rutasCuentas(app: Hono, estado: Estado) {
   app.post("/cierre", async (c) => {
     const f = await Formulario.de(c);
     const mes = f.texto("mes");
-    if (!/^\d{4}-\d{2}$/.test(mes)) return redirigir(c, "/cierre", { error: "Mes no válido." });
+    if (!/^\d{4}-(0[1-9]|1[0-2])$/.test(mes) || mes > mesDe(estado.hoy())) return redirigir(c, "/cierre", { error: "Mes no válido." });
     const cuentas = leerCuentas(bd(estado), ultimoDia(mes));
     const saldos = [];
     for (const cuenta of cuentas) {

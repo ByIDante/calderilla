@@ -32,6 +32,8 @@ export function leerGasto(f: Formulario, categorias: Categoria[]): { datos: Dato
     if (!capital || capital <= 0) return { error: "Indica el capital prestado." };
     if (tin === null || tin < 0 || tin > 100) return { error: "Indica el TIN del préstamo (0 si es sin intereses)." };
     if (!plazo || plazo < 1 || plazo > 600) return { error: "Indica el plazo en meses." };
+    const tae = f.numero("tae");
+    if (tae !== null && (tae < 0 || tae > 100)) return { error: "La TAE debe estar entre 0 y 100 %." };
     prestamo = { capital, tin, tae: f.numero("tae"), plazoMeses: plazo, comisionAmortizacion: f.numero("comision") ?? 0, vinculado: f.casilla("vinculado") };
   } else if (importe === null || importe <= 0) {
     return { error: "Indica el importe (mayor que cero)." };

@@ -24,7 +24,8 @@ export function formatoNumero(valor: number): string {
 
 /**
  * Lee un número escrito a la española o a la inglesa: "1.234,56", "1234,56", "1,234.56", "12.5", "250".
- * Con un solo punto seguido de tres cifras ("1.234") se entiende como separador de miles.
+ * Un punto seguido de grupos de tres cifras ("1.234", "12.345") se entiende como separador de miles, salvo
+ * que empiece por cero ("0.125").
  */
 export function leerNumero(texto: string): number | null {
   let limpio = texto.replace(/[€%\s ]/g, "");
@@ -37,9 +38,9 @@ export function leerNumero(texto: string): number | null {
     limpio = limpio.split(miles).join("").replace(decimal, ".");
   } else if (coma >= 0) {
     limpio = limpio.split(",").length > 2 ? limpio.split(",").join("") : limpio.replace(",", ".");
-  } else if (punto >= 0) {
-    const partes = limpio.split(".");
-    if (partes.length > 2 || partes.at(-1)?.length === 3) limpio = partes.join("");
+  } else if (punto >= 0 && /^[-+]?[1-9]\d{0,2}(\.\d{3})+$/.test(limpio)) {
+    // "1.234" o "12.345.678": puntos de miles. "0.125" o "12.5" son decimales.
+    limpio = limpio.split(".").join("");
   }
   if (!/^[-+]?\d+(\.\d+)?$/.test(limpio)) return null;
   return Number(limpio);
