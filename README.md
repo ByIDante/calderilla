@@ -144,7 +144,10 @@ Todo esto es gratis y funciona solo con conexión a internet, sin cuentas de pag
 npm run dev        # arranca y se reinicia al cambiar el código
 npm test           # tests (node:test)
 npm run typecheck  # comprobación de tipos
+npm run revisar-pantallas -- capturas   # revisa todas las páginas en móvil, tablet, portátil y pantallas grandes
 ```
+
+`revisar-pantallas` arranca la app con datos de ejemplo en una carpeta temporal y la abre con Playwright en el Chrome del sistema (390, 820, 1366, 1920 y 2560 px). Avisa si la página se desplaza de lado, si algo se sale de su tarjeta, si un texto baja de línea antes de tiempo, si una tabla no cabe, si la sección actual queda fuera del menú o si en el móvil hay botones demasiado pequeños para el dedo. Guarda capturas de las pantallas principales en la carpeta que le digas.
 
 - **Ejecución:** Node ejecuta el TypeScript directamente, sin compilar.
 - **Servidor web:** Hono, con plantillas HTML y htmx; los gráficos son de Chart.js.
