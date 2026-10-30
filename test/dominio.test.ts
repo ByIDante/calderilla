@@ -27,6 +27,22 @@ describe("importes y números", () => {
     assert.equal(leerImporte("abc"), null);
     assert.equal(leerImporte(""), null);
   });
+
+  it("se queda solo con el número aunque lleve la moneda o el signo en otro sitio", () => {
+    assert.equal(leerImporte("-200 EUR"), -20000);
+    assert.equal(leerImporte("EUR -1.234,56"), -123456);
+    assert.equal(leerImporte("- 200 €"), -20000);
+    assert.equal(leerImporte("-€200"), -20000);
+    assert.equal(leerImporte("200,00-"), -20000, "menos detrás, como en algunos bancos");
+    assert.equal(leerImporte("(1.234,56)"), -123456, "paréntesis de contabilidad");
+    assert.equal(leerImporte("\u221245,90 €"), -4590, "signo menos tipográfico");
+    assert.equal(leerImporte("USD 1,234.56"), 123456);
+    assert.equal(leerImporte("+1.500 EUR"), 150000);
+    assert.equal(leerImporte("1\u00a0234,56 €"), 123456, "espacio de miles");
+    assert.equal(leerImporte("2 x 3,50"), null, "con dos números no adivina");
+    assert.equal(leerImporte("03/10/2026"), null);
+    assert.equal(leerImporte("EUR"), null);
+  });
 });
 
 describe("fechas", () => {

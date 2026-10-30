@@ -11,6 +11,7 @@ import { puntuar } from "../src/reglas/cuestionario.ts";
 import { amortizar, crearRecurrente, leerRecurrentes } from "../src/servicios/finanzas.ts";
 import { importar, perfilPorFirma, proponer } from "../src/servicios/importacion.ts";
 import { prepararBase } from "../src/servicios/semillas.ts";
+import * as XLSX from "xlsx";
 
 const fixture = (nombre: string) => readFileSync(path.join(import.meta.dirname, "fixtures", nombre));
 const carpeta = mkdtempSync(path.join(os.tmpdir(), "calderilla-fase2-"));
@@ -68,6 +69,35 @@ describe("extractos bancarios", () => {
     assert.equal(errores, 0);
     assert.equal(movimientos.length, 7);
     assert.deepEqual(movimientos.at(-1), { fila: 8, fecha: "2026-10-28", importe: 200000, concepto: "NÓMINA OCTUBRE EMPRESA SL" });
+  });
+
+  it("Excel: importes con la moneda en el texto o en el formato de la celda", () => {
+    const hoja = XLSX.utils.aoa_to_sheet([
+      ["Fecha", "Concepto", "Importe"],
+      ["03/10/2026", "MERCADONA", "-200 EUR"],
+      ["05/10/2026", "NOMINA", 1234],
+      ["06/10/2026", "GASOLINA", -45.678],
+      ["07/10/2026", "BIZUM", "1.234,56 EUR"],
+      ["", "Saldo final", "988,88 EUR"],
+    ]);
+    // Formatos de celda que, leídos como texto, saldrían «1,234 EUR» y «-45.678»
+    hoja["C3"]!.z = '#,##0 "EUR"';
+    hoja["C4"]!.z = "0.000";
+    const libro = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(libro, hoja, "Movimientos");
+    const filas = leerArchivo("extracto.xlsx", XLSX.write(libro, { type: "buffer", bookType: "xlsx" }));
+    const lectura = interpretar(filas, adivinar(filas));
+    assert.deepEqual(
+      lectura.movimientos.map((m) => [m.fecha, m.importe]),
+      [
+        ["2026-10-03", -20000],
+        ["2026-10-05", 123400],
+        ["2026-10-06", -4568],
+        ["2026-10-07", 123456],
+      ],
+    );
+    assert.deepEqual([lectura.errores, lectura.sinFecha, lectura.sinImporte], [1, 1, 0]);
+    assert.deepEqual(lectura.ejemplo, { fila: 6, campo: "fecha", valor: "" }, "la fila del saldo no tiene fecha");
   });
 
   it("entiende fechas y columnas de cargo y abono", () => {

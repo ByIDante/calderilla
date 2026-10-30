@@ -150,7 +150,7 @@ export function rutasImportar(app: Hono, estado: Estado) {
     const adivinada = adivinar(pendiente.filas);
     const guardado = perfilPorFirma(base, firma(pendiente.filas, adivinada.filaCabecera));
     const cfg = leerConfiguracion((n) => c.req.query(n), guardado?.configuracion ?? adivinada);
-    const { movimientos, errores } = interpretar(pendiente.filas, cfg);
+    const { movimientos, errores, sinFecha, sinImporte, ejemplo } = interpretar(pendiente.filas, cfg);
     const propuestas = proponer(base, movimientos, pendiente.cuentaId);
     const categorias = new Map(base.todos<{ id: number; nombre: string; tipo: string }>("SELECT id, nombre, tipo FROM categorias").map((x) => [x.id, x]));
     const titulos = pendiente.filas[cfg.filaCabecera] ?? [];
@@ -188,8 +188,15 @@ export function rutasImportar(app: Hono, estado: Estado) {
         <section class="tarjeta">
           <div class="tarjeta-cabecera">
             <h2>${movimientos.length} movimientos</h2>
-            <span class="apagado pequeno">${nuevas} nuevos · ${propuestas.length - nuevas} ya importados${errores ? ` · ${errores} filas sin fecha o importe` : ""}</span>
+            <span class="apagado pequeno">${nuevas} nuevos · ${propuestas.length - nuevas} ya importados${errores ? ` · ${errores} filas sin leer` : ""}</span>
           </div>
+          ${ejemplo
+            ? html`<p class="apagado">
+                ${[sinFecha ? `${sinFecha} ${sinFecha === 1 ? "fila no tiene" : "filas no tienen"} una fecha que se entienda` : "", sinImporte ? `${sinImporte} ${sinImporte === 1 ? "fila no tiene" : "filas no tienen"} un importe que se entienda` : ""].filter(Boolean).join(" y ")}.
+                Por ejemplo, en la fila ${ejemplo.fila} ${ejemplo.campo === "fecha" ? "la fecha" : "el importe"} es «${ejemplo.valor || "(vacío)"}». Si son filas de totales o
+                saldos, no pasa nada: se ignoran. Si no, revisa arriba qué columna es cada cosa${ejemplo.campo === "fecha" ? " y el formato de fecha" : ""}.
+              </p>`
+            : ""}
           ${propuestas.length
             ? html`<div class="tabla-contenedor">
                 <table class="tabla-apilable">

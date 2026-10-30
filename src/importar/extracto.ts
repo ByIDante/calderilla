@@ -40,8 +40,11 @@ export function decodificar(buffer: Uint8Array): string {
 }
 
 export function leerArchivo(nombre: string, buffer: Uint8Array): Filas {
-  const filas = /\.(xlsx?|ods)$/i.test(nombre) ? leerHoja(buffer) : leerCsv(decodificar(buffer));
-  return filas.map((fila) => fila.map((celda) => String(celda ?? "").trim())).filter((fila) => fila.some(Boolean));
+  const filas: unknown[][] = /\.(xlsx?|ods)$/i.test(nombre) ? leerHoja(buffer) : leerCsv(decodificar(buffer));
+  // Los números de Excel llegan tal cual (-200, 1234.5) y se pasan con coma decimal: así «1.234» (con tres
+  // decimales) no se confunde con mil doscientos treinta y cuatro
+  const texto = (celda: unknown) => (typeof celda === "number" ? String(celda).replace(".", ",") : String(celda ?? "").trim());
+  return filas.map((fila) => fila.map(texto)).filter((fila) => fila.some(Boolean));
 }
 
 /**
@@ -65,12 +68,14 @@ function leerCsv(texto: string): Filas {
   return Papa.parse<string[]>(texto, { skipEmptyLines: true, delimiter: separador(texto) }).data;
 }
 
-function leerHoja(buffer: Uint8Array): Filas {
+function leerHoja(buffer: Uint8Array): unknown[][] {
   // dateNF va en read (en sheet_to_json se ignora): así el formato de fecha corta de Excel sale como 2026-10-03
   const libro = XLSX.read(buffer, { type: "array", cellDates: true, dateNF: "yyyy-mm-dd" });
   const hoja = libro.Sheets[libro.SheetNames[0] ?? ""];
   if (!hoja) return [];
-  return XLSX.utils.sheet_to_json<string[]>(hoja, { header: 1, raw: false, dateNF: "yyyy-mm-dd", defval: "" });
+  // Los números, sin el formato de la celda: con él, «1234 EUR» saldría «1,234 EUR» (la coma de miles en
+  // inglés) y se leería como 1,234
+  return XLSX.utils.sheet_to_json<unknown[]>(hoja, { header: 1, raw: false, rawNumbers: true, dateNF: "yyyy-mm-dd", defval: "" });
 }
 
 const quitarAcentos = (texto: string) => texto.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
@@ -128,9 +133,22 @@ export function firma(filas: Filas, filaCabecera: number): string {
   return (filas[filaCabecera] ?? []).map(quitarAcentos).join("|");
 }
 
-export function interpretar(filas: Filas, cfg: Configuracion): { movimientos: Movimiento[]; errores: number } {
+export interface Lectura {
+  movimientos: Movimiento[];
+  /** Filas que no se han podido leer (títulos repetidos, totales, saldos…) */
+  errores: number;
+  sinFecha: number;
+  sinImporte: number;
+  /** La primera fila que no se pudo leer, para enseñar qué hay en ella */
+  ejemplo: { fila: number; campo: "fecha" | "importe"; valor: string } | null;
+}
+
+export function interpretar(filas: Filas, cfg: Configuracion): Lectura {
   const movimientos: Movimiento[] = [];
   let errores = 0;
+  let sinFecha = 0;
+  let sinImporte = 0;
+  let ejemplo: Lectura["ejemplo"] = null;
   filas.slice(cfg.filaCabecera + 1).forEach((fila, i) => {
     const fecha = leerFecha(fila[cfg.fecha] ?? "", cfg.formatoFecha);
     let importe: number | null;
@@ -144,11 +162,16 @@ export function interpretar(filas: Filas, cfg: Configuracion): { movimientos: Mo
     const concepto = (fila[cfg.concepto] ?? "").replace(/\s+/g, " ").trim();
     if (!fecha || importe === null || importe === 0) {
       errores++;
+      const campo = fecha ? "importe" : "fecha";
+      if (campo === "fecha") sinFecha++;
+      else sinImporte++;
+      const columna = campo === "fecha" ? cfg.fecha : (cfg.importe ?? cfg.cargo ?? cfg.abono);
+      ejemplo ??= { fila: cfg.filaCabecera + 2 + i, campo, valor: columna === null ? "" : (fila[columna] ?? "") };
       return;
     }
     movimientos.push({ fila: cfg.filaCabecera + 1 + i, fecha, importe: cfg.invertirSigno ? -importe : importe, concepto: concepto || "(sin concepto)" });
   });
-  return { movimientos, errores };
+  return { movimientos, errores, sinFecha, sinImporte, ejemplo };
 }
 
 /**
