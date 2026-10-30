@@ -1,5 +1,5 @@
 import type { BaseDatos } from "../datos/db.ts";
-import { sumarDias, type Fecha } from "../dominio/fechas.ts";
+import { diasEntre, sumarDias, type Fecha } from "../dominio/fechas.ts";
 import { estadoEn, importeEn, ocurrencias } from "../dominio/recurrencia.ts";
 import { categoriaPorReglas, huellas, type Configuracion, type Movimiento, type Regla } from "../importar/extracto.ts";
 import { leerRecurrentes, type RecurrenteCompleto } from "./finanzas.ts";
@@ -23,20 +23,44 @@ export function leerReglas(bd: BaseDatos): (Regla & { id: number; categoria: str
   ).map((r) => ({ id: r.id, patron: r.patron, categoriaId: r.categoria_id, categoria: r.categoria }));
 }
 
-export function coincidencia(m: Pick<Movimiento, "fecha" | "importe">, recurrentes: readonly RecurrenteCompleto[]): RecurrenteCompleto | null {
+/** Cargos de gastos fijos que ya tienen un movimiento: recurrente → fechas de los movimientos emparejados. */
+export type Emparejados = Map<number, Fecha[]>;
+
+export function emparejadosEnBd(bd: BaseDatos): Emparejados {
+  const usados: Emparejados = new Map();
+  for (const fila of bd.todos<{ recurrente_id: number; fecha: string }>("SELECT recurrente_id, fecha FROM apuntes WHERE recurrente_id IS NOT NULL")) {
+    usados.set(fila.recurrente_id, [...(usados.get(fila.recurrente_id) ?? []), fila.fecha]);
+  }
+  return usados;
+}
+
+/**
+ * El gasto o ingreso fijo al que corresponde un movimiento: mismo sentido, ±5 % del importe y ±5 días de un
+ * cargo previsto que aún no tenga movimiento. Si una regla de categorías dice otra cosa (p. ej. un restaurante
+ * de 49 € cerca de la factura del móvil de 50 €), no se empareja.
+ */
+export function coincidencia(
+  m: Pick<Movimiento, "fecha" | "importe">,
+  recurrentes: readonly RecurrenteCompleto[],
+  usados: Emparejados = new Map(),
+  categoriaRegla: number | null = null,
+): RecurrenteCompleto | null {
   const tipo = m.importe < 0 ? "gasto" : "ingreso";
   const importe = Math.abs(m.importe);
-  return (
-    recurrentes.find(
-      (r) =>
-        r.tipo === tipo &&
-        estadoEn(r, sumarDias(m.fecha, MARGEN_DIAS)) !== "proximo" &&
-        ocurrencias(r, sumarDias(m.fecha, -MARGEN_DIAS), sumarDias(m.fecha, MARGEN_DIAS)).some((fecha) => {
-          const previsto = importeEn(r.versiones, fecha);
-          return Math.abs(previsto - importe) <= previsto * MARGEN_IMPORTE;
-        }),
-    ) ?? null
-  );
+  for (const r of recurrentes) {
+    if (r.tipo !== tipo || estadoEn(r, sumarDias(m.fecha, MARGEN_DIAS)) === "proximo") continue;
+    if (categoriaRegla !== null && r.categoriaId !== null && r.categoriaId !== categoriaRegla) continue;
+    const cargo = ocurrencias(r, sumarDias(m.fecha, -MARGEN_DIAS), sumarDias(m.fecha, MARGEN_DIAS)).find((fecha) => {
+      const previsto = importeEn(r.versiones, fecha);
+      const libre = !(usados.get(r.id) ?? []).some((otra) => Math.abs(diasEntre(otra, fecha)) <= MARGEN_DIAS);
+      return libre && Math.abs(previsto - importe) <= previsto * MARGEN_IMPORTE;
+    });
+    if (cargo) {
+      usados.set(r.id, [...(usados.get(r.id) ?? []), m.fecha]);
+      return r;
+    }
+  }
+  return null;
 }
 
 export function proponer(bd: BaseDatos, movimientos: readonly Movimiento[], cuentaId: number | null): Propuesta[] {
@@ -44,13 +68,17 @@ export function proponer(bd: BaseDatos, movimientos: readonly Movimiento[], cuen
   const recurrentes = leerRecurrentes(bd);
   const existentes = new Set(bd.todos<{ hash_dedupe: string }>("SELECT hash_dedupe FROM apuntes WHERE hash_dedupe IS NOT NULL").map((f) => f.hash_dedupe));
   const lista = huellas(movimientos, cuentaId);
+  const usados = emparejadosEnBd(bd);
   return movimientos.map((m, i) => {
-    const recurrente = coincidencia(m, recurrentes);
+    const duplicado = existentes.has(lista[i]!);
+    const porRegla = categoriaPorReglas(m.concepto, reglas);
+    // Un movimiento ya importado no gasta un cargo previsto: ya lo tiene asignado
+    const recurrente = duplicado ? null : coincidencia(m, recurrentes, usados, porRegla);
     return {
       ...m,
       huella: lista[i]!,
-      duplicado: existentes.has(lista[i]!),
-      categoriaId: recurrente?.categoriaId ?? categoriaPorReglas(m.concepto, reglas),
+      duplicado,
+      categoriaId: porRegla ?? recurrente?.categoriaId ?? null,
       recurrenteId: recurrente?.id ?? null,
       recurrente: recurrente?.nombre ?? null,
     };
@@ -102,16 +130,20 @@ export function importarDelBanco(bd: BaseDatos, movimientos: readonly { idExtern
   if (!movimientos.length) return 0;
   const reglas = leerReglas(bd);
   const recurrentes = leerRecurrentes(bd);
+  const usados = emparejadosEnBd(bd);
+  const yaTraidos = new Set(bd.todos<{ hash_dedupe: string }>("SELECT hash_dedupe FROM apuntes WHERE origen = 'banco'").map((f) => f.hash_dedupe));
   return bd.transaccion(() => {
     let nuevos = 0;
     for (const m of movimientos) {
-      const recurrente = coincidencia(m, recurrentes);
+      if (yaTraidos.has(`eb:${cuentaId}:${m.idExterno}`)) continue;
+      const porRegla = categoriaPorReglas(m.concepto, reglas);
+      const recurrente = coincidencia(m, recurrentes, usados, porRegla);
       const { cambios } = bd.ejecutar(
         "INSERT OR IGNORE INTO apuntes (fecha, importe, concepto, categoria_id, cuenta_id, recurrente_id, origen, id_externo, hash_dedupe) VALUES (?, ?, ?, ?, ?, ?, 'banco', ?, ?)",
         m.fecha,
         m.importe,
         m.concepto,
-        recurrente?.categoriaId ?? categoriaPorReglas(m.concepto, reglas),
+        porRegla ?? recurrente?.categoriaId ?? null,
         cuentaId,
         recurrente?.id ?? null,
         m.idExterno,

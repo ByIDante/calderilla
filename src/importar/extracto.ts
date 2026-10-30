@@ -66,7 +66,8 @@ function leerCsv(texto: string): Filas {
 }
 
 function leerHoja(buffer: Uint8Array): Filas {
-  const libro = XLSX.read(buffer, { type: "array", cellDates: true });
+  // dateNF va en read (en sheet_to_json se ignora): así el formato de fecha corta de Excel sale como 2026-10-03
+  const libro = XLSX.read(buffer, { type: "array", cellDates: true, dateNF: "yyyy-mm-dd" });
   const hoja = libro.Sheets[libro.SheetNames[0] ?? ""];
   if (!hoja) return [];
   return XLSX.utils.sheet_to_json<string[]>(hoja, { header: 1, raw: false, dateNF: "yyyy-mm-dd", defval: "" });
@@ -169,7 +170,8 @@ export interface Regla {
   categoriaId: number;
 }
 
+/** La regla más concreta gana: «uber eats» antes que «uber ». */
 export function categoriaPorReglas(concepto: string, reglas: readonly Regla[]): number | null {
   const texto = quitarAcentos(concepto);
-  return reglas.find((regla) => texto.includes(quitarAcentos(regla.patron)))?.categoriaId ?? null;
+  return [...reglas].sort((a, b) => b.patron.length - a.patron.length).find((regla) => texto.includes(quitarAcentos(regla.patron)))?.categoriaId ?? null;
 }
