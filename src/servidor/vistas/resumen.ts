@@ -8,7 +8,7 @@ interface DatosResumen {
   ctx: Contexto;
   cierrePendiente: string | null;
   proximos: { nombre: string; fecha: string; importe: number }[];
-  cierres: { etiqueta: string; plan: number; real: number | null }[];
+  cierres: { etiqueta: string; plan: number; real: number | null; patrimonio: number }[];
   porCategoria: [string, number][];
 }
 
@@ -86,6 +86,19 @@ export function vistaResumen({ ctx, cierrePendiente, proximos, cierres, porCateg
           : vacio("Cuando cierres tu primer mes verás aquí lo que ahorras de verdad frente a lo previsto.", html`<a class="boton" href="/cierre">Cerrar un mes</a>`)}
       </section>
     </div>
+
+    ${cierres.length > 1
+      ? html`<section class="tarjeta" style="margin-top:16px">
+          ${grafico(
+            "grafico-patrimonio",
+            "Patrimonio al cierre de cada mes",
+            { tipo: "line", etiquetas: cierres.map((c) => c.etiqueta), series: [{ nombre: "Patrimonio", valores: cierres.map((c) => c.patrimonio / 100) }] },
+            html`<table>
+              <tbody>${cierres.map((c) => html`<tr><td>${c.etiqueta}</td><td class="numero">${eur(c.patrimonio)}</td></tr>`)}</tbody>
+            </table>`,
+          )}
+        </section>`
+      : ""}
 
     <section class="tarjeta" style="margin-top:16px">
       <h2>Próximos cargos no mensuales</h2>

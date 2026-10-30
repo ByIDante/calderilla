@@ -13,7 +13,9 @@ export function rutasResumen(app: Hono, estado: Estado) {
     const mes = mesDe(hoy);
 
     const cierres = base
-      .todos<{ mes: string; ahorro_plan: number; ahorro_real: number | null }>("SELECT mes, ahorro_plan, ahorro_real FROM cierres_mes ORDER BY mes DESC LIMIT 12")
+      .todos<{ mes: string; ahorro_plan: number; ahorro_real: number | null; patrimonio: number; resumen: string | null }>(
+        "SELECT mes, ahorro_plan, ahorro_real, patrimonio, resumen FROM cierres_mes ORDER BY mes DESC LIMIT 12",
+      )
       .reverse();
     const mesAnterior = sumarMesesAMes(mes, -1);
     const cierrePendiente = ctx.cuentas.length > 0 && !base.uno("SELECT 1 FROM cierres_mes WHERE mes = ?", mesAnterior) ? mesAnterior : null;
@@ -37,7 +39,13 @@ export function rutasResumen(app: Hono, estado: Estado) {
         ctx,
         cierrePendiente,
         proximos,
-        cierres: cierres.map((cierre) => ({ etiqueta: nombreMesCorto(cierre.mes), plan: cierre.ahorro_plan, real: cierre.ahorro_real })),
+        cierres: cierres.map((cierre) => ({
+          etiqueta: nombreMesCorto(cierre.mes),
+          plan: cierre.ahorro_plan,
+          real: cierre.ahorro_real,
+          // Valor de mercado si se guardó; si no, a precio de compra
+          patrimonio: (JSON.parse(cierre.resumen ?? "{}") as { patrimonioMercado?: number }).patrimonioMercado ?? cierre.patrimonio,
+        })),
         porCategoria: [...porCategoria].sort((a, b) => b[1] - a[1]),
       }),
     );
