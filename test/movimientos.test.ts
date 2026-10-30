@@ -90,3 +90,22 @@ it("pestañas por banco: cada una muestra solo sus movimientos y su saldo", asyn
   assert.doesNotMatch(sinBanco, /SOLO BBVA/);
   assert.match(sinBanco, /CINE|MERCADONA|Cena con amigos/);
 });
+
+it("mostrar solo gastos o solo ingresos, y las cifras de arriba filtran", async () => {
+  const gastos = await (await pedir("/movimientos?mes=2026-10&tipo=gastos")).text();
+  assert.match(gastos, /SOLO BBVA/);
+  assert.doesNotMatch(gastos, /SOLO TR/, "un ingreso no sale entre los gastos");
+  assert.match(gastos, /Solo ingresos/);
+  const ingresos = await (await pedir("/movimientos?mes=2026-10&tipo=ingresos")).text();
+  assert.match(ingresos, /SOLO TR/);
+  assert.doesNotMatch(ingresos, /SOLO BBVA/);
+  assert.match(ingresos, /Entradas<\/div><div class="cifra-valor positivo">/, "las cifras siguen mostrando el total del mes");
+
+  bd.ejecutar("INSERT INTO apuntes (fecha, importe, concepto) VALUES ('2026-10-25', -700, 'SIN CATEGORIA')");
+  const todos = await (await pedir("/movimientos?mes=2026-10")).text();
+  assert.match(todos, /href="\/movimientos\?mes=2026-10&amp;categoria=sin"/, "«Sin categoría» se puede pulsar");
+  const sinCategoria = await (await pedir("/movimientos?mes=2026-10&categoria=sin")).text();
+  assert.match(sinCategoria, /SIN CATEGORIA/);
+  assert.doesNotMatch(sinCategoria, /Cena con amigos/, "los que ya tienen categoría no salen");
+  assert.match(todos, /<details class="tarjeta" id="presupuesto" open data-recordar-plegado/, "el presupuesto se puede plegar");
+});

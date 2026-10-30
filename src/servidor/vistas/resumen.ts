@@ -192,10 +192,10 @@ export function vistaResumen({ ctx, cierrePendiente, ocultos, presupuesto, proxi
     ${graficoGastoMeses(gastoMeses)}
 
     ${presupuesto.some((l) => l.limite)
-      ? html`<section class="tarjeta" style="margin-top:16px">
-          <div class="tarjeta-cabecera"><h2>Presupuesto por categorías</h2><a href="/movimientos#presupuesto">Ver movimientos</a></div>
+      ? html`<details class="tarjeta" style="margin-top:16px" open data-recordar-plegado="presupuesto-resumen">
+          <summary><h2>Presupuesto por categorías</h2><a class="resumen-plegado" href="/movimientos#presupuesto">Ver movimientos</a></summary>
           ${barrasPresupuesto(presupuesto)}
-        </section>`
+        </details>`
       : ""}
 
     <section class="tarjeta" style="margin-top:16px">

@@ -92,6 +92,7 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
     // Banco (entidad de la cuenta) y, dentro de él, una cuenta concreta
     const banco = c.req.query("banco") ?? "";
     const filtroCuenta = c.req.query("cuenta") ?? "";
+    const tipo = c.req.query("tipo") === "gastos" ? "gastos" : c.req.query("tipo") === "ingresos" ? "ingresos" : "";
     const condiciones = ["a.fecha BETWEEN ? AND ?"];
     const parametros: (string | number)[] = [primerDia(mes), ultimoDia(mes)];
     if (banco === "sin") condiciones.push("(a.cuenta_id IS NULL OR coalesce(cu.entidad, '') = '')");
@@ -103,6 +104,11 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
       condiciones.push("a.cuenta_id = ?");
       parametros.push(Number(filtroCuenta));
     }
+    // Las cifras de arriba (entradas, salidas, sin categoría) solo dependen del mes y del banco
+    const condicionesCifras = [...condiciones];
+    const parametrosCifras = [...parametros];
+    if (tipo === "gastos") condiciones.push("a.importe < 0");
+    if (tipo === "ingresos") condiciones.push("a.importe > 0");
     if (filtroCategoria === "sin") condiciones.push("a.categoria_id IS NULL");
     else if (/^\d+$/.test(filtroCategoria)) {
       condiciones.push("a.categoria_id = ?");
@@ -121,12 +127,18 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
       ...parametros,
     );
     const lista = categorias();
-    const ingresos = movimientos.filter((m) => m.importe > 0).reduce((s, m) => s + m.importe, 0);
-    const gastos = movimientos.filter((m) => m.importe < 0).reduce((s, m) => s - m.importe, 0);
+    const cifras = base.uno<{ ingresos: number | null; gastos: number | null; sin: number }>(
+      `SELECT sum(CASE WHEN a.importe > 0 THEN a.importe END) AS ingresos, -sum(CASE WHEN a.importe < 0 THEN a.importe END) AS gastos,
+              count(CASE WHEN a.categoria_id IS NULL THEN 1 END) AS sin
+       FROM apuntes a LEFT JOIN cuentas cu ON cu.id = a.cuenta_id WHERE ${condicionesCifras.join(" AND ")}`,
+      ...parametrosCifras,
+    );
+    const ingresos = cifras?.ingresos ?? 0;
+    const gastos = cifras?.gastos ?? 0;
     const porCategoria = new Map<string, number>();
     for (const m of movimientos.filter((x) => x.importe < 0)) porCategoria.set(m.categoria ?? "Sin categoría", (porCategoria.get(m.categoria ?? "Sin categoría") ?? 0) - m.importe);
-    const sinCategoria = movimientos.filter((m) => !m.categoria_id).length;
-    const filtros = { ...(banco ? { banco } : {}), ...(/^\d+$/.test(filtroCuenta) ? { cuenta: filtroCuenta } : {}), ...(filtroCategoria ? { categoria: filtroCategoria } : {}), ...(buscar ? { buscar } : {}) };
+    const sinCategoria = cifras?.sin ?? 0;
+    const filtros = { ...(tipo ? { tipo } : {}), ...(banco ? { banco } : {}), ...(/^\d+$/.test(filtroCuenta) ? { cuenta: filtroCuenta } : {}), ...(filtroCategoria ? { categoria: filtroCategoria } : {}), ...(buscar ? { buscar } : {}) };
     const enlace = (cambios: Record<string, string>) => {
       const p = new URLSearchParams({ mes, ...filtros, ...cambios });
       for (const [k, v] of [...p]) if (!v) p.delete(k);
@@ -181,15 +193,30 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
           : ""}
         <div class="cifras">
           ${cuentasDelBanco.length ? html`<div class="cifra"><div class="cifra-etiqueta">Saldo en ${banco}</div><div class="cifra-valor">${eur(saldoBanco)}</div></div>` : ""}
-          <div class="cifra"><div class="cifra-etiqueta">Entradas</div><div class="cifra-valor positivo">${eur(ingresos)}</div></div>
-          <div class="cifra"><div class="cifra-etiqueta">Salidas</div><div class="cifra-valor">${eur(gastos)}</div></div>
-          <div class="cifra"><div class="cifra-etiqueta">Sin categoría</div><div class="cifra-valor">${sinCategoria}</div></div>
+          <a class="cifra" href="${enlace({ tipo: tipo === "ingresos" ? "" : "ingresos" })}" aria-current="${tipo === "ingresos" ? "true" : "false"}">
+            <div class="cifra-etiqueta">Entradas</div><div class="cifra-valor positivo">${eur(ingresos)}</div>
+            <div class="cifra-nota">${tipo === "ingresos" ? "Ver todos" : "Ver solo las entradas"}</div>
+          </a>
+          <a class="cifra" href="${enlace({ tipo: tipo === "gastos" ? "" : "gastos" })}" aria-current="${tipo === "gastos" ? "true" : "false"}">
+            <div class="cifra-etiqueta">Salidas</div><div class="cifra-valor">${eur(gastos)}</div>
+            <div class="cifra-nota">${tipo === "gastos" ? "Ver todos" : "Ver solo las salidas"}</div>
+          </a>
+          <a class="cifra" href="${enlace({ categoria: filtroCategoria === "sin" ? "" : "sin" })}" aria-current="${filtroCategoria === "sin" ? "true" : "false"}">
+            <div class="cifra-etiqueta">Sin categoría</div><div class="cifra-valor">${sinCategoria}</div>
+            <div class="cifra-nota">${filtroCategoria === "sin" ? "Ver todos" : sinCategoria ? "Ver cuáles y ponérsela" : "Todos tienen categoría"}</div>
+          </a>
         </div>
         ${banco || filtroCuenta ? "" : tarjetaPresupuesto(presupuestoPorCategoria(base, mes, hoy), aqui)}
         <section class="tarjeta">
+          <nav class="pestanas pestanas-secundarias" aria-label="Qué movimientos mostrar">
+            <a href="${enlace({ tipo: "" })}" aria-current="${tipo ? "false" : "true"}">Todos</a>
+            <a href="${enlace({ tipo: "gastos" })}" aria-current="${tipo === "gastos" ? "true" : "false"}">Solo gastos</a>
+            <a href="${enlace({ tipo: "ingresos" })}" aria-current="${tipo === "ingresos" ? "true" : "false"}">Solo ingresos</a>
+          </nav>
           <form method="get" action="/movimientos" class="fila-campos">
             <input type="hidden" name="mes" value="${mes}" />
             ${banco ? html`<input type="hidden" name="banco" value="${banco}" />` : ""}
+            ${tipo ? html`<input type="hidden" name="tipo" value="${tipo}" />` : ""}
             ${/^\d+$/.test(filtroCuenta) ? html`<input type="hidden" name="cuenta" value="${filtroCuenta}" />` : ""}
             ${selector("Categoría", "categoria", [["", "Todas"], ["sin", "Sin categoría"], ...lista.map((x) => [String(x.id), x.nombre] as const)], filtroCategoria)}
             ${campo({ etiqueta: "Buscar en el concepto", nombre: "buscar", valor: buscar, marcador: "mercadona, bizum…" })}

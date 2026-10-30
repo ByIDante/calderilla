@@ -20,8 +20,12 @@ export function barrasPresupuesto(lineas: readonly LineaPresupuesto[]): Html {
 export function tarjetaPresupuesto(lineas: readonly LineaPresupuesto[], volver: string): Html {
   const conLimite = lineas.filter((l) => l.limite);
   const sinLimite = lineas.filter((l) => !l.limite && l.gastado > 0);
-  return html`<section class="tarjeta" id="presupuesto">
-    <h2>Presupuesto por categorías</h2>
+  const pasadas = conLimite.filter((l) => l.gastado > l.limite!).length;
+  return html`<details class="tarjeta" id="presupuesto" open data-recordar-plegado="presupuesto-movimientos">
+    <summary>
+      <h2>Presupuesto por categorías</h2>
+      <span class="resumen-plegado">${conLimite.length ? (pasadas ? `${pasadas} de ${conLimite.length} pasadas de su límite` : `${conLimite.length} dentro de su límite`) : "sin límites"}</span>
+    </summary>
     <p class="apagado pequeno">
       Lo que gastas en cosas que varían (comida, gasolina, restaurantes…) frente al máximo que te has puesto. Cuenta lo que apuntas o importas del banco; los cargos de tus
       gastos fijos no, porque ya están en el presupuesto general.
@@ -50,5 +54,5 @@ export function tarjetaPresupuesto(lineas: readonly LineaPresupuesto[], volver: 
         <div class="botones"><button class="boton boton-principal" type="submit">Guardar límites</button></div>
       </form>
     </details>
-  </section>`;
+  </details>`;
 }

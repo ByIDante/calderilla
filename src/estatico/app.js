@@ -116,7 +116,27 @@ function esperarAutorizacion(raiz) {
   }, 2000);
 }
 
+// Tarjetas plegables con data-recordar-plegado: se recuerda si las dejaste cerradas
+function recordarPlegado(raiz) {
+  for (const detalle of raiz.querySelectorAll?.("details[data-recordar-plegado]") ?? []) {
+    const clave = `calderilla:plegado:${detalle.dataset.recordarPlegado}`;
+    try {
+      if (localStorage.getItem(clave) === "cerrado") detalle.open = false;
+    } catch {
+      // Sin almacenamiento, se queda como venga
+    }
+    detalle.addEventListener("toggle", () => {
+      try {
+        localStorage.setItem(clave, detalle.open ? "abierto" : "cerrado");
+      } catch {
+        // Igual que arriba
+      }
+    });
+  }
+}
+
 function preparar(raiz) {
+  recordarPlegado(raiz);
   pintarGraficos(raiz);
   actualizarDependientes(document);
   enlacesExternos(raiz);

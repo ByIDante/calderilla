@@ -184,11 +184,16 @@ a:hover {
   font-weight: 600;
 }
 
+/* Todo el ancho de la pantalla (con un tope para monitores muy anchos); los textos largos, a una medida cómoda */
 main {
   padding: 28px 32px 40px;
-  max-width: 1120px;
+  max-width: 1800px;
   width: 100%;
   min-width: 0;
+}
+main > p,
+.tarjeta > p {
+  max-width: 120ch;
 }
 
 h1 {
@@ -707,6 +712,56 @@ td.celda-boton {
 }
 tr.fila-total td {
   border-top: 2px solid var(--linea-fuerte);
+}
+/* Cifras que también son un filtro (Entradas, Salidas, Sin categoría) */
+a.cifra {
+  display: block;
+  color: inherit;
+  text-decoration: none;
+}
+a.cifra:hover {
+  border-color: var(--linea-fuerte);
+  background: var(--superficie-2);
+}
+a.cifra[aria-current="true"] {
+  border-color: var(--acento);
+  box-shadow: inset 0 0 0 1px var(--acento);
+}
+a.cifra .cifra-nota {
+  color: var(--acento);
+}
+
+/* Tarjetas que se pliegan */
+details.tarjeta > summary {
+  cursor: pointer;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+details.tarjeta > summary::-webkit-details-marker {
+  display: none;
+}
+details.tarjeta > summary h2 {
+  margin: 0;
+}
+details.tarjeta > summary::after {
+  content: "▾";
+  color: var(--tinta-suave);
+  transition: transform 0.15s;
+}
+details.tarjeta:not([open]) > summary::after {
+  transform: rotate(-90deg);
+}
+details.tarjeta[open] > summary {
+  margin-bottom: 12px;
+}
+.resumen-plegado {
+  color: var(--apagado);
+  font-size: 13px;
+  font-weight: normal;
+  margin-left: auto;
 }
 tr.grupo td {
   background: var(--superficie-2);
