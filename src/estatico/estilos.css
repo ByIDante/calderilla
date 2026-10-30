@@ -650,6 +650,25 @@ td.celda-boton {
   font-size: 13px;
   padding: 3px 10px;
 }
+/* Resumen: cuánto toca ahorrar y cuánto hay para ocio, lo primero que se ve */
+.tarjeta-mes {
+  border-color: color-mix(in srgb, var(--acento) 35%, var(--linea));
+}
+.frase-mes {
+  font-size: 19px;
+  line-height: 1.4;
+  margin: 0 0 4px;
+}
+.frase-mes b {
+  font-size: 1.12em;
+}
+.tarjeta-mes h3 {
+  margin-top: 4px;
+}
+.tarjeta-mes .rejilla p {
+  margin: 0 0 8px;
+}
+
 /* Ocio: reparto de los ingresos y medidor de lo gastado */
 .reparto {
   display: flex;

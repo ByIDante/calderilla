@@ -7,6 +7,7 @@ import { contexto, ocioGastadoEn } from "../../servicios/situacion.ts";
 import { bd, render, type Estado } from "../app.ts";
 import { Formulario, idDe, redirigir } from "../formulario.ts";
 import { botonAccion, campo, cifra, eur, eurR, porque, selector, vacio } from "../vistas/comun.ts";
+import { barraReparto, medidorOcio } from "../vistas/reparto.ts";
 
 interface Apunte {
   id: number;
@@ -95,22 +96,6 @@ export function rutasOcio(app: Hono, estado: Estado) {
       ["− Ya gastado en ocio este mes", -p.ocioGastado],
       ["= Te queda", p.ocioQueda],
     ];
-    // Reparto de los ingresos en una barra (si gastas más de lo que ingresas, la barra es el total de gastos)
-    const tramos = [
-      { n: 1, nombre: "Esenciales", valor: p.esenciales },
-      { n: 2, nombre: "No esenciales", valor: p.noEsenciales },
-      { n: 3, nombre: "Ahorro", valor: Math.max(p.objetivoAhorro - p.paraMetas, 0) },
-      { n: 4, nombre: "Metas", valor: p.paraMetas },
-      { n: 5, nombre: "Ocio", valor: p.ocioPlan },
-    ].filter((t) => t.valor > 0);
-    const disponible = p.ocio + p.ocioRemanente;
-    const usado = disponible > 0 ? (p.ocioGastado / disponible) * 100 : p.ocioGastado > 0 ? 101 : 0;
-    const estadoOcio =
-      usado > 100
-        ? { clase: "mal", icono: "×", texto: "Te has pasado del ocio de este mes." }
-        : usado >= 75
-          ? { clase: "atencion", icono: "!", texto: "Ojo: te queda poco ocio este mes." }
-          : { clase: "bien", icono: "✓", texto: "Vas bien." };
 
     return render(
       c,
@@ -144,21 +129,7 @@ export function rutasOcio(app: Hono, estado: Estado) {
             ${p.sobrante < 0
               ? html`<p class="negativo"><b>Gastas ${eurR(-p.sobrante)} al mes más de lo que ingresas:</b> no queda nada para ahorro ni ocio.</p>`
               : ""}
-            <div class="reparto" role="img" aria-label="Reparto de tus ingresos: ${tramos.map((t) => `${t.nombre} ${eurR(t.valor)}`).join(", ")}">
-              ${tramos.map((t) => html`<span class="tramo tramo-${t.n}" style="flex-grow: ${t.valor}" title="${t.nombre}: ${eurR(t.valor)}"></span>`)}
-            </div>
-            <ul class="leyenda">
-              ${tramos.map((t) => html`<li><span class="muestra tramo-${t.n}" aria-hidden="true"></span>${t.nombre} <b>${eurR(t.valor)}</b></li>`)}
-            </ul>
-            <div class="medidor-ocio">
-              <div class="tarjeta-cabecera" style="margin-bottom:0">
-                <span><span class="aviso-icono estado-${estadoOcio.clase}" aria-hidden="true">${estadoOcio.icono}</span> ${estadoOcio.texto}</span>
-                <span class="numero">${eurR(p.ocioGastado)} de ${eurR(disponible)}</span>
-              </div>
-              <div class="barra" role="progressbar" aria-label="Ocio gastado" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(Math.min(usado, 100))}">
-                <div class="barra-relleno estado-${estadoOcio.clase}" style="width: ${Math.min(usado, 100).toFixed(1)}%"></div>
-              </div>
-            </div>
+            ${barraReparto(p)} ${medidorOcio(p)}
             <details class="como-tabla" style="margin-top:10px">
               <summary>Ver el cálculo paso a paso</summary>
               <div class="tabla-contenedor"><table>

@@ -2,6 +2,7 @@ import type { Context, Hono } from "hono";
 import { mesDe, nombreMes, nombreMesCorto, primerDia, sumarDias, sumarMesesAMes, ultimoDia } from "../../dominio/fechas.ts";
 import { importeEn, ocurrencias } from "../../dominio/recurrencia.ts";
 import { NOMBRE_ETAPA, type Etapa } from "../../reglas/tipos.ts";
+import { leerAportaciones, totalMensual } from "../../servicios/aportaciones.ts";
 import { leerRecurrentes, presupuestoMes } from "../../servicios/finanzas.ts";
 import { avisosPresupuesto, gastoPorCategoriaMeses, presupuestoPorCategoria } from "../../servicios/presupuesto.ts";
 import { contexto, ocioGastadoEn } from "../../servicios/situacion.ts";
@@ -73,6 +74,8 @@ export function rutasResumen(app: Hono, estado: Estado) {
         })),
         porCategoria: [...porCategoria].sort((a, b) => b[1] - a[1]),
         gastoMeses: gastoPorCategoriaMeses(base, mes),
+        automatico: totalMensual(leerAportaciones(base), mes),
+        ultimoCierre: cierres.length ? { mes: cierres.at(-1)!.mes, plan: cierres.at(-1)!.ahorro_plan, real: cierres.at(-1)!.ahorro_real } : null,
       }),
     );
   });

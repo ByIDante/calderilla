@@ -1,11 +1,13 @@
 import { html } from "hono/html";
 import { formatoFecha, mesDe, nombreMes, nombreMesCorto, sumarMesesAMes } from "../../dominio/fechas.ts";
+import type { Etapa, Presupuesto } from "../../reglas/tipos.ts";
 import type { Contexto } from "../../servicios/situacion.ts";
 import { aviso, cifra, claveAviso, eur, eurR, grafico, vacio, type Html } from "./comun.ts";
 import type { PresupuestoMes } from "../../servicios/finanzas.ts";
 import type { GastoMensual, LineaPresupuesto } from "../../servicios/presupuesto.ts";
 import { listaAvisos, tarjetaEtapa } from "./escalera.ts";
 import { barrasPresupuesto } from "./presupuesto.ts";
+import { barraReparto, medidorOcio } from "./reparto.ts";
 
 interface DatosResumen {
   ctx: Contexto;
@@ -16,6 +18,70 @@ interface DatosResumen {
   cierres: { etiqueta: string; plan: number; real: number | null; patrimonio: number }[];
   porCategoria: [string, number][];
   gastoMeses: GastoMensual;
+  /** Lo que traspasas cada mes a otra cuenta o a un fondo (Cuentas → Ahorro automático) */
+  automatico: number;
+  ultimoCierre: { mes: string; plan: number; real: number | null } | null;
+}
+
+/** A qué va el ahorro que pide cada etapa de la escalera */
+const DESTINO_ETAPA: Record<Etapa, string> = {
+  deficit: "cuadrar tus gastos",
+  colchon: "tu colchón",
+  deuda_cara: "pagar antes tu deuda cara",
+  fondo_emergencia: "tu fondo de emergencia",
+  metas_corto: "tus metas cercanas",
+  invertir: "invertir",
+};
+
+/** Lo esencial del mes en una frase: cuánto toca ahorrar y cuánto hay para ocio, y de dónde sale. */
+function tarjetaMes(p: Presupuesto, etapa: Etapa, automatico: number, ultimoCierre: DatosResumen["ultimoCierre"]): Html {
+  if (p.sobrante < 0) {
+    return html`<section class="tarjeta tarjeta-mes">
+      <h2>Tu mes en claro</h2>
+      <p class="frase-mes">Este mes gastas <b class="negativo">${eurR(-p.sobrante)} más de lo que ingresas</b>: no queda nada para ahorrar ni para ocio.</p>
+      ${barraReparto(p)}
+      <p class="apagado">Empieza por <a href="/gastos">revisar tus gastos</a>, primero los no esenciales.</p>
+    </section>`;
+  }
+  const ocioDelMes = p.ocio + p.ocioRemanente;
+  const paraEtapa = p.objetivoAhorro - p.paraMetas;
+  const destino = [p.paraMetas ? `${eurR(p.paraMetas)} para tus metas` : "", paraEtapa > 0 ? `${eurR(paraEtapa)} para ${DESTINO_ETAPA[etapa]}` : ""].filter(Boolean).join(" y ");
+  const comoApartarlo =
+    automatico <= 0
+      ? html`Apártalo nada más cobrar, mejor con una transferencia periódica (<a href="/cuentas#ahorro-automatico">ahorro automático</a>).`
+      : automatico >= p.objetivoAhorro
+        ? html`Tu ahorro automático (${eurR(automatico)} al mes) ya lo cubre.`
+        : html`Tu ahorro automático ya aparta ${eurR(automatico)}: aparta tú los otros ${eurR(p.objetivoAhorro - automatico)}.`;
+  const notasOcio = [
+    p.ocioRemanente ? `Incluye ${eurR(p.ocioRemanente)} que te sobraron el mes pasado.` : "",
+    p.correccion ? `Lleva ${eurR(p.correccion)} menos porque en tus últimos cierres ahorraste menos de lo previsto.` : "",
+  ].filter(Boolean);
+  return html`<section class="tarjeta tarjeta-mes">
+    <h2>Tu mes en claro</h2>
+    <p class="frase-mes">
+      ${p.objetivoAhorro > 0
+        ? html`Este mes toca ahorrar <b>${eurR(p.objetivoAhorro)}</b> y tienes <b>${eurR(ocioDelMes)}</b> para ocio.`
+        : html`Este mes no da para ahorrar: lo que te sobra, <b>${eurR(ocioDelMes)}</b>, es tu ocio.`}
+    </p>
+    ${barraReparto(p)}
+    <div class="rejilla">
+      <div>
+        <h3>Ahorro: ${eurR(p.objetivoAhorro)}</h3>
+        ${p.objetivoAhorro > 0 ? html`<p>${destino ? `${destino[0]!.toUpperCase()}${destino.slice(1)}. ` : ""}${comoApartarlo}</p>` : ""}
+        <p class="apagado pequeno">
+          ${ultimoCierre && ultimoCierre.real !== null
+            ? html`En ${nombreMes(ultimoCierre.mes)} ahorraste de verdad
+                <b class="${ultimoCierre.real < ultimoCierre.plan ? "negativo" : "positivo"}">${eurR(ultimoCierre.real)}</b> de ${eurR(ultimoCierre.plan)} previstos.`
+            : html`Cuando cierres un mes verás aquí cuánto ahorraste de verdad.`}
+        </p>
+      </div>
+      <div>
+        <h3>${p.ocioQueda < 0 ? `Ocio: te has pasado ${eurR(-p.ocioQueda)}` : `Ocio: te quedan ${eurR(p.ocioQueda)}`}</h3>
+        ${medidorOcio(p)}
+        <p class="apagado pequeno">${notasOcio.join(" ")} <a href="/ocio">Cómo se calcula</a></p>
+      </div>
+    </div>
+  </section>`;
 }
 
 /** Botones para ir al mes anterior o al siguiente (sin pasar del actual). */
@@ -107,7 +173,7 @@ function avisoCierre(mes: string | null, ocultos: ReadonlySet<string>): Html | s
   return ocultos.has(clave) ? "" : aviso("info", texto, { ruta: `/cierre?mes=${mes}`, texto: "Cerrar el mes" }, { clave });
 }
 
-export function vistaResumen({ ctx, cierrePendiente, ocultos, presupuesto, proximos, cierres, porCategoria, gastoMeses }: DatosResumen): Html {
+export function vistaResumen({ ctx, cierrePendiente, ocultos, presupuesto, proximos, cierres, porCategoria, gastoMeses, automatico, ultimoCierre }: DatosResumen): Html {
   const r = ctx.resultado;
   const p = r.presupuesto;
   const sinDatos = ctx.recurrentes.length === 0 && ctx.cuentas.length === 0;
@@ -127,6 +193,8 @@ export function vistaResumen({ ctx, cierrePendiente, ocultos, presupuesto, proxi
 
   return html`
     ${navegacionMes(mesDe(ctx.hoy), ctx.hoy)} ${avisoCierre(cierrePendiente, ocultos)} ${listaAvisos(r, ocultos)}
+
+    ${tarjetaMes(p, r.etapa, automatico, ultimoCierre)}
 
     <div class="cifras">
       ${cifra("Ingresos al mes", eurR(p.ingresos))} ${cifra("Gastos esenciales", eurR(p.esenciales), "con préstamos y la parte mensual de los anuales")}
