@@ -69,6 +69,26 @@ Cada recomendación tiene un **«¿Por qué?»** con la fórmula y los números.
 
 Los tipos de interés de cuentas y Letras, los tramos del IRPF y los límites de los planes de pensiones están en **Ajustes → Datos de mercado**. Cada dato lleva su fuente y la fecha en que se comprobó. Si un dato tiene más de 90 días, la app te pide verificarlo y deja de usarlo para recomendar. Una versión nueva del programa nunca pisa un dato que hayas cambiado tú.
 
+## ¿Dónde apunto cada cosa?
+
+| Qué | Dónde |
+|---|---|
+| Nómina, alquiler, recibos, el préstamo del coche | Ingresos y gastos |
+| Tu cuenta de Trade Republic u otra cuenta que paga intereses | Cuentas, tipo «Cuenta remunerada», con su TAE |
+| Lo que traspasas cada mes a esa cuenta o a un fondo | Cuentas → Ahorro automático. **No es un gasto**: es ahorro |
+| Los intereses que te paga la cuenta | No hace falta: aparecen al actualizar el saldo (la app te enseña la estimación) |
+| Fondos, ETF, acciones, cripto, divisas | Inversiones |
+| Gastos sueltos de ocio | Ocio, o importando el extracto del banco |
+
+**¿Y si un mes no hago la aportación?** No rompe nada.
+
+- La escalera mira tus saldos reales: el objetivo sigue igual y la fecha estimada se retrasa un poco.
+- No hace falta recuperarlo al mes siguiente.
+- Al cerrar el mes pones 0 en esa aportación y queda marcada con ✗.
+- Solo si en 2 de los 3 últimos cierres ahorras menos de lo previsto, la app baja el presupuesto de ocio hasta que cuadre.
+
+Si la aportación va a un fondo, al cerrar el mes se apunta la compra sola: las participaciones se calculan con el último precio, o las pones tú.
+
 ## Cuánto puedo gastar en ocio
 
 1. Lo que te sobra = ingresos − gastos esenciales − gastos no esenciales.
