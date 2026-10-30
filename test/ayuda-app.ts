@@ -20,5 +20,8 @@ export function appDePrueba(puerto: number, hoy = "2026-10-30") {
       headers: { host: `127.0.0.1:${puerto}`, cookie: "calderilla=t", ...(cuerpo ? { "content-type": "application/x-www-form-urlencoded" } : {}) },
       body: cuerpo ? new URLSearchParams(cuerpo).toString() : undefined,
     });
-  return { estado, bd: estado.sync.bd, pedir, carpeta };
+  // Formularios con archivos (multipart): el navegador pone él mismo el content-type
+  const enviarArchivo = (ruta: string, formulario: FormData) =>
+    app.request(`http://127.0.0.1:${puerto}${ruta}`, { method: "POST", headers: { host: `127.0.0.1:${puerto}`, cookie: "calderilla=t" }, body: formulario });
+  return { estado, bd: estado.sync.bd, pedir, enviarArchivo, carpeta };
 }

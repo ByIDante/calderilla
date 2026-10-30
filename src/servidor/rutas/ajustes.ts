@@ -9,9 +9,11 @@ import { PARAMETROS, type ClaveParametro } from "../../reglas/parametros.ts";
 import { PREGUNTAS, puntuar } from "../../reglas/cuestionario.ts";
 import { NOMBRE_ESTABILIDAD, NOMBRE_RIESGO } from "../../reglas/tipos.ts";
 import { ESTABILIDADES, guardarParametros, guardarPerfil, leerMercado, leerParametros, leerPerfil, RIESGOS, type PerfilCompleto } from "../../servicios/configuracion.ts";
+import { fechaDeMarca } from "../../datos/sync.ts";
+import { importarJson } from "../../servicios/importarJson.ts";
 import { bd, render, type Estado } from "../app.ts";
 import { Formulario, redirigir } from "../formulario.ts";
-import { aviso, botonAccion, campo, eur, pct, selector, type Html } from "../vistas/comun.ts";
+import { aviso, botonAccion, campo, eur, pct, selector, vacio, type Html } from "../vistas/comun.ts";
 
 const SITUACIONES: [PerfilCompleto["situacionLaboral"], string][] = [
   ["asalariado", "Asalariado"],
@@ -142,6 +144,7 @@ export function rutasAjustes(app: Hono, estado: Estado) {
             </ul>
             <div class="botones" style="margin-top:10px">
               ${botonAccion("/ajustes/copiar", "Guardar copia ahora")}
+              <a class="boton" href="/ajustes/copias">Copias de seguridad</a>
               <a class="boton" href="/ajustes/exportar" hx-boost="false">Exportar a JSON</a>
             </div>
             <details style="margin-top:12px">
@@ -277,6 +280,87 @@ export function rutasAjustes(app: Hono, estado: Estado) {
       return redirigir(c, "/ajustes", { ok: "Carpeta cambiada." });
     } catch (error) {
       return redirigir(c, "/ajustes", { error: `No se puede usar esa carpeta: ${(error as Error).message}` });
+    }
+  });
+
+  app.get("/ajustes/copias", (c) => {
+    const sync = estado.sync!;
+    const { copias, rastros } = sync.listar();
+    const fecha = (marca: string) => fechaDeMarca(marca).toLocaleString("es-ES", { dateStyle: "medium", timeStyle: "short" });
+    const fila = (archivo: string, marca: string, equipo: string) => {
+      const r = sync.resumen({ archivo, equipo });
+      return html`<tr>
+        <td>${fecha(marca)}</td>
+        <td>${r.equipo}${equipo === estado.ajustes.equipoId ? " (este)" : ""}</td>
+        <td class="pequeno">${r.recurrentes} ingresos y gastos · ${r.cuentas} cuentas · ${r.apuntes} movimientos · ${r.activos} inversiones</td>
+        <td>${botonAccion("/ajustes/copias/restaurar", "Volver a esta", { campos: { archivo }, confirmar: `¿Volver a los datos del ${fecha(marca)}? Lo de ahora queda guardado aparte por si quieres deshacerlo.` })}</td>
+      </tr>`;
+    };
+    const recientes = [...copias].sort((a, b) => b.marca.localeCompare(a.marca)).slice(0, 40);
+    const apartadas = rastros.filter((r) => r.marca && r.archivo.endsWith(".db")).sort((a, b) => b.marca!.localeCompare(a.marca!));
+    const tabla = (filas: Html[]) => html`<div class="tabla-contenedor">
+      <table>
+        <thead><tr><th>Guardada</th><th>Ordenador</th><th>Contenido</th><th></th></tr></thead>
+        <tbody>${filas}</tbody>
+      </table>
+    </div>`;
+    return render(
+      c,
+      estado,
+      { titulo: "Copias de seguridad", seccion: "ajustes" },
+      html`
+        <p><a href="/ajustes">← Ajustes</a></p>
+        <p class="apagado">
+          Calderilla guarda una copia cada vez que cambias algo: todas las de la última semana, una por día durante un mes y una por mes durante un año. Si vuelves a
+          una copia anterior, lo que tienes ahora se aparta (no se borra) y lo restaurado llega también a tu otro ordenador.
+        </p>
+        <section class="tarjeta">
+          <h2>Copias</h2>
+          ${recientes.length ? tabla(recientes.map((x) => fila(x.archivo, x.marca, x.equipo))) : vacio("Aún no hay copias.")}
+        </section>
+        ${apartadas.length
+          ? html`<section class="tarjeta">
+              <h2>Versiones apartadas</h2>
+              <p class="apagado pequeno">Las que quedaron fuera al resolver un conflicto, restaurar o importar. Se borran solas a los 30 días.</p>
+              ${tabla(apartadas.map((x) => fila(x.archivo, x.marca!, x.id.split("-")[2] ?? "")))}
+            </section>`
+          : ""}
+        <section class="tarjeta">
+          <h2>Exportar e importar</h2>
+          <p class="apagado">El JSON sirve como copia fuera de la carpeta de datos. Al importarlo se sustituye todo lo que tienes ahora (que queda apartado por si acaso).</p>
+          <div class="botones bloque"><a class="boton" href="/ajustes/exportar" hx-boost="false">Exportar a JSON</a></div>
+          <form method="post" action="/ajustes/copias/importar" enctype="multipart/form-data" class="formulario" hx-boost="false">
+            <div class="campo">
+              <label for="campo-json">Archivo exportado (.json)</label>
+              <input id="campo-json" type="file" name="archivo" accept=".json,application/json" required />
+            </div>
+            <div class="botones"><button class="boton" type="submit">Importar y sustituir mis datos</button></div>
+          </form>
+        </section>
+      `,
+    );
+  });
+
+  app.post("/ajustes/copias/restaurar", async (c) => {
+    const archivo = (await Formulario.de(c)).texto("archivo");
+    try {
+      estado.sync!.restaurar(archivo);
+      return redirigir(c, "/", { ok: "Datos restaurados. Lo que tenías antes está en «Versiones apartadas», por si quieres deshacerlo." });
+    } catch (error) {
+      return redirigir(c, "/ajustes/copias", { error: (error as Error).message });
+    }
+  });
+
+  app.post("/ajustes/copias/importar", async (c) => {
+    const archivo = (await c.req.parseBody()).archivo;
+    if (!(archivo instanceof File) || archivo.size === 0) return redirigir(c, "/ajustes/copias", { error: "Elige el archivo .json exportado." });
+    try {
+      const datos = JSON.parse(await archivo.text()) as unknown;
+      estado.sync!.copiaDeSeguridad();
+      const { filas } = importarJson(bd(estado), datos);
+      return redirigir(c, "/", { ok: `Importado: ${filas} registros. Lo que tenías antes está en «Versiones apartadas».` });
+    } catch (error) {
+      return redirigir(c, "/ajustes/copias", { error: error instanceof SyntaxError ? "Ese archivo no es un JSON válido." : (error as Error).message });
     }
   });
 

@@ -68,7 +68,7 @@ export function marcaDe(fecha: Date): string {
   return fecha.toISOString().replace(/[-:T]/g, "").slice(0, 14);
 }
 
-function fechaDeMarca(marca: string): Date {
+export function fechaDeMarca(marca: string): Date {
   return new Date(`${marca.slice(0, 4)}-${marca.slice(4, 6)}-${marca.slice(6, 8)}T${marca.slice(8, 10)}:${marca.slice(10, 12)}:${marca.slice(12, 14)}Z`);
 }
 
@@ -281,6 +281,37 @@ export class Sincronizador {
     }
   }
 
+  /** Guarda aparte una copia de los datos tal como están ahora (para poder deshacer una restauración o importación). */
+  copiaDeSeguridad() {
+    this.#apartar(this.#bd, this.estadoLocal().base);
+  }
+
+  /**
+   * Vuelve a los datos de una copia anterior (o apartada). Lo actual se aparta antes, y lo restaurado se guarda
+   * como una versión nueva, así el otro ordenador también lo recibe.
+   */
+  restaurar(archivo: string) {
+    const { copias, rastros } = this.listar();
+    const existe = copias.some((c) => c.archivo === archivo) || rastros.some((r) => r.archivo === archivo && r.archivo.endsWith(".db"));
+    if (!existe) throw new Error("Esa copia ya no está en la carpeta.");
+    const { base } = this.estadoLocal();
+    this.copiaDeSeguridad();
+    const temporal = `${this.#opciones.rutaTrabajo}.restaurar`;
+    copyFileSync(path.join(this.carpetaCopias, archivo), temporal);
+    const prueba = new BaseDatos(temporal);
+    try {
+      prueba.migrar();
+      prueba.escribirMeta("base", base);
+      prueba.escribirMeta("sucio", "1");
+    } finally {
+      prueba.cerrar();
+    }
+    this.#bd.cerrar();
+    renameSync(temporal, this.#opciones.rutaTrabajo);
+    this.#bd = this.#abrirLocal();
+    this.comprobar();
+  }
+
   /** Resuelve un conflicto: `eleccion` es el archivo de la versión que sigue, o "local" para quedarse con la de este ordenador. */
   resolver(eleccion: string) {
     const { copias, rastros } = this.listar();
@@ -301,7 +332,7 @@ export class Sincronizador {
     this.comprobar();
   }
 
-  resumen(copia: Copia | null): ResumenVersion {
+  resumen(copia: Pick<Copia, "archivo" | "equipo"> | null): ResumenVersion {
     const bd = copia ? new BaseDatos(path.join(this.carpetaCopias, copia.archivo), { soloLectura: true }) : this.#bd;
     try {
       const contar = (tabla: string) => bd.uno<{ n: number }>(`SELECT count(*) AS n FROM ${tabla}`)?.n ?? 0;
