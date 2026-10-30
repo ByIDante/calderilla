@@ -1,0 +1,28 @@
+{
+  "name": "calderilla",
+  "version": "0.1.0",
+  "description": "Web local para controlar ingresos, gastos, ocio e inversiones, con una escalera de inversión basada en reglas",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=24.15"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "dev": "node --watch src/main.ts",
+    "typecheck": "tsc",
+    "test": "node --test \"test/**/*.test.ts\"",
+    "check": "npm run typecheck && npm test",
+    "prepare": "git config core.hooksPath .githooks || exit 0"
+  },
+  "dependencies": {
+    "@hono/node-server": "^2.1.5",
+    "chart.js": "^4.6.1",
+    "hono": "^4.13.14",
+    "htmx.org": "^2.0.11"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "typescript": "^7.0.2"
+  }
+}

@@ -1,0 +1,8 @@
+#!/bin/sh
+# Impide subir datos personales o claves: la base de datos, las claves .pem y los ajustes de cada ordenador.
+prohibidos=$(git diff --cached --name-only --diff-filter=ACR | grep -E '\.db$|\.db-journal$|\.pem$|(^|/)config\.json$')
+if [ -n "$prohibidos" ]; then
+  echo "No se pueden subir estos archivos (datos personales o claves):"
+  echo "$prohibidos"
+  exit 1
+fi
