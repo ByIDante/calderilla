@@ -3,9 +3,10 @@ import { html } from "hono/html";
 import { importeEditable } from "../../dominio/dinero.ts";
 import { diferenciaMeses, formatoFecha } from "../../dominio/fechas.ts";
 import { leerParametros } from "../../servicios/configuracion.ts";
+import { leerCuentas } from "../../servicios/cuentas.ts";
 import { bd, render, type Estado } from "../app.ts";
 import { Formulario, idDe, redirigir } from "../formulario.ts";
-import { barra, botonAccion, campo, eur, vacio } from "../vistas/comun.ts";
+import { barra, botonAccion, campo, eur, selector, vacio } from "../vistas/comun.ts";
 
 interface Meta {
   id: number;
@@ -14,6 +15,7 @@ interface Meta {
   fecha: string;
   ahorrado: number;
   cumplida: number;
+  cuenta_id: number | null;
 }
 
 export function rutasMetas(app: Hono, estado: Estado) {
@@ -21,7 +23,14 @@ export function rutasMetas(app: Hono, estado: Estado) {
     const base = bd(estado);
     const hoy = estado.hoy();
     const p = leerParametros(base);
-    const metas = base.todos<Meta>("SELECT * FROM metas ORDER BY cumplida, fecha");
+    const cuentas = leerCuentas(base, hoy);
+    const saldoDe = new Map(cuentas.map((x) => [x.id, x]));
+    // Si la meta va unida a una cuenta, lo ahorrado es su saldo (como mucho, el objetivo)
+    const metas = base.todos<Meta>("SELECT * FROM metas ORDER BY cumplida, fecha").map((m) => {
+      const cuenta = m.cuenta_id ? saldoDe.get(m.cuenta_id) : undefined;
+      return { ...m, ahorrado: cuenta ? Math.min(Math.max(cuenta.saldo, 0), m.objetivo) : m.ahorrado, cuenta: cuenta?.nombre ?? null };
+    });
+    const opcionesCuenta = [["", "Ninguna: lo actualizo a mano"] as const, ...cuentas.filter((x) => x.tipo !== "plan_pensiones").map((x) => [String(x.id), x.nombre] as const)];
     return render(
       c,
       estado,
@@ -43,10 +52,21 @@ export function rutasMetas(app: Hono, estado: Estado) {
                   ${!m.cumplida && falta > 0
                     ? html`<p class="pequeno">Faltan ${eur(falta)}: unos <b>${eur(Math.ceil(falta / meses))} al mes</b> durante ${meses} meses.</p>`
                     : ""}
-                  <form method="post" action="/metas/${m.id}" class="botones">
-                    <input type="text" inputmode="decimal" name="ahorrado" value="${importeEditable(m.ahorrado)}" aria-label="Ahorrado para ${m.nombre}" style="max-width:120px" />
-                    <button class="boton boton-pequeno" type="submit">Actualizar lo ahorrado</button>
-                  </form>
+                  ${m.cuenta
+                    ? html`<p class="apagado pequeno">Unida a la cuenta «${m.cuenta}»: lo ahorrado se actualiza solo con su saldo.</p>`
+                    : html`<form method="post" action="/metas/${m.id}" class="botones">
+                        <input type="text" inputmode="decimal" name="ahorrado" value="${importeEditable(m.ahorrado)}" aria-label="Ahorrado para ${m.nombre}" style="max-width:120px" />
+                        <button class="boton boton-pequeno" type="submit">Actualizar lo ahorrado</button>
+                      </form>`}
+                  <details>
+                    <summary class="pequeno">${m.cuenta ? "Cambiar la cuenta" : "Unirla a una cuenta"}</summary>
+                    <form method="post" action="/metas/${m.id}/cuenta" class="botones" style="margin-top:6px">
+                      <select name="cuenta" aria-label="Cuenta de ${m.nombre}" style="max-width:240px">
+                        ${opcionesCuenta.map(([v, t]) => html`<option value="${v}" ${v === (m.cuenta_id ? String(m.cuenta_id) : "") ? html`selected` : ""}>${t}</option>`)}
+                      </select>
+                      <button class="boton boton-pequeno" type="submit">Guardar</button>
+                    </form>
+                  </details>
                   <p class="botones" style="margin-top:8px">
                     ${m.cumplida ? "" : botonAccion(`/metas/${m.id}/cumplida`, "Marcar como cumplida", { estilo: "enlace" })}
                     ${botonAccion(`/metas/${m.id}/borrar`, "Borrar", { estilo: "enlace", confirmar: `¿Borrar la meta «${m.nombre}»?` })}
@@ -62,6 +82,7 @@ export function rutasMetas(app: Hono, estado: Estado) {
               ${campo({ etiqueta: "Qué", nombre: "nombre", requerido: true, marcador: "Viaje a Japón" })} ${campo({ etiqueta: "Cuánto", nombre: "objetivo", sufijo: "€", requerido: true })}
               ${campo({ etiqueta: "Para cuándo", nombre: "fecha", tipo: "date", requerido: true })} ${campo({ etiqueta: "Ya apartado", nombre: "ahorrado", sufijo: "€", valor: "0" })}
             </div>
+            ${selector("¿Lo apartas en una cuenta propia?", "cuenta", opcionesCuenta, "", "Si eliges una cuenta, lo ahorrado será su saldo y se actualizará solo. Úsalo solo si esa cuenta es solo para esta meta.")}
             <div class="botones"><button class="boton boton-principal" type="submit">Añadir meta</button></div>
           </form>
         </section>
@@ -76,7 +97,7 @@ export function rutasMetas(app: Hono, estado: Estado) {
     const fecha = f.fecha("fecha");
     if (!nombre || !objetivo || objetivo <= 0 || !fecha) return redirigir(c, "/metas", { error: "Indica qué, cuánto y para cuándo." });
     if (fecha <= estado.hoy()) return redirigir(c, "/metas", { error: "La fecha tiene que ser futura." });
-    bd(estado).ejecutar("INSERT INTO metas (nombre, objetivo, fecha, ahorrado) VALUES (?, ?, ?, ?)", nombre, objetivo, fecha, f.importe("ahorrado") ?? 0);
+    bd(estado).ejecutar("INSERT INTO metas (nombre, objetivo, fecha, ahorrado, cuenta_id) VALUES (?, ?, ?, ?, ?)", nombre, objetivo, fecha, f.importe("ahorrado") ?? 0, f.entero("cuenta"));
     return redirigir(c, "/metas", { ok: `Meta «${nombre}» añadida.` });
   });
 
@@ -85,6 +106,12 @@ export function rutasMetas(app: Hono, estado: Estado) {
     if (ahorrado === null || ahorrado < 0) return redirigir(c, "/metas", { error: "Lo ahorrado no es un número." });
     bd(estado).ejecutar("UPDATE metas SET ahorrado = ? WHERE id = ?", ahorrado, idDe(c));
     return redirigir(c, "/metas", { ok: "Actualizado." });
+  });
+
+  app.post("/metas/:id/cuenta", async (c) => {
+    const cuenta = (await Formulario.de(c)).entero("cuenta");
+    bd(estado).ejecutar("UPDATE metas SET cuenta_id = ? WHERE id = ?", cuenta, idDe(c));
+    return redirigir(c, "/metas", { ok: cuenta ? "Meta unida a la cuenta: lo ahorrado se actualiza solo." : "La meta ya no va unida a ninguna cuenta." });
   });
 
   app.post("/metas/:id/cumplida", (c) => {

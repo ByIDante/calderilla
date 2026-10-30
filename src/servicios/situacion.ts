@@ -55,7 +55,11 @@ export function construir(bd: BaseDatos, hoy: Fecha): Omit<Contexto, "resultado"
   const especulativo = cartera.filter((p) => esEspeculativo(p.activo));
   const pensiones = cuentas.filter((c) => c.tipo === "plan_pensiones").reduce((s, c) => s + c.saldo, 0);
 
-  const metas = bd.todos<{ nombre: string; objetivo: number; ahorrado: number; fecha: string }>("SELECT nombre, objetivo, ahorrado, fecha FROM metas WHERE cumplida = 0");
+  // Una meta unida a una cuenta lleva ahorrado lo que tenga esa cuenta (como mucho, el objetivo)
+  const saldoDe = new Map(cuentas.map((c) => [c.id, c.saldo]));
+  const metas = bd
+    .todos<{ nombre: string; objetivo: number; ahorrado: number; fecha: string; cuenta_id: number | null }>("SELECT nombre, objetivo, ahorrado, fecha, cuenta_id FROM metas WHERE cumplida = 0")
+    .map((m) => ({ nombre: m.nombre, objetivo: m.objetivo, fecha: m.fecha, ahorrado: m.cuenta_id ? Math.min(Math.max(saldoDe.get(m.cuenta_id) ?? 0, 0), m.objetivo) : m.ahorrado }));
   const cierres = bd.todos<{ mes: string; ahorro_plan: number; ahorro_real: number | null; liquidez_libre: number; fondo_objetivo: number; ocio_sobrante: number }>(
     "SELECT mes, ahorro_plan, ahorro_real, liquidez_libre, fondo_objetivo, ocio_sobrante FROM cierres_mes WHERE mes < ? ORDER BY mes DESC LIMIT 6",
     mes,
