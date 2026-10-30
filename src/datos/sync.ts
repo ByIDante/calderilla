@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { BaseDatos } from "./db.ts";
 
@@ -13,6 +13,10 @@ import { BaseDatos } from "./db.ts";
  *
  * Las "cabezas" son las copias de las que no sale ninguna otra. Si hay una sola, todo cuadra; si hay dos,
  * dos ordenadores han guardado a la vez y hay que elegir. Nada se mezcla ni se borra sin preguntar.
+ *
+ * Las copias apartadas al resolver un conflicto (".descartada-<fecha>.db") y las que se podan por antiguas
+ * (que dejan un archivo vacío ".podada") siguen "nombrando" a su padre: si no, al desaparecer una copia su
+ * padre volvería a parecer una cabeza y saltaría un conflicto que no existe.
  */
 
 export interface Copia {
@@ -25,8 +29,10 @@ export interface Copia {
   padre: string | null;
 }
 
-const PATRON = /^((\d{6})-(\d{14})-([a-z0-9]{8}))_de_(inicio|\d{6}-\d{14}-[a-z0-9]{8})\.db$/;
-const PATRON_DESCARTADA = /^(\d{6})-(\d{14})-[a-z0-9]{8}_de_.+\.descartada\.db$/;
+const ID = String.raw`(\d{6})-(\d{14})-([a-z0-9]{8})`;
+const PATRON = new RegExp(`^(${ID})_de_(inicio|\\d{6}-\\d{14}-[a-z0-9]{8})\\.db$`);
+const PATRON_DESCARTADA = new RegExp(`^(${ID})_de_(inicio|\\d{6}-\\d{14}-[a-z0-9]{8})\\.descartada-(\\d{14})\\.db$`);
+const PATRON_PODADA = new RegExp(`^(${ID})_de_(inicio|\\d{6}-\\d{14}-[a-z0-9]{8})\\.podada$`);
 
 export function leerNombre(archivo: string): Copia | null {
   const m = PATRON.exec(archivo);
@@ -34,6 +40,25 @@ export function leerNombre(archivo: string): Copia | null {
   const [, id = "", gen = "", marca = "", equipo = "", padre = ""] = m;
   return { archivo, id, gen: Number(gen), marca, equipo, padre: padre === "inicio" ? null : padre };
 }
+
+/** Rastro de una copia que ya no es una versión (apartada o podada): solo importa a quién nombra como padre. */
+export interface Rastro {
+  archivo: string;
+  id: string;
+  padre: string | null;
+  /** Cuándo se apartó (solo las descartadas). */
+  marca: string | null;
+}
+
+export function leerRastro(archivo: string): Rastro | null {
+  const descartada = PATRON_DESCARTADA.exec(archivo);
+  if (descartada) return { archivo, id: descartada[1]!, padre: descartada[5] === "inicio" ? null : descartada[5]!, marca: descartada[6]! };
+  const podada = PATRON_PODADA.exec(archivo);
+  if (podada) return { archivo, id: podada[1]!, padre: podada[5] === "inicio" ? null : podada[5]!, marca: null };
+  return null;
+}
+
+const nombreBase = (copia: Pick<Copia, "id" | "padre">) => `${copia.id}_de_${copia.padre ?? "inicio"}`;
 
 export function nombreCopia(gen: number, marca: string, equipo: string, padre: string | null): string {
   return `${String(gen).padStart(6, "0")}-${marca}-${equipo}_de_${padre ?? "inicio"}.db`;
@@ -47,9 +72,9 @@ function fechaDeMarca(marca: string): Date {
   return new Date(`${marca.slice(0, 4)}-${marca.slice(4, 6)}-${marca.slice(6, 8)}T${marca.slice(8, 10)}:${marca.slice(10, 12)}:${marca.slice(12, 14)}Z`);
 }
 
-/** Copias de las que no sale ninguna otra, de la más reciente a la más antigua. */
-export function cabezas(copias: readonly Copia[]): Copia[] {
-  const padres = new Set(copias.map((copia) => copia.padre));
+/** Copias de las que no sale ninguna otra (ni viva ni apartada ni podada), de la más reciente a la más antigua. */
+export function cabezas(copias: readonly Copia[], rastros: readonly Pick<Rastro, "padre">[] = []): Copia[] {
+  const padres = new Set([...copias, ...rastros].map((copia) => copia.padre));
   return copias.filter((copia) => !padres.has(copia.id)).sort((a, b) => b.gen - a.gen || b.marca.localeCompare(a.marca));
 }
 
@@ -66,8 +91,8 @@ export type Decision =
   | { tipo: "descargar"; copia: Copia }
   | { tipo: "conflicto"; versiones: Copia[]; localConCambios: boolean };
 
-export function decidir(copias: readonly Copia[], local: EstadoLocal): Decision {
-  const actuales = cabezas(copias);
+export function decidir(copias: readonly Copia[], local: EstadoLocal, rastros: readonly Pick<Rastro, "padre">[] = []): Decision {
+  const actuales = cabezas(copias, rastros);
   const [unica] = actuales;
   if (!unica) return { tipo: "enviar" };
   if (actuales.length === 1) {
@@ -84,8 +109,8 @@ const DIA = 86_400_000;
  * Qué copias sobran. Se guardan todas las de los últimos 7 días, la última de cada día durante 30 días y la
  * última de cada mes durante un año. Nunca se borran las cabezas ni la copia de la que sale este ordenador.
  */
-export function copiasSobrantes(copias: readonly Copia[], base: string | null, ahora: Date): Copia[] {
-  const conservar = new Set<string>(cabezas(copias).map((copia) => copia.id));
+export function copiasSobrantes(copias: readonly Copia[], base: string | null, ahora: Date, rastros: readonly Pick<Rastro, "padre">[] = []): Copia[] {
+  const conservar = new Set<string>(cabezas(copias, rastros).map((copia) => copia.id));
   if (base) conservar.add(base);
   const ultimaDelDia = new Map<string, Copia>();
   const ultimaDelMes = new Map<string, Copia>();
@@ -158,12 +183,12 @@ export class Sincronizador {
     return bd;
   }
 
-  listar(): { copias: Copia[]; descartadas: string[] } {
+  listar(): { copias: Copia[]; rastros: Rastro[] } {
     mkdirSync(this.carpetaCopias, { recursive: true });
     const archivos = readdirSync(this.carpetaCopias);
     return {
       copias: archivos.map(leerNombre).filter((copia): copia is Copia => copia !== null),
-      descartadas: archivos.filter((archivo) => PATRON_DESCARTADA.test(archivo)),
+      rastros: archivos.map(leerRastro).filter((rastro): rastro is Rastro => rastro !== null),
     };
   }
 
@@ -175,7 +200,8 @@ export class Sincronizador {
   comprobar(): Decision | null {
     this.#ultimaComprobacion = Date.now();
     try {
-      const decision = decidir(this.listar().copias, this.estadoLocal());
+      const { copias, rastros } = this.listar();
+      const decision = decidir(copias, this.estadoLocal(), rastros);
       if (decision.tipo === "enviar") this.#enviar(this.estadoLocal().base);
       if (decision.tipo === "descargar") this.#descargar(decision.copia, true);
       this.estado = decision.tipo === "conflicto" ? { tipo: "conflicto", versiones: decision.versiones, localConCambios: decision.localConCambios } : { tipo: "ok" };
@@ -241,20 +267,24 @@ export class Sincronizador {
 
   /** Guarda una copia apartada (no cuenta como versión) para no perder nada al resolver un conflicto. */
   #apartar(bd: BaseDatos, padre: string | null) {
-    const nombre = nombreCopia(0, marcaDe(this.#ahora()), this.#opciones.equipoId, padre).replace(/\.db$/, ".descartada.db");
+    const marca = marcaDe(this.#ahora());
+    const nombre = nombreCopia(0, marca, this.#opciones.equipoId, padre).replace(/\.db$/, `.descartada-${marca}.db`);
     bd.copiarA(path.join(this.carpetaCopias, nombre));
   }
 
+  /** Aparta versiones: dejan de contar, pero se guardan 30 días contando desde ahora. */
   #descartar(copias: readonly Copia[]) {
+    const marca = marcaDe(this.#ahora());
     for (const copia of copias) {
       const origen = path.join(this.carpetaCopias, copia.archivo);
-      if (existsSync(origen)) renameSync(origen, origen.replace(/\.db$/, ".descartada.db"));
+      if (existsSync(origen)) renameSync(origen, path.join(this.carpetaCopias, `${nombreBase(copia)}.descartada-${marca}.db`));
     }
   }
 
   /** Resuelve un conflicto: `eleccion` es el archivo de la versión que sigue, o "local" para quedarse con la de este ordenador. */
   resolver(eleccion: string) {
-    const versiones = cabezas(this.listar().copias);
+    const { copias, rastros } = this.listar();
+    const versiones = cabezas(copias, rastros);
     const { base } = this.estadoLocal();
     if (eleccion === "local") {
       const padre = versiones.find((copia) => copia.id === base) ?? versiones[0] ?? null;
@@ -295,15 +325,30 @@ export class Sincronizador {
     }
   }
 
+  /**
+   * Borra copias antiguas según la retención. Cada copia borrada deja un ".podada" vacío que sigue nombrando a
+   * su padre; ese rastro se borra cuando su padre ya no existe. Las apartadas se borran 30 días después de
+   * apartarlas.
+   */
   #podar() {
-    const { copias, descartadas } = this.listar();
     const ahora = this.#ahora();
-    for (const copia of copiasSobrantes(copias, this.estadoLocal().base, ahora)) {
-      rmSync(path.join(this.carpetaCopias, copia.archivo), { force: true });
+    const ruta = (archivo: string) => path.join(this.carpetaCopias, archivo);
+    const dejarRastro = (copia: Pick<Copia, "id" | "padre">) => writeFileSync(ruta(`${nombreBase(copia)}.podada`), "");
+    let { copias, rastros } = this.listar();
+    for (const copia of copiasSobrantes(copias, this.estadoLocal().base, ahora, rastros)) {
+      dejarRastro(copia);
+      rmSync(ruta(copia.archivo), { force: true });
     }
-    for (const archivo of descartadas) {
-      const marca = PATRON_DESCARTADA.exec(archivo)?.[2];
-      if (marca && ahora.getTime() - fechaDeMarca(marca).getTime() > 30 * DIA) rmSync(path.join(this.carpetaCopias, archivo), { force: true });
+    for (const rastro of rastros) {
+      if (rastro.marca && ahora.getTime() - fechaDeMarca(rastro.marca).getTime() > 30 * DIA) {
+        dejarRastro(rastro);
+        rmSync(ruta(rastro.archivo), { force: true });
+      }
+    }
+    ({ copias, rastros } = this.listar());
+    const vivas = new Set(copias.map((copia) => copia.id));
+    for (const rastro of rastros) {
+      if (!rastro.marca && (!rastro.padre || !vivas.has(rastro.padre))) rmSync(ruta(rastro.archivo), { force: true });
     }
   }
 

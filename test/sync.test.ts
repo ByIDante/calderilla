@@ -28,7 +28,7 @@ describe("nombres y decisiones", () => {
     assert.equal(raiz.archivo, "000001-20261001100000-aaaaaaaa_de_inicio.db");
     assert.equal(hijaA.padre, raiz.id);
     assert.equal(leerNombre("foto.db"), null);
-    assert.equal(leerNombre(hijaA.archivo.replace(".db", ".descartada.db")), null);
+    assert.equal(leerNombre(hijaA.archivo.replace(".db", ".descartada-20261030120000.db")), null);
   });
 
   it("decide qué hacer en cada caso", () => {
@@ -132,7 +132,7 @@ describe("dos ordenadores con una carpeta sincronizada", () => {
     assert.deepEqual(nombres(portatil), ["Coche", "Ocio", "Vivienda"]);
     assert.equal(portatil.estado.tipo, "ok");
     // La versión descartada sigue en la carpeta, apartada
-    assert.ok(readdirSync(path.join(compartidaA, "copias")).some((archivo) => archivo.endsWith(".descartada.db")));
+    assert.ok(readdirSync(path.join(compartidaA, "copias")).some((archivo) => archivo.includes(".descartada-")));
 
     sincronizar(compartidaA, compartidaB, true);
     assert.equal(sobremesa.comprobar()?.tipo, "nada");
@@ -155,5 +155,60 @@ describe("dos ordenadores con una carpeta sincronizada", () => {
     assert.ok(!nombres(portatil).includes("Regalos"));
     portatil.cerrar();
     sobremesa.cerrar();
+  });
+});
+
+describe("un año de uso", () => {
+  it("un solo ordenador nunca ve conflictos aunque se poden copias, y conserva las de cada día y mes", () => {
+    const compartida = carpetaTemporal();
+    let reloj = new Date("2026-01-01T09:00:00Z");
+    const sync = new Sincronizador({
+      carpetaDatos: compartida,
+      rutaTrabajo: path.join(carpetaTemporal(), "trabajo.db"),
+      equipoId: "aaaaaaaa",
+      equipoNombre: "Portátil",
+      alAbrir: (bd: BaseDatos) => bd.migrar(),
+      ahora: () => reloj,
+    });
+    for (let dia = 0; dia < 120; dia++) {
+      for (const hora of [9, 20]) {
+        reloj = new Date(Date.UTC(2026, 0, 1 + dia, hora));
+        sync.bd.ejecutar("INSERT INTO categorias (nombre, tipo) VALUES (?, 'otro')", `c-${dia}-${hora}`);
+        const decision = sync.comprobar();
+        assert.equal(decision?.tipo, "enviar", `día ${dia} ${hora}h: ${decision?.tipo}`);
+      }
+    }
+    const archivos = readdirSync(path.join(compartida, "copias"));
+    const vivas = archivos.filter((a) => leerNombre(a));
+    assert.ok(vivas.some((a) => a.includes("-20260131")), "la última de enero se conserva");
+    assert.ok(vivas.filter((a) => /-202604(2[3-9]|30)/.test(a)).length >= 14, "toda la última semana");
+    assert.ok(archivos.filter((a) => a.endsWith(".podada")).length <= vivas.length, "los rastros no se acumulan");
+    sync.cerrar();
+  });
+
+  it("al resolver, una rama perdedora con varias copias no vuelve a dar conflicto", () => {
+    const compartida = carpetaTemporal();
+    const crear = (equipoId: string) =>
+      new Sincronizador({ carpetaDatos: compartida, rutaTrabajo: path.join(carpetaTemporal(), "trabajo.db"), equipoId, equipoNombre: equipoId, alAbrir: (bd: BaseDatos) => bd.migrar() });
+    const a = crear("aaaaaaaa");
+    a.comprobar();
+    const b = crear("bbbbbbbb");
+    b.bd.escribirMeta("sucio", "0");
+    b.comprobar();
+    // B guarda dos veces; A, sin verlo, guarda una (se simula quitándole a A la vista de B con la base vieja)
+    const baseComun = a.estadoLocal().base;
+    b.bd.ejecutar("INSERT INTO categorias (nombre, tipo) VALUES ('B1', 'otro')");
+    b.comprobar();
+    b.bd.ejecutar("INSERT INTO categorias (nombre, tipo) VALUES ('B2', 'otro')");
+    b.comprobar();
+    a.bd.ejecutar("INSERT INTO categorias (nombre, tipo) VALUES ('A1', 'otro')");
+    assert.equal(a.estadoLocal().base, baseComun);
+    assert.equal(a.comprobar()?.tipo, "conflicto");
+    a.resolver("local");
+    assert.equal(a.estado.tipo, "ok");
+    assert.equal(a.comprobar()?.tipo, "nada");
+    assert.equal(b.comprobar()?.tipo, "descargar");
+    a.cerrar();
+    b.cerrar();
   });
 });
