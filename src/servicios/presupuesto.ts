@@ -1,6 +1,6 @@
 import type { BaseDatos } from "../datos/db.ts";
 import { eurosRedondos as eur } from "../dominio/dinero.ts";
-import { diasDelMes, mesDe, primerDia, ultimoDia, type Fecha, type Mes } from "../dominio/fechas.ts";
+import { diasDelMes, mesDe, primerDia, sumarMesesAMes, ultimoDia, type Fecha, type Mes } from "../dominio/fechas.ts";
 import { mensualEn } from "../dominio/recurrencia.ts";
 import type { Aviso } from "../reglas/tipos.ts";
 import { leerRecurrentes } from "./finanzas.ts";
@@ -81,4 +81,34 @@ export function guardarLimites(bd: BaseDatos, limites: ReadonlyMap<number, numbe
       }
     }
   });
+}
+
+export interface GastoMensual {
+  meses: Mes[];
+  series: { nombre: string; valores: number[] }[];
+}
+
+/**
+ * Lo que salió cada mes por categoría, según tus movimientos (apuntados, importados o del banco). Las 5
+ * categorías con más gasto van por separado y el resto se junta en «Otras».
+ */
+export function gastoPorCategoriaMeses(bd: BaseDatos, hasta: Mes, numeroMeses = 12): GastoMensual {
+  const meses = Array.from({ length: numeroMeses }, (_, i) => sumarMesesAMes(hasta, i - (numeroMeses - 1)));
+  const filas = bd.todos<{ mes: string; categoria: string | null; total: number }>(
+    `SELECT substr(a.fecha, 1, 7) AS mes, c.nombre AS categoria, -sum(a.importe) AS total FROM apuntes a LEFT JOIN categorias c ON c.id = a.categoria_id
+     WHERE a.importe < 0 AND a.fecha BETWEEN ? AND ? GROUP BY mes, categoria`,
+    primerDia(meses[0]!),
+    ultimoDia(hasta),
+  );
+  const totales = new Map<string, number>();
+  for (const f of filas) totales.set(f.categoria ?? "Sin categoría", (totales.get(f.categoria ?? "Sin categoría") ?? 0) + f.total);
+  const principales = [...totales].sort((a, b) => b[1] - a[1]).slice(0, 5).map(([nombre]) => nombre);
+  const nombreDe = (categoria: string | null) => (principales.includes(categoria ?? "Sin categoría") ? (categoria ?? "Sin categoría") : "Otras");
+  const nombres = [...principales, ...(totales.size > principales.length ? ["Otras"] : [])];
+  const valores = new Map(nombres.map((n) => [n, meses.map(() => 0)]));
+  for (const f of filas) {
+    const i = meses.indexOf(f.mes);
+    if (i >= 0) valores.get(nombreDe(f.categoria))![i]! += f.total;
+  }
+  return { meses, series: nombres.map((nombre) => ({ nombre, valores: valores.get(nombre)! })) };
 }

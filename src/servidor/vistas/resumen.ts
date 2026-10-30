@@ -1,8 +1,9 @@
 import { html } from "hono/html";
-import { formatoFecha, nombreMes } from "../../dominio/fechas.ts";
+import { formatoFecha, mesDe, nombreMes, nombreMesCorto, sumarMesesAMes } from "../../dominio/fechas.ts";
 import type { Contexto } from "../../servicios/situacion.ts";
 import { aviso, cifra, claveAviso, eur, eurR, grafico, vacio, type Html } from "./comun.ts";
-import type { LineaPresupuesto } from "../../servicios/presupuesto.ts";
+import type { PresupuestoMes } from "../../servicios/finanzas.ts";
+import type { GastoMensual, LineaPresupuesto } from "../../servicios/presupuesto.ts";
 import { listaAvisos, tarjetaEtapa } from "./escalera.ts";
 import { barrasPresupuesto } from "./presupuesto.ts";
 
@@ -14,6 +15,89 @@ interface DatosResumen {
   proximos: { nombre: string; fecha: string; importe: number }[];
   cierres: { etiqueta: string; plan: number; real: number | null; patrimonio: number }[];
   porCategoria: [string, number][];
+  gastoMeses: GastoMensual;
+}
+
+/** Botones para ir al mes anterior o al siguiente (sin pasar del actual). */
+function navegacionMes(mes: string, hoy: string): Html {
+  const anterior = sumarMesesAMes(mes, -1);
+  const siguiente = sumarMesesAMes(mes, 1);
+  const actual = mesDe(hoy);
+  return html`<div class="botones bloque">
+    <a class="boton boton-pequeno" href="/?mes=${anterior}">← ${nombreMes(anterior)}</a>
+    ${mes < actual ? html`<a class="boton boton-pequeno" href="${siguiente === actual ? "/" : `/?mes=${siguiente}`}">${nombreMes(siguiente)} →</a>` : ""}
+  </div>`;
+}
+
+function tablaCategorias(filas: readonly [string, number][]): Html {
+  return html`<table>
+    <thead><tr><th>Categoría</th><th class="numero">Al mes</th></tr></thead>
+    <tbody>${filas.map(([nombre, valor]) => html`<tr><td>${nombre}</td><td class="numero">${eur(valor)}</td></tr>`)}</tbody>
+  </table>`;
+}
+
+/** Gasto por categoría mes a mes (barras apiladas, 5 categorías + «Otras»). */
+function graficoGastoMeses(datos: GastoMensual): Html {
+  const conDatos = datos.meses.map((_, i) => datos.series.some((s) => (s.valores[i] ?? 0) > 0));
+  const primero = conDatos.indexOf(true);
+  if (primero < 0 || conDatos.filter(Boolean).length < 2) return html``;
+  const meses = datos.meses.slice(primero);
+  const series = datos.series.map((s) => ({ nombre: s.nombre, valores: s.valores.slice(primero).map((v) => v / 100) }));
+  return html`<section class="tarjeta" style="margin-top:16px">
+    ${grafico(
+      "grafico-gasto-meses",
+      "Gasto por categoría, mes a mes (según tus movimientos)",
+      { tipo: "bar", apilado: true, etiquetas: meses.map(nombreMesCorto), series },
+      html`<table>
+        <thead><tr><th>Categoría</th>${meses.map((m) => html`<th class="numero">${nombreMesCorto(m)}</th>`)}</tr></thead>
+        <tbody>
+          ${series.map((s) => html`<tr><td>${s.nombre}</td>${s.valores.map((v) => html`<td class="numero">${eur(Math.round(v * 100))}</td>`)}</tr>`)}
+        </tbody>
+      </table>`,
+    )}
+  </section>`;
+}
+
+export interface DatosMesPasado {
+  mes: string;
+  plan: PresupuestoMes;
+  cierre: { ahorro_plan: number; ahorro_real: number | null; ocio_plan: number; ocio_gastado: number; etapa: string; patrimonio: number } | null;
+  ocioGastado: number;
+  gastos: [string, number][];
+  hoy: string;
+}
+
+export function vistaMesPasado({ mes, plan, cierre, ocioGastado, gastos, hoy }: DatosMesPasado): Html {
+  return html`
+    ${navegacionMes(mes, hoy)}
+    ${cierre ? "" : aviso("info", "Este mes no se cerró: no se sabe cuánto ahorraste de verdad. Lo de abajo es lo previsto y lo que hay en tus movimientos.", { ruta: `/cierre?mes=${mes}`, texto: "Cerrarlo ahora" })}
+    <div class="cifras">
+      ${cifra("Ingresos previstos", eurR(plan.ingresos))} ${cifra("Gastos fijos previstos", eurR(plan.esenciales + plan.noEsenciales))}
+      ${cierre ? cifra("Ahorro", cierre.ahorro_real === null ? "—" : eurR(cierre.ahorro_real), `previsto: ${eurR(cierre.ahorro_plan)}`, cierre.ahorro_real !== null && cierre.ahorro_real < cierre.ahorro_plan ? "mal" : "bien") : ""}
+      ${cifra("Ocio", eurR(cierre?.ocio_gastado ?? ocioGastado), cierre ? `de ${eurR(cierre.ocio_plan)} previstos` : "gastado")}
+      ${cierre ? cifra("Patrimonio al cierre", eurR(cierre.patrimonio), `etapa: ${cierre.etapa}`) : ""}
+    </div>
+    <div class="rejilla">
+      <section class="tarjeta">
+        <h2>Lo que salió, por categoría</h2>
+        ${gastos.length
+          ? html`<div class="tabla-contenedor">${tablaCategorias(gastos)}</div>`
+          : vacio("No hay movimientos apuntados ni importados de este mes.", html`<a class="boton" href="/importar">Importar un extracto</a>`)}
+        <p><a href="/movimientos?mes=${mes}">Ver los movimientos de ${nombreMes(mes)}</a></p>
+      </section>
+      <section class="tarjeta">
+        <h2>Gastos fijos de ese mes</h2>
+        ${plan.lineas.filter((l) => l.recurrente.tipo === "gasto").length
+          ? html`<ul class="lista-plana">
+              ${plan.lineas
+                .filter((l) => l.recurrente.tipo === "gasto")
+                .sort((a, b) => b.mensual - a.mensual)
+                .map((l) => html`<li><span>${l.recurrente.nombre}</span><span class="numero">${eur(l.mensual)}</span></li>`)}
+            </ul>`
+          : html`<p class="apagado">Ninguno.</p>`}
+      </section>
+    </div>
+  `;
 }
 
 function avisoCierre(mes: string | null, ocultos: ReadonlySet<string>): Html | string {
@@ -23,7 +107,7 @@ function avisoCierre(mes: string | null, ocultos: ReadonlySet<string>): Html | s
   return ocultos.has(clave) ? "" : aviso("info", texto, { ruta: `/cierre?mes=${mes}`, texto: "Cerrar el mes" }, { clave });
 }
 
-export function vistaResumen({ ctx, cierrePendiente, ocultos, presupuesto, proximos, cierres, porCategoria }: DatosResumen): Html {
+export function vistaResumen({ ctx, cierrePendiente, ocultos, presupuesto, proximos, cierres, porCategoria, gastoMeses }: DatosResumen): Html {
   const r = ctx.resultado;
   const p = r.presupuesto;
   const sinDatos = ctx.recurrentes.length === 0 && ctx.cuentas.length === 0;
@@ -42,7 +126,7 @@ export function vistaResumen({ ctx, cierrePendiente, ocultos, presupuesto, proxi
   }
 
   return html`
-    ${avisoCierre(cierrePendiente, ocultos)} ${listaAvisos(r, ocultos)}
+    ${navegacionMes(mesDe(ctx.hoy), ctx.hoy)} ${avisoCierre(cierrePendiente, ocultos)} ${listaAvisos(r, ocultos)}
 
     <div class="cifras">
       ${cifra("Ingresos al mes", eurR(p.ingresos))} ${cifra("Gastos esenciales", eurR(p.esenciales), "con préstamos y la parte mensual de los anuales")}
@@ -104,6 +188,8 @@ export function vistaResumen({ ctx, cierrePendiente, ocultos, presupuesto, proxi
           )}
         </section>`
       : ""}
+
+    ${graficoGastoMeses(gastoMeses)}
 
     ${presupuesto.some((l) => l.limite)
       ? html`<section class="tarjeta" style="margin-top:16px">

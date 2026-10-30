@@ -54,3 +54,21 @@ it("presupuesto por categorías: límites, lo gastado sin los gastos fijos y avi
   await pedir("/presupuesto", { [`limite_${comida}`]: "", volver: "/movimientos" });
   assert.equal(presupuestoPorCategoria(bd, "2026-10", "2026-10-20").find((l) => l.categoriaId === comida)?.limite, null, "vacío quita el límite");
 });
+
+it("meses anteriores y gasto por categoría mes a mes", async () => {
+  const { gastoPorCategoriaMeses } = await import("../src/servicios/presupuesto.ts");
+  bd.ejecutar("INSERT INTO apuntes (fecha, importe, concepto, categoria_id) VALUES ('2026-09-10', -4000, 'CINE', ?), ('2026-09-12', -20000, 'SUPER', ?)", categoria("Ocio"), categoria("Alimentación"));
+  const datos = gastoPorCategoriaMeses(bd, "2026-10", 3);
+  assert.deepEqual(datos.meses, ["2026-08", "2026-09", "2026-10"]);
+  const alimentacion = datos.series.find((s) => s.nombre === "Alimentación");
+  assert.deepEqual(alimentacion?.valores, [0, 20000, 32000], "incluye también los cargos de gastos fijos: es lo que salió de verdad");
+
+  const septiembre = await (await pedir("/?mes=2026-09")).text();
+  assert.match(septiembre, /Así fue septiembre de 2026/);
+  assert.match(septiembre, /Este mes no se cerró/);
+  assert.match(await (await pedir("/ocio?mes=2026-09")).text(), /CINE/);
+  const actual = await (await pedir("/")).text();
+  assert.match(actual, /grafico-gasto-meses/, "con dos meses de movimientos ya sale el gráfico");
+  assert.match(actual, /href="\/\?mes=2026-09"/);
+  assert.match(await (await pedir("/?mes=2027-01")).text(), /Resumen de octubre de 2026/, "un mes futuro muestra el actual");
+});

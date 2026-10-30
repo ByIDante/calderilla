@@ -1,9 +1,9 @@
-import type { Hono } from "hono";
+import type { Context, Hono } from "hono";
 import { html } from "hono/html";
-import { formatoFecha, mesDe, nombreMes, primerDia, ultimoDia } from "../../dominio/fechas.ts";
+import { formatoFecha, mesDe, nombreMes, primerDia, sumarMesesAMes, ultimoDia } from "../../dominio/fechas.ts";
 import { NOMBRE_ETAPA } from "../../reglas/tipos.ts";
 import { leerAportaciones, totalMensual } from "../../servicios/aportaciones.ts";
-import { contexto } from "../../servicios/situacion.ts";
+import { contexto, ocioGastadoEn } from "../../servicios/situacion.ts";
 import { bd, render, type Estado } from "../app.ts";
 import { Formulario, idDe, redirigir } from "../formulario.ts";
 import { botonAccion, campo, cifra, eur, eurR, porque, selector, vacio } from "../vistas/comun.ts";
@@ -17,10 +17,51 @@ interface Apunte {
   tipo: string | null;
 }
 
+/** El ocio de un mes ya pasado: lo previsto en su cierre y lo gastado. */
+function ocioPasado(c: Context, estado: Estado, mes: string) {
+  const base = bd(estado);
+  const cierre = base.uno<{ ocio_plan: number; ocio_gastado: number; ocio_sobrante: number }>("SELECT ocio_plan, ocio_gastado, ocio_sobrante FROM cierres_mes WHERE mes = ?", mes);
+  const apuntes = base.todos<Apunte>(
+    `SELECT a.id, a.fecha, a.importe, a.concepto, c.nombre AS categoria, c.tipo FROM apuntes a JOIN categorias c ON c.id = a.categoria_id
+     WHERE c.tipo = 'ocio' AND a.recurrente_id IS NULL AND a.fecha BETWEEN ? AND ? ORDER BY a.fecha DESC`,
+    primerDia(mes),
+    ultimoDia(mes),
+  );
+  const gastado = ocioGastadoEn(base, ultimoDia(mes));
+  const siguiente = sumarMesesAMes(mes, 1);
+  return render(
+    c,
+    estado,
+    { titulo: `Ocio de ${nombreMes(mes)}`, seccion: "ocio" },
+    html`
+      <div class="botones bloque">
+        <a class="boton boton-pequeno" href="/ocio?mes=${sumarMesesAMes(mes, -1)}">← ${nombreMes(sumarMesesAMes(mes, -1))}</a>
+        <a class="boton boton-pequeno" href="${siguiente >= mesDe(estado.hoy()) ? "/ocio" : `/ocio?mes=${siguiente}`}">${nombreMes(siguiente)} →</a>
+      </div>
+      <div class="cifras">
+        ${cifra("Gastado en ocio", eurR(gastado))}
+        ${cierre ? cifra("Previsto", eurR(cierre.ocio_plan), gastado > cierre.ocio_plan ? "te pasaste" : `sobraron ${eurR(cierre.ocio_plan - gastado)}`, gastado > cierre.ocio_plan ? "mal" : "bien") : cifra("Previsto", "—", "este mes no se cerró")}
+        ${cierre?.ocio_sobrante ? cifra("Pasó al mes siguiente", eurR(cierre.ocio_sobrante)) : ""}
+      </div>
+      <section class="tarjeta">
+        <h2>Gastos de ocio</h2>
+        ${apuntes.length
+          ? html`<ul class="lista-plana">
+              ${apuntes.map((a) => html`<li><span>${formatoFecha(a.fecha)} · ${a.concepto} <span class="apagado pequeno">${a.categoria}</span></span><span class="numero">${eur(-a.importe)}</span></li>`)}
+            </ul>`
+          : vacio("No hay gastos de ocio apuntados ese mes.")}
+        <p><a href="/movimientos?mes=${mes}">Ver todos los movimientos de ${nombreMes(mes)}</a></p>
+      </section>
+    `,
+  );
+}
+
 export function rutasOcio(app: Hono, estado: Estado) {
   app.get("/ocio", (c) => {
     const base = bd(estado);
     const hoy = estado.hoy();
+    const pedido = c.req.query("mes") ?? "";
+    if (/^\d{4}-(0[1-9]|1[0-2])$/.test(pedido) && pedido < mesDe(hoy)) return ocioPasado(c, estado, pedido);
     const ctx = contexto(base, hoy);
     const p = ctx.resultado.presupuesto;
     const mes = mesDe(hoy);
@@ -53,6 +94,7 @@ export function rutasOcio(app: Hono, estado: Estado) {
       estado,
       { titulo: `Ocio de ${nombreMes(mes)}`, seccion: "ocio" },
       html`
+        <div class="botones bloque"><a class="boton boton-pequeno" href="/ocio?mes=${sumarMesesAMes(mes, -1)}">← ${nombreMes(sumarMesesAMes(mes, -1))}</a></div>
         <div class="cifras">
           ${cifra("Te queda para ocio", eurR(p.ocioQueda), `hasta fin de mes`, p.ocioQueda < 0 ? "mal" : "acento")} ${cifra("Ocio del mes", eurR(p.ocio + p.ocioRemanente))}
           ${cifra("Gastado", eurR(p.ocioGastado))} ${cifra("Ocio mínimo", eurR(p.ocioMinimo), "nunca baja de aquí si te sobra dinero")}

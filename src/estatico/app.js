@@ -15,15 +15,17 @@ function pintarGraficos(raiz) {
     if (!fuente) continue;
     const datos = JSON.parse(fuente.textContent);
     lienzo.dataset.pintado = "1";
+    const apilado = datos.apilado === true;
+    // Colores en orden fijo (paleta validada): hasta 6 series; el resto se agrupa en «Otras» antes de llegar aquí
     const series = datos.series.map((serie, i) => ({
       label: serie.nombre,
       data: serie.valores,
-      backgroundColor: color(`--serie-${i + 1}`),
-      borderColor: color(`--serie-${i + 1}`),
-      borderRadius: 4,
+      backgroundColor: color(`--serie-${(i % 6) + 1}`),
+      borderColor: apilado ? color("--superficie") : color(`--serie-${(i % 6) + 1}`),
+      borderRadius: apilado ? 0 : 4,
       borderSkipped: "start",
       maxBarThickness: 28,
-      borderWidth: datos.tipo === "line" ? 2 : 0,
+      borderWidth: datos.tipo === "line" ? 2 : apilado ? 1 : 0,
       pointRadius: datos.tipo === "line" ? 4 : 0,
       tension: 0,
     }));
@@ -48,7 +50,9 @@ function pintarGraficos(raiz) {
           legend: { display: series.length > 1, position: "top", align: "start", labels: { color: color("--tinta-suave"), boxWidth: 12, boxHeight: 12 } },
           tooltip: { callbacks: { label: (c) => ` ${c.dataset.label}: ${formatoEuros.format(c.parsed[horizontal ? "x" : "y"])}` } },
         },
-        scales: horizontal ? { x: ejeValor, y: ejeCategoria } : { x: ejeCategoria, y: ejeValor },
+        scales: horizontal
+          ? { x: { ...ejeValor, stacked: apilado }, y: { ...ejeCategoria, stacked: apilado } }
+          : { x: { ...ejeCategoria, stacked: apilado }, y: { ...ejeValor, stacked: apilado } },
       },
     });
   }
