@@ -218,3 +218,21 @@ describe("escalera: casos límite", () => {
     assert.doesNotMatch(r.acciones.map((a) => a.porque).join(" "), /Banco Viejo/);
   });
 });
+
+describe("textos de la escalera", () => {
+  it("si las metas se llevan todo el ahorro, lo dice en vez de proponer «ahorra 0 €»", () => {
+    const r = evaluar(
+      situacion({
+        ingresos: e(2150),
+        esenciales: e(1456),
+        noEsenciales: e(14),
+        liquidez: e(7000),
+        metas: [{ nombre: "Entrada piso", objetivo: e(45000), ahorrado: e(1200), fecha: "2030-06-01" }],
+      }),
+      p,
+    );
+    assert.equal(r.etapa, "fondo_emergencia");
+    assert.match(txt(r.acciones[0]?.texto), /todo tu ahorro .* se lo llevan tus metas/);
+    assert.doesNotMatch(txt(r.acciones[0]?.texto), /Ahorra 0 €/);
+  });
+});

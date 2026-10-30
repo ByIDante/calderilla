@@ -201,13 +201,21 @@ function progresoHacia(c: Calculo, objetivo: number): Progreso {
   return { actual, objetivo, falta, meses: mesesHasta(falta, c.aporte) };
 }
 
+/** Si este mes todo el ahorro se lo llevan las metas, se dice en vez de proponer «ahorra 0 €». */
+function textoSinAporte(c: Calculo, destino: string, falta: number): string | null {
+  if (c.aporte > 0 || c.requeridoMetas <= 0) return null;
+  return `Este mes todo tu ahorro (${eur(c.presupuesto.objetivoAhorro)}) se lo llevan tus metas, así que no queda nada para ${destino}: te faltan ${eur(falta)}. Valora alargar la fecha de alguna meta o bajar su importe.`;
+}
+
 function planColchon(c: Calculo): Plan {
   const progreso = progresoHacia(c, c.colchonObjetivo);
   const meses = c.p.colchonMeses === 1 ? "un mes" : `${c.p.colchonMeses} meses`;
   return {
     acciones: [
       {
-        texto: `Aparta ${eur(c.aporte)} al mes en tu cuenta corriente o remunerada hasta tener ${eur(c.colchonObjetivo)} libres. Te faltan ${eur(progreso.falta)}.${alRitmo(progreso.meses)}`,
+        texto:
+          textoSinAporte(c, "el colchón", progreso.falta) ??
+          `Aparta ${eur(c.aporte)} al mes en tu cuenta corriente o remunerada hasta tener ${eur(c.colchonObjetivo)} libres. Te faltan ${eur(progreso.falta)}.${alRitmo(progreso.meses)}`,
         porque: `Un colchón de ${meses} de gastos esenciales (mínimo ${eur(c.p.colchonMinimo * 100)}) evita que un imprevisto pequeño acabe en descubierto o en la tarjeta. ${ejemplosCuentas(c.productos)}`,
       },
     ],
@@ -239,7 +247,9 @@ function planFondo(c: Calculo): Plan {
   return {
     acciones: [
       {
-        texto: `Ahorra ${eur(c.aporte)} al mes en una cuenta remunerada o un fondo monetario hasta llegar a ${eur(c.fondoObjetivo)}. Te faltan ${eur(progreso.falta)}.${alRitmo(progreso.meses)}`,
+        texto:
+          textoSinAporte(c, "el fondo de emergencia", progreso.falta) ??
+          `Ahorra ${eur(c.aporte)} al mes en una cuenta remunerada o un fondo monetario hasta llegar a ${eur(c.fondoObjetivo)}. Te faltan ${eur(progreso.falta)}.${alRitmo(progreso.meses)}`,
         porque: [
           `Tu fondo de emergencia son ${c.fondoMeses} meses de gastos esenciales (${c.fondoMeses} × ${eur(c.s.esenciales)}), según la estabilidad de tus ingresos.`,
           "Sirve para no tener que vender inversiones en plena caída o si te quedas sin trabajo, así que debe estar disponible y sin riesgo.",
