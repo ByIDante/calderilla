@@ -6,7 +6,8 @@ Web local para llevar el control de tu economía: ingresos, gastos fijos y a pla
 - **Resumen del mes.** Muestra lo que entra, lo que sale y lo que sobra, con gráficos y una tabla de cierres.
 - **Ocio.** Calcula cuánto te queda este mes para ocio y explica de dónde sale la cifra.
 - **Escalera de inversión.** Según tus gastos y lo que te sobra, te dice en qué etapa estás y qué hacer. Cuando cumples los requisitos, pasas a la siguiente etapa o se desbloquean más opciones.
-- **Cartera.** Fondos, ETF, acciones, cripto y divisas, con su valor y lo que ganas o pierdes.
+- **Cartera.** Fondos, ETF, acciones, cripto y divisas, con su valor y lo que ganas o pierdes. Los precios se actualizan solos con fuentes gratuitas, y también puedes ponerlos a mano.
+- **Tus movimientos.** Importa el extracto del banco (CSV o Excel) o conecta el banco para que traiga saldos y movimientos solo.
 
 Funciona en tu ordenador, sin cuentas ni suscripciones. **No usa IA ni necesita una cuenta de Claude:** las recomendaciones son reglas fijas. Las diseñaron en octubre de 2026 varios agentes especializados (un gestor de inversiones, un investigador de integraciones y un «abogado del diablo» que atacó el diseño).
 
@@ -76,6 +77,31 @@ Los tipos de interés de cuentas y Letras, los tramos del IRPF y los límites de
 4. La mitad de lo que no gastes pasa al mes siguiente.
 5. Cuando terminas un préstamo, su cuota va entera a ahorro durante 3 meses antes de repartirse.
 
+## Precios, extractos y bancos
+
+Todo esto es gratis y funciona solo con conexión a internet, sin cuentas de pago ni de Claude. Lo que se vincula (claves, bancos) se guarda en cada ordenador por separado, en **Ajustes → Servicios vinculados**.
+
+- **Precios automáticos.** En cada inversión, busca por ISIN, ticker o nombre y elige el resultado.
+  - ETF, acciones y muchos fondos (con su identificador de Morningstar) salen de Yahoo Finance.
+  - Las criptomonedas salen de CoinGecko. Funciona sin clave; con una clave Demo gratuita admite más consultas.
+  - Los tipos de cambio salen del Banco Central Europeo.
+  - Se actualizan al abrir la app cada 12 horas, y con el botón «Actualizar precios».
+  - Yahoo no es una API oficial y algunos fondos españoles no aparecen: el precio manual funciona siempre, y si pones uno a mano para un día, ese día gana el tuyo.
+- **Importar un extracto** (Ocio → Importar, o Ajustes). Sirve para cualquier banco:
+  - Sube el CSV o Excel. La primera vez se adivinan las columnas y las puedes corregir; el formato se recuerda.
+  - Los cargos de tus gastos fijos (±5 % del importe y ±5 días) se reconocen y no se cuentan dos veces.
+  - El resto se categoriza con reglas del tipo «si el concepto contiene *mercadona* → Alimentación», que puedes ampliar.
+  - Si subes el mismo extracto dos veces, no se duplica nada.
+- **Conectar el banco** (Ajustes → Bancos). Se hace con [Enable Banking](https://enablebanking.com):
+  - **Qué necesitas:** una cuenta gratuita y una aplicación registrada en su web, que te da un ID y un archivo de clave `.pem`. Después autorizas cada banco desde su propia app o web.
+  - **Coste:** es gratis para uso personal («modo restringido»: solo lee tus propias cuentas).
+  - **Qué trae:** saldos y movimientos, cada 12 horas y con un botón. No puede mover dinero.
+  - **Renovación:** el permiso dura como mucho 180 días; la app avisa 14 días antes de que caduque.
+  - **Bancos:** en octubre de 2026 su lista de España incluía CaixaBank, BBVA, Santander y Sabadell. ING, Openbank, Revolut y Trade Republic no estaban: para esos, importa el extracto.
+  - **Dos ordenadores:** algunos bancos solo permiten una sesión por persona, así que vincular el mismo banco en los dos ordenadores puede desconectar uno.
+- **Préstamos.** Si amortizas antes de tiempo, apúntalo en el préstamo y elige si reduces la cuota o el plazo. La app recalcula el cuadro, la fecha de fin y los intereses que te ahorras.
+- **Perfil de riesgo.** En Ajustes → Perfil hay un cuestionario de 5 preguntas. Tu perfil es el menor entre el riesgo que aguantas y el que te puedes permitir.
+
 ## Desarrollo
 
 ```bash
@@ -97,6 +123,9 @@ src/
   dominio/                dinero, fechas, recurrencias y préstamos (sistema francés)
   reglas/                 escalera, deudas, ocio, parámetros y datos de mercado iniciales
   servicios/              lectura y escritura de los datos para las reglas y las pantallas
+  precios/                precios (Yahoo Finance, CoinGecko) y tipos de cambio (BCE)
+  importar/               lectura de extractos CSV y Excel
+  bancos/                 conexión con Enable Banking
   servidor/               rutas, vistas y seguridad de la web local
-test/                     tests
+test/                     tests (sin red: las respuestas de las APIs están grabadas)
 ```
