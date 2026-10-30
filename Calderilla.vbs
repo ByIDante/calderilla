@@ -1,17 +1,24 @@
 ' Abre Calderilla sin la ventana negra. Para cerrarla: Ajustes -> Cerrar Calderilla.
-' Antes de abrirla busca si hay una version nueva en GitHub y la instala (si Git esta instalado y hay
-' conexion; si no, se abre igual). La primera vez, o tras actualizar, se ve la ventana mientras instala.
+' Antes de abrirla busca si hay una version nueva en GitHub y la instala (si hay conexion; si no, se abre
+' igual). La primera vez, o tras actualizar, se ve la ventana mientras instala.
 Set shell = CreateObject("WScript.Shell")
 Set fso = CreateObject("Scripting.FileSystemObject")
 carpeta = fso.GetParentFolderName(WScript.ScriptFullName)
 shell.CurrentDirectory = carpeta
+Set entorno = shell.Environment("PROCESS")
 
 ' Ejecuta una orden sin ventana y devuelve su codigo de salida
 Function Ejecutar(orden)
   Ejecutar = shell.Run("cmd /c " & orden, 0, True)
 End Function
 
-If Ejecutar("where git") = 0 Then
+' El paquete para Windows trae su propio Node en la carpeta "node"
+If fso.FileExists(carpeta & "\node\node.exe") Then entorno("PATH") = carpeta & "\node;" & entorno("PATH")
+
+If fso.FileExists(carpeta & "\VERSION") And Not fso.FolderExists(carpeta & "\.git") Then
+  ' Paquete para Windows (sin Git): descarga la version nueva de GitHub si la hay
+  Ejecutar "node scripts\actualizar.ts"
+ElseIf Ejecutar("where git") = 0 Then
   If Not fso.FolderExists(carpeta & "\.git") Then
     Ejecutar "git init -q -b main && git remote add origin https://github.com/ByIDante/calderilla.git"
   End If
@@ -21,7 +28,7 @@ If Ejecutar("where git") = 0 Then
   End If
 End If
 
-shell.Environment("PROCESS")("CALDERILLA_OCULTO") = "1"
+entorno("CALDERILLA_OCULTO") = "1"
 visible = 0
 If Not fso.FolderExists(carpeta & "\node_modules") Then
   visible = 1

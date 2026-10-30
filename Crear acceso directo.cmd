@@ -2,7 +2,10 @@
 rem Crea en el escritorio un acceso directo que abre Calderilla sin la ventana negra.
 setlocal
 cd /d "%~dp0"
+rem Primero quita a los archivos la marca de "descargado de internet", para que Windows no pregunte cada vez
+rem si de verdad quieres abrirlos
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+  "Get-ChildItem -LiteralPath '%~dp0' -Recurse -File | Unblock-File;" ^
   "$s = (New-Object -ComObject WScript.Shell).CreateShortcut([Environment]::GetFolderPath('Desktop') + '\Calderilla.lnk');" ^
   "$s.TargetPath = 'wscript.exe';" ^
   "$s.Arguments = '\"%~dp0Calderilla.vbs\"';" ^

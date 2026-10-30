@@ -3,3 +3,8 @@
 *.vbs text eol=crlf
 *.ico binary
 test/fixtures/** -text
+
+# Lo que no hace falta en las descargas (el paquete para Windows y sus actualizaciones)
+test/ export-ignore
+.github/ export-ignore
+.githooks/ export-ignore

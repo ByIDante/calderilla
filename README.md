@@ -15,15 +15,27 @@ Funciona en tu ordenador, sin cuentas ni suscripciones. **No usa IA ni necesita 
 
 ## Instalar
 
-Necesitas **Node.js 24 o superior** ([nodejs.org](https://nodejs.org), versión LTS).
+### Windows, sin instalar nada (la forma fácil)
 
-### Windows
+[**Descarga Calderilla para Windows**](https://github.com/ByIDante/calderilla/releases/latest/download/Calderilla-Windows.zip). No hace falta cuenta de GitHub, ni Node, ni Git: el ZIP lo lleva todo dentro.
+
+1. Descomprímelo donde quieras, por ejemplo en `Documentos`.
+2. Abre **`Crear acceso directo.cmd`** con doble clic. Si Windows avisa de que viene de internet, pulsa **Más información → Ejecutar de todas formas**. Te deja «Calderilla» en el escritorio.
+3. Ábrela desde el escritorio. La primera vez te pide una carpeta para tus datos.
+
+Cada vez que la abres busca si hay una versión nueva y la instala sola. Si está abierta mucho tiempo, también mira cada 6 horas y te avisa con un botón para reiniciar e instalarla.
+
+### Windows, con Node
+
+Necesitas **Node.js 24 o superior** ([nodejs.org](https://nodejs.org), versión LTS).
 
 1. Descarga el código: en GitHub, botón **Code → Download ZIP**, y descomprímelo; o, si tienes git, ejecuta `git clone`.
 2. Abre la carpeta y haz doble clic en **`Calderilla.cmd`**. La primera vez instala lo necesario (tarda un minuto); después se abre el navegador.
 3. Para salir, cierra la ventana negra. Si quieres abrirla con un clic, crea un acceso directo a `Calderilla.cmd` en el escritorio.
 
 ### Linux o macOS
+
+Con Node.js 24 o superior:
 
 ```bash
 npm ci
@@ -41,7 +53,7 @@ Para cerrarla, usa **Ajustes → Cerrar Calderilla**: guarda todo antes de salir
 
 ### Actualizar
 
-- **Windows:** con [Git](https://git-scm.com/download/win) instalado (opciones por defecto), **el acceso directo del escritorio busca e instala la versión nueva cada vez que abres Calderilla**. Sin conexión, se abre igual. También puedes hacerlo a mano con **`Actualizar.cmd`**. La primera vez puede pedirte entrar en GitHub.
+- **Windows:** **el acceso directo del escritorio busca e instala la versión nueva cada vez que abres Calderilla**. Sin conexión, se abre igual. El ZIP de la forma fácil lo hace solo; si instalaste con Node, necesitas [Git](https://git-scm.com/download/win) (opciones por defecto). También puedes hacerlo a mano con **`Actualizar.cmd`**.
 - **Linux:** `git pull` en la carpeta del programa.
 
 Si se instala una versión nueva mientras Calderilla está abierta, aparece un aviso con el botón **Reiniciar**: guarda todo, se cierra y se vuelve a abrir con la versión nueva.
@@ -145,7 +157,10 @@ npm run dev        # arranca y se reinicia al cambiar el código
 npm test           # tests (node:test)
 npm run typecheck  # comprobación de tipos
 npm run revisar-pantallas -- capturas   # revisa todas las páginas en móvil, tablet, portátil y pantallas grandes
+npm run paquete-windows                  # crea dist/Calderilla-Windows.zip (con Node y dependencias dentro)
 ```
+
+`paquete-windows` empaqueta el último commit (hay que tenerlo todo en commit) con Node 24 para Windows, comprobado con las sumas de nodejs.org, y las dependencias ya instaladas. Para que la gente lo descargue, súbelo a una release de GitHub con el nombre `Calderilla-Windows.zip`: el enlace de «la forma fácil» siempre apunta a la última. Solo hace falta un paquete nuevo si cambia la versión de Node; el código se actualiza solo desde la rama `main`, y las dependencias se reinstalan si cambia `package-lock.json`.
 
 `revisar-pantallas` arranca la app con datos de ejemplo en una carpeta temporal y la abre con Playwright en el Chrome del sistema (390, 820, 1366, 1920 y 2560 px). Avisa si la página se desplaza de lado, si algo se sale de su tarjeta, si un texto baja de línea antes de tiempo, si una tabla no cabe, si la sección actual queda fuera del menú o si en el móvil hay botones demasiado pequeños para el dedo. Guarda capturas de las pantallas principales en la carpeta que le digas.
 

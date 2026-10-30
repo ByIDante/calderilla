@@ -25,7 +25,7 @@ it("lee la versión instalada de la carpeta .git (suelta o empaquetada)", () => 
 });
 
 it("con una versión nueva instalada avisa y se puede reiniciar desde la app", async () => {
-  app.estado.versionNueva = true;
+  app.estado.versionNueva = "instalada";
   assert.match(await (await app.pedir("/")).text(), /Hay una versión nueva de Calderilla instalada/);
   let reiniciada = false;
   app.estado.reiniciar = () => {

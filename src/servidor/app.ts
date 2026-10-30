@@ -34,8 +34,11 @@ export interface Estado {
   salir?: () => void;
   /** Cierra y vuelve a abrir el programa (tras instalar una versión nueva). */
   reiniciar?: () => void;
-  /** Se ha instalado una versión nueva mientras la app estaba abierta. */
-  versionNueva?: boolean;
+  /**
+   * «instalada»: se ha instalado una versión nueva mientras la app estaba abierta.
+   * «disponible»: el paquete para Windows ha visto en GitHub una versión nueva, que se instala al reiniciar.
+   */
+  versionNueva?: "instalada" | "disponible";
 }
 
 /** La base de datos de esta petición (solo existe con una carpeta de datos elegida). */
@@ -47,7 +50,8 @@ export function bd(estado: Estado): BaseDatos {
 /** Avisos de la banda superior: cambios llegados de otro ordenador, errores de la carpeta… */
 export function bandas(estado: Estado): Banda[] {
   const lista: Banda[] = [];
-  if (estado.versionNueva) lista.push({ nivel: "info", texto: "Hay una versión nueva de Calderilla instalada.", enlace: { ruta: "/reiniciar", texto: "Reiniciar para usarla" } });
+  if (estado.versionNueva === "instalada") lista.push({ nivel: "info", texto: "Hay una versión nueva de Calderilla instalada.", enlace: { ruta: "/reiniciar", texto: "Reiniciar para usarla" } });
+  if (estado.versionNueva === "disponible") lista.push({ nivel: "info", texto: "Hay una versión nueva de Calderilla.", enlace: { ruta: "/reiniciar", texto: "Reiniciar para instalarla" } });
   const sync = estado.sync;
   if (!sync) return lista;
   if (sync.aviso) {
@@ -130,7 +134,11 @@ export function crearApp(estado: Estado): Hono {
       estado,
       { titulo: "Reiniciar Calderilla", seccion: "ajustes" },
       html`<section class="tarjeta">
-        <p>Se ha instalado una versión nueva. Para usarla hay que cerrar Calderilla y volver a abrirla: se guarda todo antes y tarda unos segundos.</p>
+        <p>
+          ${estado.versionNueva === "disponible"
+            ? "Hay una versión nueva. Para instalarla hay que cerrar Calderilla y volver a abrirla: se guarda todo antes, se descarga y tarda unos segundos."
+            : "Se ha instalado una versión nueva. Para usarla hay que cerrar Calderilla y volver a abrirla: se guarda todo antes y tarda unos segundos."}
+        </p>
         ${botonAccion("/reiniciar", "Reiniciar ahora", { estilo: "secundario" })}
       </section>`,
     ),
@@ -142,7 +150,9 @@ export function crearApp(estado: Estado): Hono {
     return c.html(
       pagina(
         { titulo: "Reiniciando…", seccion: "bienvenida" },
-        html`<meta http-equiv="refresh" content="4;url=/" />${aviso("info", "Reiniciando Calderilla con la versión nueva. Esta página se recargará sola en unos segundos.")}`,
+        // app.js recarga en cuanto la app vuelve a responder; el refresh es por si no hubiera JavaScript
+        html`<meta http-equiv="refresh" content="120;url=/" />
+          <div data-esperar-vuelta>${aviso("info", "Reiniciando Calderilla con la versión nueva. Esta página se recargará sola en unos segundos.")}</div>`,
       ),
     );
   });

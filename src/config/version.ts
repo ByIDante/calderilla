@@ -5,11 +5,18 @@ import path from "node:path";
 export const RAIZ = path.join(import.meta.dirname, "..", "..");
 
 /**
- * Commit de git con el que está instalado el programa, leído directamente de la carpeta .git (no hace falta
- * tener git). Sirve para darse cuenta de que se ha actualizado mientras la app estaba abierta.
- * null si no es una copia de git (p. ej. descargada como ZIP y aún sin actualizar).
+ * Commit con el que está instalado el programa, leído directamente de la carpeta .git (no hace falta
+ * tener git) o, en el paquete para Windows, de su archivo VERSION. Sirve para darse cuenta de que se ha
+ * actualizado mientras la app estaba abierta. null si no se sabe (p. ej. descargada como ZIP de GitHub).
  */
 export function versionInstalada(raiz = RAIZ): string | null {
+  if (!existsSync(path.join(raiz, ".git"))) {
+    try {
+      return readFileSync(path.join(raiz, "VERSION"), "utf8").trim() || null;
+    } catch {
+      return null;
+    }
+  }
   try {
     const head = readFileSync(path.join(raiz, ".git", "HEAD"), "utf8").trim();
     if (!head.startsWith("ref: ")) return head;

@@ -3,6 +3,8 @@ rem Abre Calderilla con doble clic. Para salir, cierra esta ventana.
 setlocal
 cd /d "%~dp0"
 title Calderilla
+rem El paquete para Windows trae su propio Node en la carpeta "node"
+if exist "%~dp0node\node.exe" set "PATH=%~dp0node;%PATH%"
 
 where node >nul 2>nul
 if errorlevel 1 (

@@ -14,7 +14,8 @@
     "test": "node --test \"test/**/*.test.ts\"",
     "check": "npm run typecheck && npm test",
     "prepare": "git config core.hooksPath .githooks || exit 0",
-    "revisar-pantallas": "node scripts/revisar-pantallas.ts"
+    "revisar-pantallas": "node scripts/revisar-pantallas.ts",
+    "paquete-windows": "node scripts/paquete-windows.ts"
   },
   "dependencies": {
     "@hono/node-server": "^2.1.5",

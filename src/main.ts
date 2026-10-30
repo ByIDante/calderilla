@@ -5,6 +5,7 @@ import path from "node:path";
 import { serve } from "@hono/node-server";
 import { cargarAjustes, carpetaAjustes, guardarAjustes, rutaTrabajo } from "./config/ajustes.ts";
 import { haySincronizacionPendiente, sincronizarBancos } from "./bancos/conexiones.ts";
+import { esPaquete, ultimaVersion } from "./config/actualizar.ts";
 import { RAIZ, versionInstalada } from "./config/version.ts";
 import { Sincronizador } from "./datos/sync.ts";
 import { actualizarPrecios, hayQueActualizar } from "./precios/actualizar.ts";
@@ -138,23 +139,40 @@ function sincronizarBancosSiToca() {
 }
 sincronizarBancosSiToca();
 
+/** El paquete para Windows mira en GitHub si hay versión nueva cada 6 horas (al abrirlo ya lo ha hecho el lanzador). */
+const paquete = esPaquete(RAIZ);
+let ultimaComprobacion = Date.now();
+function buscarVersionNuevaSiToca() {
+  if (!paquete || estado.versionNueva || Date.now() - ultimaComprobacion < 6 * 3_600_000) return;
+  ultimaComprobacion = Date.now();
+  void ultimaVersion().then((sha) => {
+    if (sha && sha !== versionInstalada()) estado.versionNueva = "disponible";
+  });
+}
+
 // Cada minuto se mira si hay cambios de otro ordenador y se guarda lo pendiente
 setInterval(() => {
-  if (!estado.versionNueva && versionAlArrancar !== null && versionInstalada() !== versionAlArrancar) estado.versionNueva = true;
+  if (!estado.versionNueva && versionAlArrancar !== null && versionInstalada() !== versionAlArrancar) estado.versionNueva = "instalada";
+  buscarVersionNuevaSiToca();
   estado.sync?.comprobar();
   actualizarPreciosSiToca();
   sincronizarBancosSiToca();
 }, 60_000);
 
 let cerrando = false;
-/** Guarda lo pendiente y sale. Con `volver`, antes deja lanzada otra Calderilla (con la versión nueva). */
+/**
+ * Guarda lo pendiente y sale. Con `volver`, antes deja lanzada otra Calderilla (con la versión nueva). En
+ * Windows se vuelve a abrir con el lanzador, que instala lo que falte (versión nueva, dependencias).
+ */
 function salir(volver = false) {
   if (cerrando) return;
   cerrando = true;
   try {
     estado.sync?.cerrar();
     if (volver) {
-      spawn(process.execPath, process.argv.slice(1), {
+      const lanzador = path.join(RAIZ, "Calderilla.vbs");
+      const [orden, argumentos] = process.platform === "win32" && existsSync(lanzador) ? ["wscript.exe", [lanzador]] : [process.execPath, process.argv.slice(1)];
+      spawn(orden, argumentos, {
         cwd: RAIZ,
         detached: true,
         stdio: "ignore",

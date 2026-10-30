@@ -116,6 +116,26 @@ function esperarAutorizacion(raiz) {
   }, 2000);
 }
 
+// Página de «Reiniciando…»: en cuanto responde la Calderilla nueva se vuelve a la app (si se está
+// instalando una versión nueva puede tardar más de lo normal)
+function esperarVuelta(raiz) {
+  if (!(raiz.querySelector?.("[data-esperar-vuelta]") ?? document.querySelector("[data-esperar-vuelta]"))) return;
+  const inicio = Date.now();
+  const intentar = async () => {
+    try {
+      // Los primeros instantes aún contesta la anterior, que está cerrándose
+      if (Date.now() - inicio > 2000 && (await fetch("/", { cache: "no-store" })).ok) {
+        location.href = "/";
+        return;
+      }
+    } catch {
+      // Todavía no ha vuelto
+    }
+    setTimeout(intentar, 1000);
+  };
+  setTimeout(intentar, 1000);
+}
+
 // Tarjetas plegables con data-recordar-plegado: se recuerda si las dejaste cerradas
 function recordarPlegado(raiz) {
   for (const detalle of raiz.querySelectorAll?.("details[data-recordar-plegado]") ?? []) {
@@ -169,6 +189,7 @@ function preparar(raiz) {
   actualizarDependientes(document);
   enlacesExternos(raiz);
   esperarAutorizacion(raiz);
+  esperarVuelta(raiz);
 }
 
 document.addEventListener("change", () => actualizarDependientes(document));
