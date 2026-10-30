@@ -33,24 +33,33 @@ async function terminar(c: Context, estado: Estado, codigo: string | undefined, 
   if (!api) return redirigir(c, "/bancos", { error: "Falta configurar Enable Banking." });
   const sesion = await api.crearSesion(codigo);
   const base = bd(estado);
+  const config = leerBancos();
+  // Al renovar el permiso (cada 180 días) se reutilizan las cuentas de Calderilla de antes: si no, se
+  // duplicarían el saldo y los movimientos
+  const anteriores = config.conexiones.filter((x) => x.banco === pendiente.banco.nombre);
+  const mismaCuenta = (a: { uid: string; iban: string | null }, b: { uid: string; iban: string | null }) => a.uid === b.uid || (a.iban !== null && a.iban === b.iban);
   const conexion: Conexion = {
     sessionId: sesion.sessionId,
     banco: pendiente.banco.nombre,
     pais: pendiente.banco.pais,
     validoHasta: sesion.validoHasta,
-    ultimaSincronizacion: null,
-    cuentas: sesion.cuentas.map((cuenta) => ({
-      ...cuenta,
-      cuentaId: base.ejecutar(
-        "INSERT INTO cuentas (nombre, tipo, entidad, moneda) VALUES (?, 'corriente', ?, ?)",
-        [pendiente.banco.nombre, cuenta.nombre ?? "", ocultarIban(cuenta.iban)].filter(Boolean).join(" "),
-        pendiente.banco.nombre,
-        cuenta.moneda ?? "EUR",
-      ).id,
-    })),
+    ultimaSincronizacion: anteriores.map((x) => x.ultimaSincronizacion).filter(Boolean).sort().at(-1) ?? null,
+    cuentas: sesion.cuentas.map((cuenta) => {
+      const previa = anteriores.flatMap((x) => x.cuentas).find((x) => mismaCuenta(x, cuenta));
+      if (previa) return { ...cuenta, cuentaId: previa.cuentaId };
+      return {
+        ...cuenta,
+        cuentaId: base.ejecutar(
+          "INSERT INTO cuentas (nombre, tipo, entidad, moneda) VALUES (?, 'corriente', ?, ?)",
+          [pendiente.banco.nombre, cuenta.nombre ?? "", ocultarIban(cuenta.iban)].filter(Boolean).join(" "),
+          pendiente.banco.nombre,
+          cuenta.moneda ?? "EUR",
+        ).id,
+      };
+    }),
   };
-  const config = leerBancos();
-  config.conexiones = [...config.conexiones.filter((x) => x.sessionId !== conexion.sessionId), conexion];
+  const sustituidas = new Set(anteriores.filter((x) => x.cuentas.some((c) => conexion.cuentas.some((n) => mismaCuenta(c, n)))).map((x) => x.sessionId));
+  config.conexiones = [...config.conexiones.filter((x) => x.sessionId !== conexion.sessionId && !sustituidas.has(x.sessionId)), conexion];
   guardarBancos(config);
   const informe = await sincronizarBancos(() => bd(estado), estado.hoy());
   return redirigir(c, "/bancos", {

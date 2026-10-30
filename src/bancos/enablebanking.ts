@@ -104,16 +104,22 @@ interface TransaccionApi {
 export function interpretarMovimientos(json: unknown): { movimientos: MovimientoBanco[]; siguiente: string | null } {
   const datos = json as { transactions?: TransaccionApi[]; continuation_key?: string | null };
   const movimientos: MovimientoBanco[] = [];
+  const vistos = new Map<string, number>();
   for (const t of datos.transactions ?? []) {
     if (t.status && t.status !== "BOOK") continue;
     const fecha = t.booking_date ?? t.value_date ?? t.transaction_date;
     const cantidad = Number(t.transaction_amount?.amount);
     if (!fecha || !Number.isFinite(cantidad)) continue;
-    const importe = Math.round(Math.abs(cantidad) * 100) * (t.credit_debit_indicator === "DBIT" ? -1 : 1);
+    // Sin indicador de cargo o abono, se respeta el signo del importe
+    const importe = t.credit_debit_indicator ? Math.round(Math.abs(cantidad) * 100) * (t.credit_debit_indicator === "DBIT" ? -1 : 1) : Math.round(cantidad * 100);
     const contraparte = t.credit_debit_indicator === "DBIT" ? t.creditor?.name : t.debtor?.name;
     const concepto = [...(t.remittance_information ?? []), contraparte].filter(Boolean).join(" · ") || "(sin concepto)";
-    // Si el banco no da referencia, se construye una con los datos del movimiento
-    const idExterno = t.entry_reference ?? t.transaction_id ?? createHash("sha1").update(`${fecha}|${importe}|${concepto}`).digest("hex");
+    // Si el banco no da referencia, se construye una con los datos del movimiento y su número de orden
+    // (dos cafés iguales el mismo día son dos movimientos)
+    const clave = `${fecha}|${importe}|${concepto}`;
+    const orden = (vistos.get(clave) ?? 0) + 1;
+    vistos.set(clave, orden);
+    const idExterno = t.entry_reference ?? t.transaction_id ?? createHash("sha1").update(`${clave}|${orden}`).digest("hex");
     movimientos.push({ idExterno, fecha: fecha.slice(0, 10), importe, concepto });
   }
   return { movimientos, siguiente: datos.continuation_key || null };

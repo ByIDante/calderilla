@@ -109,6 +109,12 @@ export async function sincronizarBancos(bd: () => BaseDatos, hoy: Fecha): Promis
     }
     if (todoBien) conexion.ultimaSincronizacion = new Date().toISOString();
   }
-  guardarBancos(config);
+  // Mientras se esperaba a la red pudo cambiar la configuración (vincular, desvincular…): solo se apunta la hora
+  const actual = leerBancos();
+  for (const conexion of actual.conexiones) {
+    const sincronizada = config.conexiones.find((x) => x.sessionId === conexion.sessionId);
+    if (sincronizada) conexion.ultimaSincronizacion = sincronizada.ultimaSincronizacion;
+  }
+  guardarBancos(actual);
   return informe;
 }
