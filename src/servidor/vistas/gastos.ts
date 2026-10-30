@@ -200,6 +200,23 @@ function vistaGestion(r: RecurrenteCompleto, hoy: Fecha): Html {
             <li><span>Última cuota</span><span>${formatoFecha(r.fin)}</span></li>
           </ul>
           <p><a href="/gastos/${r.id}/cuadro">Ver el cuadro de amortización</a></p>
+        </section>
+        <section class="tarjeta">
+          <h2>Amortizar antes de tiempo</h2>
+          ${(prestamo.amortizaciones ?? []).length
+            ? html`<ul class="lista-plana bloque">
+                ${(prestamo.amortizaciones ?? []).map((a) => html`<li><span>${formatoFecha(a.fecha)} · ${a.modo === "cuota" ? "bajando la cuota" : "acortando el plazo"}</span><span class="numero">${eur(a.importe)}</span></li>`)}
+              </ul>`
+            : ""}
+          <p class="apagado">Antes de hacerlo, mira en Inversiones si la regla lo recomienda para este préstamo${prestamo.vinculado ? " y recuerda que el precio dependía de mantener la financiación" : ""}.</p>
+          <form method="post" action="/gastos/${r.id}/amortizar" class="formulario">
+            <div class="fila-campos">
+              ${campo({ etiqueta: "Importe", nombre: "importe", sufijo: "€", requerido: true, id: "importe-amortizar" })}
+              ${campo({ etiqueta: "Fecha", nombre: "fecha", tipo: "date", valor: hoy, id: "fecha-amortizar" })}
+              ${selector("Qué reducir", "modo", [["plazo", "El plazo (misma cuota, acabas antes)"], ["cuota", "La cuota (mismo plazo, pagas menos al mes)"]], "plazo", "Reducir plazo suele ahorrar más intereses.")}
+            </div>
+            <div class="botones"><button class="boton" type="submit">Apuntar amortización</button></div>
+          </form>
         </section>`
       : ""}
     ${r.versiones.length > 1
@@ -230,12 +247,12 @@ export function vistaCuadro(r: RecurrenteCompleto, hoy: Fecha): Html {
     <div class="tabla-contenedor">
       <table>
         <thead>
-          <tr><th>Nº</th><th>Fecha</th><th class="numero">Cuota</th><th class="numero">Intereses</th><th class="numero">Amortizado</th><th class="numero">Pendiente</th></tr>
+          <tr><th>Nº</th><th>Fecha</th><th class="numero">Anticipado</th><th class="numero">Cuota</th><th class="numero">Intereses</th><th class="numero">Amortizado</th><th class="numero">Pendiente</th></tr>
         </thead>
         <tbody>
           ${cuadro.map(
             (f) => html`<tr class="${f.fecha <= hoy ? "finalizado" : ""}">
-              <td>${f.numero}</td><td>${formatoFecha(f.fecha)}</td><td class="numero">${eur(f.cuota)}</td><td class="numero">${eur(f.intereses)}</td>
+              <td>${f.numero}</td><td>${formatoFecha(f.fecha)}</td><td class="numero">${f.anticipado ? eur(f.anticipado) : ""}</td><td class="numero">${eur(f.cuota)}</td><td class="numero">${eur(f.intereses)}</td>
               <td class="numero">${eur(f.amortizacion)}</td><td class="numero">${eur(f.pendiente)}</td>
             </tr>`,
           )}

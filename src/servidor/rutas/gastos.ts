@@ -1,11 +1,11 @@
 import type { Context, Hono } from "hono";
 import { html } from "hono/html";
-import { esFecha, mesDe, type Fecha } from "../../dominio/fechas.ts";
+import { esFecha, formatoFecha, mesDe, type Fecha } from "../../dominio/fechas.ts";
 import { finPorCuotas, mensualEn, type Frecuencia } from "../../dominio/recurrencia.ts";
-import { actualizarRecurrente, borrarRecurrente, crearRecurrente, leerRecurrentes, terminarRecurrente, type DatosRecurrente } from "../../servicios/finanzas.ts";
+import { actualizarRecurrente, amortizar, borrarRecurrente, crearRecurrente, leerRecurrentes, terminarRecurrente, type DatosRecurrente } from "../../servicios/finanzas.ts";
 import { bd, render, type Estado } from "../app.ts";
 import { Formulario, idDe, redirigir } from "../formulario.ts";
-import { aviso } from "../vistas/comun.ts";
+import { aviso, eurR } from "../vistas/comun.ts";
 import { valoresDe, vistaCuadro, vistaFormulario, vistaLista, type Categoria, type Valores } from "../vistas/gastos.ts";
 
 const FRECUENCIAS: Frecuencia[] = ["mensual", "trimestral", "semestral", "anual"];
@@ -140,6 +140,17 @@ export function rutasGastos(app: Hono, estado: Estado) {
     if (!esFecha(fecha)) return redirigir(c, `/gastos/${id}`, { error: "Indica la fecha del último cargo." });
     terminarRecurrente(bd(estado), id, fecha);
     return redirigir(c, "/gastos", { ok: "Hecho: deja de contar a partir de esa fecha." });
+  });
+
+  app.post("/gastos/:id/amortizar", async (c) => {
+    const id = idDe(c);
+    const f = await Formulario.de(c);
+    const importe = f.importe("importe");
+    if (!importe || importe <= 0) return redirigir(c, `/gastos/${id}`, { error: "Indica cuánto amortizas." });
+    const resultado = amortizar(bd(estado), id, { fecha: f.fecha("fecha") ?? estado.hoy(), importe, modo: f.texto("modo") === "cuota" ? "cuota" : "plazo" });
+    return redirigir(c, `/gastos/${id}`, {
+      ok: `Amortización apuntada: te ahorras unos ${eurR(resultado.interesesAntes - resultado.interesesDespues)} de intereses y terminas el ${formatoFecha(resultado.fin)}. Actualiza el saldo de la cuenta de la que salió el dinero.`,
+    });
   });
 
   app.post("/gastos/:id/borrar", (c) => {

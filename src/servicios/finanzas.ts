@@ -1,7 +1,7 @@
 import type { BaseDatos } from "../datos/db.ts";
 import type { Centimos } from "../dominio/dinero.ts";
 import { diasEntre, sumarMeses, type Fecha, type Mes } from "../dominio/fechas.ts";
-import { cuotaMensual, cuotasRestantesPrestamo, finPrestamo, pendienteEn, taeDe, type Prestamo } from "../dominio/prestamo.ts";
+import { cuadroAmortizacion, cuotaMensual, cuotasRestantesPrestamo, finPrestamo, interesesTotales, pendienteEn, taeDe, type Amortizacion, type Prestamo } from "../dominio/prestamo.ts";
 import { estadoEn, importeEn, mensualEn, provisionAcumulada, type Frecuencia, type Recurrente, type VersionImporte } from "../dominio/recurrencia.ts";
 import type { Deuda } from "../reglas/deuda.ts";
 import type { PrestamoFin } from "../reglas/tipos.ts";
@@ -51,6 +51,10 @@ export function leerRecurrentes(bd: BaseDatos, id?: number): RecurrenteCompleto[
     versiones.set(v.recurrente_id, [...(versiones.get(v.recurrente_id) ?? []), { validoDesde: v.valido_desde, importe: v.importe }]);
   }
   const prestamos = new Map(bd.todos<FilaPrestamo>("SELECT * FROM prestamos").map((p) => [p.recurrente_id, p]));
+  const amortizaciones = new Map<number, Amortizacion[]>();
+  for (const a of bd.todos<{ prestamo_id: number; fecha: string; importe: number; modo: Amortizacion["modo"] }>("SELECT prestamo_id, fecha, importe, modo FROM amortizaciones ORDER BY fecha")) {
+    amortizaciones.set(a.prestamo_id, [...(amortizaciones.get(a.prestamo_id) ?? []), { fecha: a.fecha, importe: a.importe, modo: a.modo }]);
+  }
   return filas.map((fila) => {
     const prestamo = prestamos.get(fila.id);
     return {
@@ -76,6 +80,7 @@ export function leerRecurrentes(bd: BaseDatos, id?: number): RecurrenteCompleto[
             primeraCuota: prestamo.primera_cuota,
             comisionAmortizacion: prestamo.comision_amortizacion,
             vinculado: prestamo.vinculado === 1,
+            amortizaciones: amortizaciones.get(prestamo.id) ?? [],
           }
         : null,
     };
@@ -97,9 +102,9 @@ export interface DatosRecurrente {
 }
 
 /** Con préstamo, la fecha de fin y la cuota salen del préstamo (la cuota se puede corregir a mano). */
-function normalizar(datos: DatosRecurrente): DatosRecurrente {
+function normalizar(datos: DatosRecurrente, amortizaciones: readonly Amortizacion[] = []): DatosRecurrente {
   if (!datos.prestamo) return datos;
-  const prestamo = { ...datos.prestamo, primeraCuota: datos.inicio };
+  const prestamo = { ...datos.prestamo, primeraCuota: datos.inicio, amortizaciones };
   return {
     ...datos,
     tipo: "gasto",
@@ -156,9 +161,9 @@ export function crearRecurrente(bd: BaseDatos, entrada: DatosRecurrente): number
  * conservan el importe que tenían. Si `desde` es anterior o igual al inicio, se corrige el importe original.
  */
 export function actualizarRecurrente(bd: BaseDatos, id: number, entrada: DatosRecurrente, desde: Fecha) {
-  const datos = normalizar(entrada);
   const [actual] = leerRecurrentes(bd, id);
   if (!actual) throw new Error("No existe ese ingreso o gasto.");
+  const datos = normalizar(entrada, actual.prestamo?.amortizaciones);
   bd.transaccion(() => {
     bd.ejecutar(
       "UPDATE recurrentes SET tipo = ?, nombre = ?, categoria_id = ?, frecuencia = ?, inicio = ?, fin = ?, esencial = ?, clase = ?, nota = ? WHERE id = ?",
@@ -188,6 +193,32 @@ export function actualizarRecurrente(bd: BaseDatos, id: number, entrada: DatosRe
     }
     guardarPrestamo(bd, id, datos);
   });
+}
+
+/**
+ * Pago anticipado de un préstamo. El préstamo manda: se recalcula su cuadro y, con él, la fecha de fin
+ * del gasto y (si se reduce la cuota) el importe a partir de la siguiente cuota.
+ */
+export function amortizar(bd: BaseDatos, recurrenteId: number, a: Amortizacion): { interesesAntes: number; interesesDespues: number; fin: Fecha } {
+  const [r] = leerRecurrentes(bd, recurrenteId);
+  if (!r?.prestamo) throw new Error("Ese gasto no es un préstamo.");
+  const antes = r.prestamo;
+  const despues = { ...antes, amortizaciones: [...(antes.amortizaciones ?? []), a] };
+  const fin = finPrestamo(despues);
+  bd.transaccion(() => {
+    bd.ejecutar("INSERT INTO amortizaciones (prestamo_id, fecha, importe, modo) VALUES (?, ?, ?, ?)", antes.id, a.fecha, a.importe, a.modo);
+    bd.ejecutar("UPDATE recurrentes SET fin = ? WHERE id = ?", fin, recurrenteId);
+    const siguiente = cuadroAmortizacion(despues).find((fila) => fila.fecha > a.fecha && fila.cuota > 0);
+    if (a.modo === "cuota" && siguiente) {
+      bd.ejecutar(
+        "INSERT INTO recurrentes_importes (recurrente_id, valido_desde, importe) VALUES (?, ?, ?) ON CONFLICT (recurrente_id, valido_desde) DO UPDATE SET importe = excluded.importe",
+        recurrenteId,
+        siguiente.fecha,
+        siguiente.cuota,
+      );
+    }
+  });
+  return { interesesAntes: interesesTotales(antes), interesesDespues: interesesTotales(despues), fin };
 }
 
 /** «Quitar»: deja de contar a partir de `fecha`, pero el historial se conserva. */
