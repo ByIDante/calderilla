@@ -53,8 +53,15 @@ it("renovar el permiso de un banco reutiliza sus cuentas y no duplica nada", asy
   const conectar = await app.request("http://127.0.0.1:5198/bancos/conectar", { method: "POST", headers: cabeceras, body: "banco=CaixaBank" });
   assert.equal(conectar.status, 200);
   assert.ok(estadoAutorizacion);
+  assert.match(await conectar.text(), /target="_blank"/, "el banco se abre en una pestaña nueva");
+  const antes = await (await app.request(`http://127.0.0.1:5198/bancos/autorizacion/${estadoAutorizacion}`, { headers: { host: "127.0.0.1:5198" } })).json();
+  assert.deepEqual(antes, { estado: "pendiente" });
   const vuelta = await app.request(`http://127.0.0.1:5198/bancos/volver?code=c&state=${estadoAutorizacion}`, { headers: { host: "127.0.0.1:5198" } });
-  assert.equal(vuelta.status, 303);
+  assert.equal(vuelta.status, 200);
+  assert.match(await vuelta.text(), /Ya puedes cerrar esta pestaña/);
+  const despues = (await (await app.request(`http://127.0.0.1:5198/bancos/autorizacion/${estadoAutorizacion}`, { headers: { host: "127.0.0.1:5198" } })).json()) as { estado: string; ok: string };
+  assert.equal(despues.estado, "hecha", "la pestaña de Calderilla se entera de que ya está");
+  assert.match(despues.ok, /CaixaBank vinculado/);
 
   assert.equal(bd.uno<{ n: number }>("SELECT count(*) AS n FROM cuentas")?.n, 1, "no crea otra cuenta");
   const config = leerBancos();

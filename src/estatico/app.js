@@ -82,9 +82,45 @@ function actualizarDependientes(raiz) {
   }
 }
 
+// Los enlaces a otras webs (el banco, fuentes de datos…) se abren en una pestaña nueva: Calderilla se queda en la suya
+function enlacesExternos(raiz) {
+  for (const enlace of raiz.querySelectorAll("a[href]")) {
+    if (enlace.origin && enlace.origin !== location.origin) {
+      enlace.target = "_blank";
+      enlace.rel = "noopener noreferrer";
+    }
+  }
+}
+
+// Mientras autorizas en la pestaña del banco, esta pregunta cada 2 s si ya ha terminado y se actualiza sola
+let esperando = null;
+function esperarAutorizacion(raiz) {
+  const aviso = raiz.querySelector?.("[data-esperar-autorizacion]") ?? document.querySelector("[data-esperar-autorizacion]");
+  clearInterval(esperando);
+  if (!aviso) return;
+  const token = aviso.dataset.esperarAutorizacion;
+  esperando = setInterval(async () => {
+    if (!document.body.contains(aviso)) return clearInterval(esperando);
+    try {
+      const respuesta = await (await fetch(`/bancos/autorizacion/${token}`)).json();
+      if (respuesta.estado === "pendiente") return;
+      clearInterval(esperando);
+      const consulta = new URLSearchParams();
+      if (respuesta.ok) consulta.set("ok", respuesta.ok);
+      if (respuesta.error) consulta.set("error", respuesta.error);
+      if (respuesta.estado === "desconocida") consulta.set("error", "La autorización ha caducado. Vuelve a conectar el banco.");
+      location.href = `/bancos?${consulta}`;
+    } catch {
+      // Sin respuesta (p. ej. Calderilla reiniciándose): se vuelve a intentar
+    }
+  }, 2000);
+}
+
 function preparar(raiz) {
   pintarGraficos(raiz);
   actualizarDependientes(document);
+  enlacesExternos(raiz);
+  esperarAutorizacion(raiz);
 }
 
 document.addEventListener("change", () => actualizarDependientes(document));

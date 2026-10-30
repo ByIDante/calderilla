@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import type { Context, Hono } from "hono";
+import type { Hono } from "hono";
 import { html } from "hono/html";
 import { cliente, diasParaCaducar, guardarBancos, guardarClave, hayClave, leerBancos, sincronizarBancos, type Conexion } from "../../bancos/conexiones.ts";
 import type { Banco } from "../../bancos/enablebanking.ts";
@@ -47,14 +47,25 @@ export function borrarLoTraido(base: BaseDatos, cuentas: readonly number[]): num
   });
 }
 
+type Desenlace = { ok?: string; error?: string };
+
+/** Cómo acabó cada autorización, para que la pestaña de Calderilla se entere aunque el banco vuelva en otra. */
+const desenlaces = new Map<string, Desenlace & { creado: number }>();
+
+function apuntarDesenlace(token: string | undefined, desenlace: Desenlace): Desenlace {
+  if (token) desenlaces.set(token, { ...desenlace, creado: Date.now() });
+  for (const [clave, d] of desenlaces) if (Date.now() - d.creado > 3_600_000) desenlaces.delete(clave);
+  return desenlace;
+}
+
 /** Vuelta del banco: crea la sesión, da de alta una cuenta de Calderilla por cada cuenta del banco y trae los datos. */
-async function terminar(c: Context, estado: Estado, codigo: string | undefined, token: string | undefined, error?: string) {
-  if (error) return redirigir(c, "/bancos", { error: `El banco no autorizó el acceso: ${error}` });
+async function terminar(estado: Estado, codigo: string | undefined, token: string | undefined, error?: string): Promise<Desenlace> {
+  if (error) return apuntarDesenlace(token, { error: `El banco no autorizó el acceso: ${error}` });
   const pendiente = token ? autorizaciones.get(token) : undefined;
-  if (!codigo || !pendiente) return redirigir(c, "/bancos", { error: "No reconozco esta autorización (¿ha caducado?). Vuelve a conectar el banco." });
+  if (!codigo || !pendiente) return { error: "No reconozco esta autorización (¿ha caducado?). Vuelve a conectar el banco." };
   autorizaciones.delete(token!);
   const api = cliente();
-  if (!api) return redirigir(c, "/bancos", { error: "Falta configurar Enable Banking." });
+  if (!api) return apuntarDesenlace(token, { error: "Falta configurar Enable Banking." });
   const sesion = await api.crearSesion(codigo);
   const base = bd(estado);
   const config = leerBancos();
@@ -86,7 +97,7 @@ async function terminar(c: Context, estado: Estado, codigo: string | undefined, 
   config.conexiones = [...config.conexiones.filter((x) => x.sessionId !== conexion.sessionId && !sustituidas.has(x.sessionId)), conexion];
   guardarBancos(config);
   const informe = await sincronizarBancos(() => bd(estado), estado.hoy());
-  return redirigir(c, "/bancos", {
+  return apuntarDesenlace(token, {
     ok: `${pendiente.banco.nombre} vinculado: ${conexion.cuentas.length} cuentas, ${informe.nuevos} movimientos traídos.`,
     ...(informe.errores.length ? { error: informe.errores.join(" · ") } : {}),
   });
@@ -259,8 +270,12 @@ export function rutasBancos(app: Hono, estado: Estado) {
       estado,
       { titulo: `Autorizar ${banco.nombre}`, seccion: "ajustes" },
       html`<section class="tarjeta">
-        <p>Ahora te llevo a ${banco.nombre} para que autorices el acceso de solo lectura. Al terminar, el banco te devolverá aquí.</p>
-        <p><a class="boton boton-principal" href="${url}" hx-boost="false">Ir a ${banco.nombre}</a></p>
+        <p>
+          Se abrirá ${banco.nombre} en una pestaña nueva para que autorices el acceso de solo lectura. Esta pestaña se queda esperando y se actualiza sola cuando
+          termines.
+        </p>
+        <p><a class="boton boton-principal" href="${url}" target="_blank" rel="noopener noreferrer">Ir a ${banco.nombre}</a></p>
+        <p class="apagado" data-esperar-autorizacion="${token}">Esperando a que autorices en la otra pestaña…</p>
         <details style="margin-top:16px">
           <summary>¿El banco te ha dejado en otra página?</summary>
           <p class="apagado">Si registraste una dirección de vuelta que no es la de Calderilla, copia la dirección completa de esa página (la que lleva <code>?code=</code>) y pégala aquí.</p>
@@ -273,12 +288,33 @@ export function rutasBancos(app: Hono, estado: Estado) {
     );
   });
 
-  app.get("/bancos/volver", (c) => terminar(c, estado, c.req.query("code"), c.req.query("state"), c.req.query("error_description") ?? c.req.query("error")));
+  // El banco vuelve en su pestaña: aquí solo se confirma; la pestaña de Calderilla se entera sola
+  app.get("/bancos/volver", async (c) => {
+    const desenlace = await terminar(estado, c.req.query("code"), c.req.query("state"), c.req.query("error_description") ?? c.req.query("error"));
+    return render(
+      c,
+      estado,
+      { titulo: desenlace.ok ? "Banco vinculado" : "No se pudo vincular el banco", seccion: "ajustes" },
+      html`<section class="tarjeta">
+        ${desenlace.ok ? aviso("logro", desenlace.ok) : ""} ${desenlace.error ? aviso("error", desenlace.error) : ""}
+        <p>Ya puedes cerrar esta pestaña: la de Calderilla se ha actualizado sola.</p>
+        <p class="apagado pequeno"><a href="/bancos">O sigue aquí, en Bancos</a></p>
+      </section>`,
+    );
+  });
+
+  app.get("/bancos/autorizacion/:token", (c) => {
+    const token = c.req.param("token");
+    const desenlace = desenlaces.get(token);
+    if (desenlace) return c.json({ estado: "hecha", ok: desenlace.ok ?? null, error: desenlace.error ?? null });
+    return c.json({ estado: autorizaciones.has(token) ? "pendiente" : "desconocida" });
+  });
 
   app.post("/bancos/volver-manual", async (c) => {
     try {
       const url = new URL((await Formulario.de(c)).texto("url"));
-      return await terminar(c, estado, url.searchParams.get("code") ?? undefined, url.searchParams.get("state") ?? undefined, url.searchParams.get("error") ?? undefined);
+      const desenlace = await terminar(estado, url.searchParams.get("code") ?? undefined, url.searchParams.get("state") ?? undefined, url.searchParams.get("error") ?? undefined);
+      return redirigir(c, "/bancos", desenlace);
     } catch {
       return redirigir(c, "/bancos", { error: "Esa dirección no es válida: copia la dirección completa de la barra del navegador." });
     }
