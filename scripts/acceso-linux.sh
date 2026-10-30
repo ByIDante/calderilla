@@ -17,7 +17,8 @@ cat > "$lanzador" <<DESKTOP
 Type=Application
 Name=Calderilla
 Comment=Tus ingresos, gastos, ocio e inversiones
-Exec=sh -c 'cd "$raiz" && exec "$node" src/main.ts'
+Path=$raiz
+Exec="$node" src/main.ts
 Icon=$raiz/src/estatico/icono.svg
 Terminal=false
 Categories=Office;Finance;
