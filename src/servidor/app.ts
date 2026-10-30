@@ -17,7 +17,8 @@ import { rutasMovimientos } from "./rutas/movimientos.ts";
 import { rutasOcio } from "./rutas/ocio.ts";
 import { rutasResumen } from "./rutas/resumen.ts";
 import { seguridad } from "./seguridad.ts";
-import { aviso, pagina, type Banda, type OpcionesPagina, type Html } from "./vistas/comun.ts";
+import { html } from "hono/html";
+import { aviso, botonAccion, pagina, type Banda, type OpcionesPagina, type Html } from "./vistas/comun.ts";
 
 export interface Estado {
   ajustes: Ajustes;
@@ -31,6 +32,10 @@ export interface Estado {
   guardarAjustes: (ajustes: Ajustes) => void;
   /** Cierra el programa guardando lo pendiente (botón «Cerrar Calderilla»: sin ventana no hay otra forma). */
   salir?: () => void;
+  /** Cierra y vuelve a abrir el programa (tras instalar una versión nueva). */
+  reiniciar?: () => void;
+  /** Se ha instalado una versión nueva mientras la app estaba abierta. */
+  versionNueva?: boolean;
 }
 
 /** La base de datos de esta petición (solo existe con una carpeta de datos elegida). */
@@ -42,6 +47,7 @@ export function bd(estado: Estado): BaseDatos {
 /** Avisos de la banda superior: cambios llegados de otro ordenador, errores de la carpeta… */
 export function bandas(estado: Estado): Banda[] {
   const lista: Banda[] = [];
+  if (estado.versionNueva) lista.push({ nivel: "info", texto: "Hay una versión nueva de Calderilla instalada.", enlace: { ruta: "/reiniciar", texto: "Reiniciar para usarla" } });
   const sync = estado.sync;
   if (!sync) return lista;
   if (sync.aviso) {
@@ -117,6 +123,29 @@ export function crearApp(estado: Estado): Hono {
   rutasMetas(app, estado);
   rutasAjustes(app, estado);
   rutasBancos(app, estado);
+
+  app.get("/reiniciar", (c) =>
+    render(
+      c,
+      estado,
+      { titulo: "Reiniciar Calderilla", seccion: "ajustes" },
+      html`<section class="tarjeta">
+        <p>Se ha instalado una versión nueva. Para usarla hay que cerrar Calderilla y volver a abrirla: se guarda todo antes y tarda unos segundos.</p>
+        ${botonAccion("/reiniciar", "Reiniciar ahora", { estilo: "secundario" })}
+      </section>`,
+    ),
+  );
+
+  app.post("/reiniciar", (c) => {
+    setTimeout(() => estado.reiniciar?.(), 300);
+    // La página se recarga sola cuando la app ha vuelto
+    return c.html(
+      pagina(
+        { titulo: "Reiniciando…", seccion: "bienvenida" },
+        html`<meta http-equiv="refresh" content="4;url=/" />${aviso("info", "Reiniciando Calderilla con la versión nueva. Esta página se recargará sola en unos segundos.")}`,
+      ),
+    );
+  });
 
   app.post("/salir", (c) => {
     setTimeout(() => estado.salir?.(), 300);

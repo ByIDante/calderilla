@@ -1,12 +1,13 @@
 @echo off
 rem Baja la ultima version de Calderilla desde GitHub. Tus datos no se tocan: estan en tu carpeta de datos.
-rem Necesita Git (https://git-scm.com/download/win). La primera vez te pedira entrar en GitHub.
+rem Necesita Git (https://git-scm.com/download/win). La primera vez puede pedirte entrar en GitHub.
+rem El acceso directo del escritorio ya lo hace solo cada vez que abres Calderilla.
 setlocal
 cd /d "%~dp0"
 title Actualizar Calderilla
 where git >nul 2>nul
 if errorlevel 1 (
-  echo Para actualizar con un clic necesitas Git: descargalo de https://git-scm.com/download/win,
+  echo Para actualizar necesitas Git: descargalo de https://git-scm.com/download/win,
   echo instalalo con las opciones por defecto y vuelve a abrir este archivo.
   pause
   exit /b 1
@@ -23,10 +24,13 @@ if errorlevel 1 (
   pause
   exit /b 1
 )
-rem El programa no se edita a mano: se deja exactamente como esta en GitHub
-git reset -q --hard origin/main
-for /f %%v in ('git log -1 --format^=%%cd --date^=format:%%d/%%m/%%Y') do set FECHA=%%v
-echo.
-echo Calderilla esta al dia (version del %FECHA%).
-echo Si estaba abierta, cierrala (Ajustes - Cerrar Calderilla) y vuelve a abrirla.
-pause
+rem Este archivo tambien puede cambiar al actualizar: todo lo que queda va en un solo bloque, que Windows
+rem lee entero antes de ejecutarlo
+(
+  git reset -q --hard origin/main
+  echo.
+  echo Calderilla esta al dia.
+  echo Si estaba abierta, te avisara para reiniciarla con la version nueva.
+  pause
+  exit /b 0
+)

@@ -5,6 +5,7 @@ import path from "node:path";
 import { serve } from "@hono/node-server";
 import { cargarAjustes, carpetaAjustes, guardarAjustes, rutaTrabajo } from "./config/ajustes.ts";
 import { haySincronizacionPendiente, sincronizarBancos } from "./bancos/conexiones.ts";
+import { RAIZ, versionInstalada } from "./config/version.ts";
 import { Sincronizador } from "./datos/sync.ts";
 import { actualizarPrecios, hayQueActualizar } from "./precios/actualizar.ts";
 import { hoy } from "./dominio/fechas.ts";
@@ -53,7 +54,11 @@ const estado: Estado = {
   },
   guardarAjustes,
   salir: () => salir(),
+  reiniciar: () => salir(true),
 };
+
+// Si se instala una versión nueva con la app abierta, se avisa para reiniciar
+const versionAlArrancar = versionInstalada();
 
 if (ajustes.carpetaDatos) {
   try {
@@ -77,14 +82,22 @@ function abrirNavegador(direccion: string) {
   }
 }
 
+// Al reiniciar, la versión anterior tarda un momento en soltar el puerto: se reintenta en vez de rendirse
+const reiniciando = process.env.CALDERILLA_REINICIO === "1";
+let intentos = 0;
+
 const servidor = serve({ fetch: crearApp(estado).fetch, hostname: "127.0.0.1", port: ajustes.puerto }, () => {
   console.log(`Calderilla está abierta en ${url}`);
   console.log(`Datos: ${ajustes.carpetaDatos ?? "(aún sin carpeta)"} · Ajustes de este ordenador: ${carpetaAjustes()}`);
-  console.log("Para salir, cierra esta ventana o pulsa Ctrl+C.");
-  abrirNavegador(url);
+  console.log("Para salir, cierra esta ventana, pulsa Ctrl+C o usa Ajustes → Cerrar Calderilla.");
+  if (!reiniciando) abrirNavegador(url);
 });
 
 servidor.on("error", (error: NodeJS.ErrnoException) => {
+  if (error.code === "EADDRINUSE" && reiniciando && intentos++ < 40) {
+    setTimeout(() => servidor.listen(ajustes.puerto, "127.0.0.1"), 250);
+    return;
+  }
   if (error.code === "EADDRINUSE") {
     // Ya hay una Calderilla abierta (doble clic dos veces): se abre la existente en el navegador
     console.log(`Calderilla ya está abierta en ${url}`);
@@ -127,20 +140,31 @@ sincronizarBancosSiToca();
 
 // Cada minuto se mira si hay cambios de otro ordenador y se guarda lo pendiente
 setInterval(() => {
+  if (!estado.versionNueva && versionAlArrancar !== null && versionInstalada() !== versionAlArrancar) estado.versionNueva = true;
   estado.sync?.comprobar();
   actualizarPreciosSiToca();
   sincronizarBancosSiToca();
 }, 60_000);
 
 let cerrando = false;
-function salir() {
+/** Guarda lo pendiente y sale. Con `volver`, antes deja lanzada otra Calderilla (con la versión nueva). */
+function salir(volver = false) {
   if (cerrando) return;
   cerrando = true;
   try {
     estado.sync?.cerrar();
+    if (volver) {
+      spawn(process.execPath, process.argv.slice(1), {
+        cwd: RAIZ,
+        detached: true,
+        stdio: "ignore",
+        windowsHide: true,
+        env: { ...process.env, CALDERILLA_REINICIO: "1" },
+      }).unref();
+    }
   } finally {
     process.exit(0);
   }
 }
 // SIGHUP llega en Windows al cerrar la ventana de la consola; SIGBREAK con Ctrl+Pausa
-for (const senal of ["SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK"] as const) process.on(senal, salir);
+for (const senal of ["SIGINT", "SIGTERM", "SIGHUP", "SIGBREAK"] as const) process.on(senal, () => salir());

@@ -41,8 +41,10 @@ Para cerrarla, usa **Ajustes → Cerrar Calderilla**: guarda todo antes de salir
 
 ### Actualizar
 
-- **Windows:** haz doble clic en **`Actualizar.cmd`**. La primera vez necesita [Git](https://git-scm.com/download/win), instalado con las opciones por defecto, y te pedirá entrar en GitHub. Después, cierra Calderilla y vuelve a abrirla.
+- **Windows:** con [Git](https://git-scm.com/download/win) instalado (opciones por defecto), **el acceso directo del escritorio busca e instala la versión nueva cada vez que abres Calderilla**. Sin conexión, se abre igual. También puedes hacerlo a mano con **`Actualizar.cmd`**. La primera vez puede pedirte entrar en GitHub.
 - **Linux:** `git pull` en la carpeta del programa.
+
+Si se instala una versión nueva mientras Calderilla está abierta, aparece un aviso con el botón **Reiniciar**: guarda todo, se cierra y se vuelve a abrir con la versión nueva.
 
 Tus datos no se tocan al actualizar: están en tu carpeta de datos, no en la del programa.
 
