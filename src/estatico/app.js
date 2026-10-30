@@ -136,6 +136,47 @@ function esperarVuelta(raiz) {
   setTimeout(intentar, 1000);
 }
 
+// Cambiar la categoría de varios movimientos a la vez: las casillas de la lista van al formulario de la
+// barra (atributo form). «Marcar todos», cuántos hay marcados y mayúsculas + clic para marcar un tramo
+const casillasDe = (formulario) => [...document.querySelectorAll(`input[type="checkbox"][form="${formulario.id}"]`)];
+function contarMarcados(formulario) {
+  const casillas = casillasDe(formulario);
+  const marcados = casillas.filter((x) => x.checked).length;
+  const texto = formulario.querySelector("[data-cuenta-marcados]");
+  if (texto) texto.textContent = marcados ? `${marcados} ${marcados === 1 ? "marcado" : "marcados"}` : "Marca los que quieras y cámbiales la categoría a la vez";
+  const todos = formulario.querySelector("[data-marcar-todos]");
+  if (todos) {
+    todos.checked = marcados > 0 && marcados === casillas.length;
+    todos.indeterminate = marcados > 0 && marcados < casillas.length;
+  }
+  const boton = formulario.querySelector('button[type="submit"]');
+  if (boton) boton.disabled = marcados === 0;
+}
+function prepararSeleccion(raiz) {
+  for (const formulario of raiz.querySelectorAll?.("form[data-seleccion-masiva]") ?? []) contarMarcados(formulario);
+}
+document.addEventListener("change", (evento) => {
+  const casilla = evento.target;
+  if (casilla.matches?.("[data-marcar-todos]")) {
+    for (const x of casillasDe(casilla.form)) x.checked = casilla.checked;
+    contarMarcados(casilla.form);
+  } else if (casilla.form?.matches("[data-seleccion-masiva]")) {
+    contarMarcados(casilla.form);
+  }
+});
+let ultimaMarcada = null;
+document.addEventListener("click", (evento) => {
+  const casilla = evento.target;
+  if (!casilla.matches?.('input[type="checkbox"][form]') || !casilla.form?.matches("[data-seleccion-masiva]")) return;
+  if (evento.shiftKey && ultimaMarcada?.form === casilla.form && document.body.contains(ultimaMarcada)) {
+    const casillas = casillasDe(casilla.form);
+    const [desde, hasta] = [casillas.indexOf(ultimaMarcada), casillas.indexOf(casilla)].sort((a, b) => a - b);
+    for (const x of casillas.slice(desde, hasta + 1)) x.checked = casilla.checked;
+    contarMarcados(casilla.form);
+  }
+  ultimaMarcada = casilla;
+});
+
 // Tarjetas plegables con data-recordar-plegado: se recuerda si las dejaste cerradas
 function recordarPlegado(raiz) {
   for (const detalle of raiz.querySelectorAll?.("details[data-recordar-plegado]") ?? []) {
@@ -190,6 +231,7 @@ function preparar(raiz) {
   enlacesExternos(raiz);
   esperarAutorizacion(raiz);
   esperarVuelta(raiz);
+  prepararSeleccion(raiz);
 }
 
 document.addEventListener("change", () => actualizarDependientes(document));

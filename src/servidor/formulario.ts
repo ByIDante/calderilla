@@ -5,14 +5,31 @@ import { esFecha } from "../dominio/fechas.ts";
 /** Lectura cómoda de los campos de un formulario, aceptando importes con coma o punto. */
 export class Formulario {
   readonly #campos: Record<string, string>;
+  /** Todos los valores de los campos que se repiten (p. ej. varias casillas con el mismo nombre) */
+  readonly #listas: Record<string, string[]>;
 
-  constructor(campos: Record<string, string>) {
+  constructor(campos: Record<string, string>, listas: Record<string, string[]> = {}) {
     this.#campos = campos;
+    this.#listas = listas;
   }
 
   static async de(c: Context): Promise<Formulario> {
-    const cuerpo = await c.req.parseBody();
-    return new Formulario(Object.fromEntries(Object.entries(cuerpo).filter((e): e is [string, string] => typeof e[1] === "string")));
+    const cuerpo = await c.req.parseBody({ all: true });
+    const campos: Record<string, string> = {};
+    const listas: Record<string, string[]> = {};
+    for (const [nombre, valor] of Object.entries(cuerpo)) {
+      const textos = (Array.isArray(valor) ? valor : [valor]).filter((v): v is string => typeof v === "string");
+      if (!textos.length) continue;
+      listas[nombre] = textos;
+      // Si un campo se repite, como campo suelto vale el último (como hasta ahora)
+      campos[nombre] = textos.at(-1)!;
+    }
+    return new Formulario(campos, listas);
+  }
+
+  /** Los números enteros de un campo que se repite (las casillas marcadas de una lista) */
+  enteros(nombre: string): number[] {
+    return (this.#listas[nombre] ?? []).filter((v) => /^\d+$/.test(v)).map(Number);
   }
 
   texto(nombre: string): string {

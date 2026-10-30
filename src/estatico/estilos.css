@@ -823,6 +823,48 @@ input[type="checkbox"] {
 input[type="file"] {
   max-width: 100%;
 }
+
+/* Cambiar la categoría de varios movimientos a la vez: la barra se queda arriba al bajar por la lista */
+.barra-masiva {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 16px;
+  margin: 12px 0 4px;
+  padding: 10px 12px;
+  background: var(--superficie-2);
+  border: 1px solid var(--linea);
+  border-radius: 8px;
+}
+.barra-masiva-accion {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+.barra-masiva select {
+  width: auto;
+  max-width: 100%;
+}
+.elegir-todos {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.m-elegir {
+  width: 1%;
+}
+.elegir {
+  display: inline-flex;
+  padding: 4px;
+  cursor: pointer;
+}
 .entrada.con-sufijo {
   position: relative;
 }
@@ -1026,9 +1068,32 @@ button {
   /* Movimientos: concepto e importe arriba, la categoría ocupando el ancho y «Borrar» al lado */
   table.tabla-movimientos tr {
     display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     gap: 2px 12px;
     align-items: center;
+  }
+  table.tabla-movimientos .m-elegir {
+    grid-column: 1;
+    grid-row: 1 / span 2;
+    align-self: start;
+    width: auto;
+  }
+  /* En el móvil la casilla es más grande y se pulsa también alrededor */
+  table.tabla-movimientos .elegir {
+    margin: -6px;
+    padding: 10px;
+  }
+  table.tabla-movimientos .elegir input,
+  .elegir-todos input {
+    width: 22px;
+    height: 22px;
+  }
+  .barra-masiva-accion {
+    margin-left: 0;
+    width: 100%;
+  }
+  .barra-masiva select {
+    flex: 1;
   }
   table.tabla-movimientos td {
     display: block;
@@ -1039,29 +1104,29 @@ button {
     display: none;
   }
   table.tabla-movimientos .m-fecha {
-    grid-column: 1;
+    grid-column: 2;
     font-size: 12.5px;
     color: var(--apagado);
     font-weight: normal;
   }
   table.tabla-movimientos .m-concepto {
-    grid-column: 1;
+    grid-column: 2;
   }
   table.tabla-movimientos .m-importe {
-    grid-column: 2;
+    grid-column: 3;
     grid-row: 1 / span 2;
     text-align: right;
     font-weight: 650;
   }
   table.tabla-movimientos .m-categoria {
-    grid-column: 1;
+    grid-column: 2;
     margin-top: 6px;
   }
   table.tabla-movimientos .m-categoria select {
     width: 100%;
   }
   table.tabla-movimientos .m-borrar {
-    grid-column: 2;
+    grid-column: 3;
     margin-top: 6px;
   }
 

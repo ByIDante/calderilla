@@ -133,3 +133,33 @@ it("al importar un Excel dice qué filas no entiende y enseña un ejemplo", asyn
   assert.match(revision, /1 fila no tiene un importe que se entienda/);
   assert.match(revision, /en la fila 3 el importe es «pendiente»/);
 });
+
+it("se cambia la categoría de varios movimientos marcados a la vez", async () => {
+  const conceptos = ["MASIVO UNO", "MASIVO DOS", "MASIVO TRES"];
+  for (const concepto of conceptos) await pedir("/movimientos", { tipo: "gasto", importe: "5", fecha: "2026-10-15", concepto, categoria: "" });
+  const ids = bd.todos<{ id: number }>("SELECT id FROM apuntes WHERE concepto LIKE 'MASIVO %' ORDER BY id").map((x) => x.id);
+  const pagina = await (await pedir("/movimientos?mes=2026-10&buscar=MASIVO")).text();
+  assert.match(pagina, /form="cambio-masivo"/);
+  assert.match(pagina, /Marcar todos \(3\)/);
+
+  const cambiar = (marcados: number[], valor: string) => {
+    const formulario = new FormData();
+    for (const id of marcados) formulario.append("ids", String(id));
+    formulario.set("categoria", valor);
+    formulario.set("volver", "/movimientos?mes=2026-10&buscar=MASIVO");
+    return app.enviarArchivo("/movimientos/categoria", formulario);
+  };
+  const categoriaDe = (id: number) => bd.uno<{ c: number | null }>("SELECT categoria_id AS c FROM apuntes WHERE id = ?", id)?.c;
+
+  const respuesta = await cambiar(ids.slice(0, 2), String(categoria("Compras")));
+  assert.equal(respuesta.status, 303);
+  assert.match(decodeURIComponent(respuesta.headers.get("location") ?? "").replace(/\+/g, " "), /^\/movimientos\?mes=2026-10&buscar=MASIVO&ok=2 movimientos ahora en «Compras»/);
+  assert.deepEqual(ids.map(categoriaDe), [categoria("Compras"), categoria("Compras"), null], "el que no está marcado no cambia");
+
+  await cambiar(ids.slice(1), "sin");
+  assert.deepEqual(ids.map(categoriaDe), [categoria("Compras"), null, null]);
+
+  assert.match((await cambiar([], String(categoria("Compras")))).headers.get("location") ?? "", /error=Marca\+primero/);
+  assert.match((await cambiar(ids, "999999")).headers.get("location") ?? "", /error=Elige/);
+  assert.equal(categoriaDe(ids[0]!), categoria("Compras"), "con una categoría que no existe no se toca nada");
+});

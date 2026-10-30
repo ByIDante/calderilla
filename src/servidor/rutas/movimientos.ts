@@ -173,8 +173,9 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
           <a class="boton" href="/importar">Importar un extracto</a>
         </div>
         <p class="apagado">
-          Aquí está todo lo que has apuntado, importado o traído del banco. Si un movimiento está en la categoría equivocada, cámbiala en su desplegable. Si se repite (el
-          mismo comercio cada mes), entra en él y crea una regla para que la próxima vez se categorice solo.
+          Aquí está todo lo que has apuntado, importado o traído del banco. Si un movimiento está en la categoría equivocada, cámbiala en su desplegable; para cambiar
+          varios a la vez, márcalos y elige la categoría arriba de la lista. Si se repite (el mismo comercio cada mes), entra en él y crea una regla para que la próxima
+          vez se categorice solo.
         </p>
         ${bancos.length
           ? html`<nav class="pestanas" aria-label="Elegir banco">
@@ -223,12 +224,28 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
             <div class="campo"><label>&nbsp;</label><button class="boton" type="submit">Filtrar</button></div>
           </form>
           ${movimientos.length
-            ? html`<div class="tabla-contenedor">
+            ? html`<form id="cambio-masivo" method="post" action="/movimientos/categoria" class="barra-masiva" data-mantener-posicion data-seleccion-masiva>
+                  <input type="hidden" name="volver" value="${aqui}" />
+                  <label class="elegir-todos"><input type="checkbox" data-marcar-todos /> Marcar todos (${movimientos.length})</label>
+                  <span class="apagado pequeno" data-cuenta-marcados>Marca los que quieras y cámbiales la categoría a la vez</span>
+                  <div class="barra-masiva-accion">
+                    <select name="categoria" aria-label="Categoría nueva para los marcados" required>
+                      <option value="" selected disabled>Categoría nueva…</option>
+                      <option value="sin">Sin categoría</option>
+                      ${opcionesCategoria(lista).slice(1).map(([v, t]) => html`<option value="${v}">${t}</option>`)}
+                    </select>
+                    <button class="boton boton-pequeno" type="submit">Cambiar categoría</button>
+                  </div>
+                </form>
+                <div class="tabla-contenedor">
                 <table class="tabla-acciones tabla-apilable tabla-movimientos">
-                  <thead><tr><th>Fecha</th><th>Concepto</th><th class="numero">Importe</th><th>Categoría</th><th></th></tr></thead>
+                  <thead><tr><th class="m-elegir" aria-label="Marcar"></th><th>Fecha</th><th>Concepto</th><th class="numero">Importe</th><th>Categoría</th><th></th></tr></thead>
                   <tbody>
                     ${movimientos.map(
                       (m) => html`<tr>
+                        <td class="m-elegir">
+                          <label class="elegir"><input type="checkbox" name="ids" value="${m.id}" form="cambio-masivo" aria-label="Marcar ${m.concepto}" /></label>
+                        </td>
                         <td class="m-fecha">${formatoFecha(m.fecha)}</td>
                         <td class="m-concepto">
                           <a href="/movimientos/${m.id}?volver=${encodeURIComponent(aqui)}">${m.concepto}</a>
@@ -352,6 +369,21 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
       aplicados = base.ejecutar("UPDATE apuntes SET categoria_id = ? WHERE recurrente_id IS NULL AND lower(concepto) LIKE ?", categoria, `%${patron}%`).cambios;
     }
     return redirigir(c, volver, { ok: `Regla «${patron}» creada${aplicados ? ` y aplicada a ${aplicados} movimientos` : ""}.` });
+  });
+
+  // Varios movimientos a la vez (va antes de /movimientos/:id para que «categoria» no se tome por un id)
+  app.post("/movimientos/categoria", async (c) => {
+    const f = await Formulario.de(c);
+    const volver = volverA(f.texto("volver"));
+    const ids = f.enteros("ids");
+    const sin = f.texto("categoria") === "sin";
+    const categoria = sin ? undefined : categorias().find((x) => x.id === f.entero("categoria"));
+    if (!ids.length) return redirigir(c, volver, { error: "Marca primero los movimientos que quieres cambiar." });
+    if (!sin && !categoria) return redirigir(c, volver, { error: "Elige la categoría nueva." });
+    const base = bd(estado);
+    const cambiados = base.transaccion(() => ids.reduce((total, id) => total + base.ejecutar("UPDATE apuntes SET categoria_id = ? WHERE id = ?", categoria?.id ?? null, id).cambios, 0));
+    const cuantos = `${cambiados} ${cambiados === 1 ? "movimiento" : "movimientos"}`;
+    return redirigir(c, volver, { ok: categoria ? `${cuantos} ahora en «${categoria.nombre}».` : `${cuantos} ahora sin categoría.` });
   });
 
   app.post("/movimientos/:id", async (c) => {
