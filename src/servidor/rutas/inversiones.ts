@@ -6,6 +6,8 @@ import { NOMBRE_ETAPA, type Etapa } from "../../reglas/tipos.ts";
 import { esEspeculativo, leerActivos, leerCartera, NOMBRE_RENTA, NOMBRE_TIPO_ACTIVO, tipoCambio, type Renta, type TipoActivo } from "../../servicios/cartera.ts";
 import { esAhorro } from "../../servicios/cuentas.ts";
 import { contexto } from "../../servicios/situacion.ts";
+import { actualizarPrecios, cotizar, guardarCotizacion } from "../../precios/actualizar.ts";
+import { buscarCoingecko, buscarYahoo, type ResultadoBusqueda } from "../../precios/fuentes.ts";
 import { bd, render, type Estado } from "../app.ts";
 import { Formulario, idDe, redirigir } from "../formulario.ts";
 import { botonAccion, campo, casilla, cifra, eur, eurR, grafico, pct, porque, selector, vacio, type Html } from "../vistas/comun.ts";
@@ -44,6 +46,7 @@ export function rutasInversiones(app: Hono, estado: Estado) {
     const r = ctx.resultado;
     const cartera = ctx.cartera.filter((p) => p.cantidad > 0 || p.coste > 0);
     const historial = base.todos<{ fecha: string; etapa: Etapa }>("SELECT fecha, etapa FROM historial_etapas ORDER BY id DESC LIMIT 12");
+    const actualizados = base.leerMeta("precios_actualizados");
 
     // Exposición por moneda: cuentas de ahorro y cartera, en euros
     const porMoneda = new Map<string, number>();
@@ -98,6 +101,10 @@ export function rutasInversiones(app: Hono, estado: Estado) {
           <div class="tarjeta-cabecera">
             <h2>Tu cartera</h2>
             <span class="apagado pequeno">Valor total: ${eurR(cartera.reduce((s, p) => s + p.valor, 0))}</span>
+          </div>
+          <div class="botones bloque">
+            ${botonAccion("/precios/actualizar", "Actualizar precios")}
+            <span class="apagado pequeno">${actualizados ? `Últimos precios automáticos: ${new Date(actualizados).toLocaleString("es-ES", { dateStyle: "short", timeStyle: "short" })}` : "Los precios automáticos se actualizan solos cada 12 horas al abrir la app."}</span>
           </div>
           ${cartera.length
             ? html`<div class="tabla-contenedor">
@@ -207,7 +214,7 @@ export function rutasInversiones(app: Hono, estado: Estado) {
     if (!/^[A-Z]{3}$/.test(moneda)) return redirigir(c, "/inversiones", { error: "La moneda son tres letras: EUR, USD…" });
     const base = bd(estado);
     const hoy = estado.hoy();
-    base.transaccion(() => {
+    const id = base.transaccion(() => {
       const { id } = base.ejecutar(
         "INSERT INTO activos (nombre, isin, simbolo, tipo, renta, moneda, especulativo) VALUES (?, ?, ?, ?, ?, ?, ?)",
         nombre,
@@ -223,11 +230,13 @@ export function rutasInversiones(app: Hono, estado: Estado) {
       if (cantidad && importe) base.ejecutar("INSERT INTO movimientos_cartera (activo_id, fecha, tipo, cantidad, importe) VALUES (?, ?, 'compra', ?, ?)", id, f.fecha("fecha") ?? hoy, cantidad, importe);
       const precio = f.numero("precio");
       if (precio) base.ejecutar("INSERT OR REPLACE INTO precios (activo_id, fecha, precio, fuente) VALUES (?, ?, ?, 'manual')", id, hoy, precio);
+      return id;
     });
-    return redirigir(c, "/inversiones", { ok: `Añadido «${nombre}».` });
+    if (tipo === "divisa") return redirigir(c, "/inversiones", { ok: `Añadido «${nombre}». Su valor sale del tipo de cambio.` });
+    return redirigir(c, `/activos/${id}`, { ok: `Añadido «${nombre}». Si quieres que su precio se actualice solo, búscalo aquí abajo.` });
   });
 
-  app.get("/activos/:id", (c) => {
+  app.get("/activos/:id", async (c) => {
     const base = bd(estado);
     const hoy = estado.hoy();
     const id = idDe(c);
@@ -239,6 +248,17 @@ export function rutasInversiones(app: Hono, estado: Estado) {
       id,
     );
     const precios = base.todos<{ fecha: string; precio: number; fuente: string }>("SELECT fecha, precio, fuente FROM precios WHERE activo_id = ? ORDER BY fecha DESC LIMIT 10", id);
+    const busqueda = c.req.query("buscar")?.trim() ?? "";
+    let resultados: ResultadoBusqueda[] = [];
+    let errorBusqueda: string | null = null;
+    if (busqueda) {
+      try {
+        resultados = activo.tipo === "cripto" ? await buscarCoingecko(busqueda, estado.ajustes.coingeckoClave) : await buscarYahoo(busqueda);
+      } catch (error) {
+        errorBusqueda = `No se pudo buscar: ${(error as Error).message}`;
+      }
+    }
+    const sugerencia = activo.isin ?? activo.simbolo ?? activo.nombre;
     return render(
       c,
       estado,
@@ -255,6 +275,36 @@ export function rutasInversiones(app: Hono, estado: Estado) {
             ? html`<section class="tarjeta"><h2>Valor</h2><p class="apagado">Una divisa se valora con el tipo de cambio (en Inversiones → Exposición por moneda).</p></section>`
             : html`<section class="tarjeta"><h2>Actualizar el precio</h2>${formularioPrecio(id, activo.moneda, hoy)}</section>`}
         </div>
+        ${activo.tipo === "divisa"
+          ? ""
+          : html`<section class="tarjeta" style="margin-top:16px">
+              <h2>Precio automático</h2>
+              ${activo.fuentePrecio === "manual"
+                ? html`<p class="apagado">
+                      Busca el activo por ISIN, ticker o nombre y elige el resultado correcto: su precio se actualizará solo. ${activo.tipo === "cripto" ? "Las criptomonedas se buscan en CoinGecko." : "Se busca en Yahoo Finance; algunos fondos españoles no aparecen y hay que seguir poniendo el valor liquidativo a mano."}
+                    </p>
+                    <form method="get" action="/activos/${id}" class="botones">
+                      <input type="text" name="buscar" value="${busqueda || sugerencia}" aria-label="Buscar por ISIN, ticker o nombre" style="max-width:320px" />
+                      <button class="boton" type="submit">Buscar</button>
+                    </form>
+                    ${errorBusqueda ? html`<p class="negativo">${errorBusqueda}</p>` : ""}
+                    ${busqueda && !resultados.length && !errorBusqueda ? html`<p class="apagado">Sin resultados. Prueba con el ticker o el nombre, o deja el precio manual.</p>` : ""}
+                    ${resultados.length
+                      ? html`<ul class="lista-plana" style="margin-top:10px">
+                          ${resultados.map(
+                            (r) => html`<li>
+                              <span>${r.nombre} <span class="apagado pequeno">${[r.simbolo, r.tipo, r.mercado].filter(Boolean).join(" · ")}</span></span>
+                              ${botonAccion(`/activos/${id}/fuente`, "Usar este", { campos: { fuente: r.fuente, simbolo: r.simbolo } })}
+                            </li>`,
+                          )}
+                        </ul>`
+                      : ""}`
+                : html`<p>
+                      Se actualiza solo desde ${activo.fuentePrecio === "yahoo" ? "Yahoo Finance" : "CoinGecko"} (<code>${activo.simboloFuente}</code>). Si pones un precio a mano para un día, ese
+                      día gana el tuyo.
+                    </p>
+                    ${botonAccion(`/activos/${id}/fuente/quitar`, "Volver a precio manual", { estilo: "enlace" })}`}
+            </section>`}
         <section class="tarjeta" style="margin-top:16px">
           <h2>Movimientos</h2>
           ${movimientos.length
@@ -311,6 +361,35 @@ export function rutasInversiones(app: Hono, estado: Estado) {
     const volver = (await Formulario.de(c)).entero("volver");
     bd(estado).ejecutar("DELETE FROM movimientos_cartera WHERE id = ?", idDe(c));
     return redirigir(c, volver ? `/activos/${volver}` : "/inversiones", { ok: "Movimiento borrado." });
+  });
+
+  app.post("/activos/:id/fuente", async (c) => {
+    const id = idDe(c);
+    const f = await Formulario.de(c);
+    const fuente = f.texto("fuente") === "coingecko" ? "coingecko" : "yahoo";
+    const simbolo = f.texto("simbolo");
+    const activo = leerActivos(bd(estado)).find((a) => a.id === id);
+    if (!activo || !simbolo) return redirigir(c, `/activos/${id}`, { error: "Elige un resultado de la búsqueda." });
+    bd(estado).ejecutar("UPDATE activos SET fuente_precio = ?, simbolo_fuente = ? WHERE id = ?", fuente, simbolo, id);
+    try {
+      const cotizacion = await cotizar({ fuentePrecio: fuente, simboloFuente: simbolo }, { hoy: estado.hoy(), coingeckoClave: estado.ajustes.coingeckoClave });
+      if (cotizacion) guardarCotizacion(bd(estado), { id, fuentePrecio: fuente, moneda: activo.moneda }, cotizacion);
+      return redirigir(c, `/activos/${id}`, { ok: cotizacion ? `Enlazado. Último precio: ${formatoNumero(cotizacion.precio)} ${cotizacion.moneda ?? ""}.` : "Enlazado, pero la fuente aún no da precio." });
+    } catch (error) {
+      return redirigir(c, `/activos/${id}`, { error: `Enlazado, pero no se pudo traer el precio ahora: ${(error as Error).message}` });
+    }
+  });
+
+  app.post("/activos/:id/fuente/quitar", (c) => {
+    const id = idDe(c);
+    bd(estado).ejecutar("UPDATE activos SET fuente_precio = 'manual', simbolo_fuente = NULL WHERE id = ?", id);
+    return redirigir(c, `/activos/${id}`, { ok: "El precio vuelve a ser manual." });
+  });
+
+  app.post("/precios/actualizar", async (c) => {
+    const informe = await actualizarPrecios(() => bd(estado), { hoy: estado.hoy(), coingeckoClave: estado.ajustes.coingeckoClave });
+    const resumen = informe.actualizados.length ? `Actualizado: ${informe.actualizados.join(", ")}.` : "No hay precios automáticos que actualizar.";
+    return redirigir(c, "/inversiones", informe.errores.length ? { ok: resumen, error: informe.errores.join(" · ") } : { ok: resumen });
   });
 
   app.post("/tipos-cambio", async (c) => {

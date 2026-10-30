@@ -3,6 +3,7 @@ import { randomBytes } from "node:crypto";
 import { serve } from "@hono/node-server";
 import { cargarAjustes, carpetaAjustes, guardarAjustes, rutaTrabajo } from "./config/ajustes.ts";
 import { Sincronizador } from "./datos/sync.ts";
+import { actualizarPrecios, hayQueActualizar } from "./precios/actualizar.ts";
 import { hoy } from "./dominio/fechas.ts";
 import { crearApp, type Estado } from "./servidor/app.ts";
 import { prepararBase } from "./servicios/semillas.ts";
@@ -74,8 +75,27 @@ servidor.on("error", (error: NodeJS.ErrnoException) => {
   throw error;
 });
 
+/** Precios automáticos y tipos de cambio, como mucho cada 12 horas y sin bloquear la app. */
+let actualizando = false;
+function actualizarPreciosSiToca() {
+  const sync = estado.sync;
+  if (actualizando || !sync || !hayQueActualizar(sync.bd)) return;
+  actualizando = true;
+  actualizarPrecios(() => estado.sync!.bd, { hoy: hoy(), coingeckoClave: ajustes.coingeckoClave })
+    .then((informe) => {
+      if (informe.errores.length) console.warn("Precios que no se pudieron actualizar:", informe.errores.join(" · "));
+      estado.sync?.programarEnvio();
+    })
+    .catch((error: Error) => console.warn("No se pudieron actualizar los precios:", error.message))
+    .finally(() => (actualizando = false));
+}
+actualizarPreciosSiToca();
+
 // Cada minuto se mira si hay cambios de otro ordenador y se guarda lo pendiente
-setInterval(() => estado.sync?.comprobar(), 60_000);
+setInterval(() => {
+  estado.sync?.comprobar();
+  actualizarPreciosSiToca();
+}, 60_000);
 
 let cerrando = false;
 function salir() {
