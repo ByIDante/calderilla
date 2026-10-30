@@ -66,15 +66,20 @@ function tarjetaAportaciones(aportaciones: Aportacion[], hechas: Map<number, Map
   const total = totalMensual(vivas, opciones.mes);
   const meses = Array.from({ length: 6 }, (_, i) => sumarMesesAMes(opciones.mes, i - 6));
   const comparacion =
-    total === 0
+    opciones.sugerido === 0 && total === 0
+      ? "Apunta aquí lo que traspasas cada mes a tu cuenta de ahorro (o a un fondo). Cuando tengas tus ingresos y gastos en «Ingresos y gastos», la app te dirá si es lo que pide tu etapa."
+      : total === 0
       ? `La regla sugiere ahorrar ${eurR(opciones.sugerido)} al mes en tu etapa («${opciones.etapa}»). Si tienes un traspaso automático a tu cuenta de ahorro o una compra periódica de un fondo, apúntalo aquí.`
       : total < opciones.sugerido
         ? `Tus aportaciones suman ${eurR(total)} al mes y la regla sugiere ${eurR(opciones.sugerido)}. Los ${eurR(opciones.sugerido - total)} restantes puedes dejarlos en la cuenta corriente: también cuentan como ahorro si no los gastas.`
         : `Tus aportaciones suman ${eurR(total)} al mes, ${total > opciones.sugerido ? `más de los ${eurR(opciones.sugerido)} que sugiere la regla. Bien, siempre que te quede para el día a día y el ocio` : "justo lo que sugiere la regla"}.`;
+  // Lo normal es traspasar desde la corriente a la de ahorro: se propone la primera cuenta que no es corriente
+  const ahorro = opciones.cuentas.find((x) => x.tipo !== "corriente" && x.tipo !== "plan_pensiones");
   const destinos = [
     ...opciones.cuentas.filter((x) => x.tipo !== "plan_pensiones").map((x) => [`c:${x.id}`, `Cuenta: ${x.nombre}`] as const),
     ...opciones.activos.map((x) => [`a:${x.id}`, `Inversión: ${x.nombre}`] as const),
   ];
+  const destinoPorDefecto = ahorro ? `c:${ahorro.id}` : destinos[0]?.[0];
   return html`<section class="tarjeta" id="ahorro-automatico">
     <h2>Ahorro automático</h2>
     <p>${comparacion}</p>
@@ -111,13 +116,13 @@ function tarjetaAportaciones(aportaciones: Aportacion[], hechas: Map<number, Map
         presupuesto de ocio hasta que vuelva a cuadrar.
       </p>
     </details>
-    <details style="margin-top:10px">
+    <details style="margin-top:10px" ${vivas.length ? "" : html`open`}>
       <summary class="boton">Añadir una aportación</summary>
       ${destinos.length
         ? html`<form method="post" action="/aportaciones" class="formulario" style="margin-top:12px">
             <div class="fila-campos">
               ${campo({ etiqueta: "Nombre", nombre: "nombre", requerido: true, marcador: "Traspaso a Trade Republic" })}
-              ${selector("Destino", "destino", destinos, destinos[0]?.[0])}
+              ${selector("Cuenta o fondo al que va", "destino", destinos, destinoPorDefecto)}
               ${campo({ etiqueta: "Importe al mes", nombre: "importe", sufijo: "€", requerido: true })}
               ${campo({ etiqueta: "Día del mes", nombre: "dia", valor: "1", sufijo: "", ayuda: "Cuándo sale de tu cuenta." })}
               ${campo({ etiqueta: "Desde", nombre: "inicio", tipo: "date", valor: opciones.hoy })}
@@ -143,7 +148,10 @@ export function rutasCuentas(app: Hono, estado: Estado) {
       estado,
       { titulo: "Cuentas y cierres", seccion: "cuentas" },
       html`
-        <div class="botones bloque"><a class="boton boton-principal" href="/cierre">Cerrar un mes</a></div>
+        <div class="botones bloque">
+          <a class="boton boton-principal" href="/cierre">Cerrar un mes</a>
+          <a class="boton" href="#ahorro-automatico">Ahorro automático (lo que traspasas cada mes)</a>
+        </div>
         ${DONDE_VA}
         <section class="tarjeta">
           <h2>Tus cuentas</h2>
