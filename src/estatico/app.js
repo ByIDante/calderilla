@@ -124,6 +124,29 @@ function preparar(raiz) {
 }
 
 document.addEventListener("change", () => actualizarDependientes(document));
+// Formularios marcados con data-mantener-posicion: al volver a la misma página, se queda donde estabas
+const CLAVE_POSICION = "calderilla:posicion";
+document.addEventListener("submit", (evento) => {
+  if (!evento.target.closest?.("[data-mantener-posicion]")) return;
+  try {
+    sessionStorage.setItem(CLAVE_POSICION, JSON.stringify({ ruta: location.pathname, y: window.scrollY }));
+  } catch {
+    // Sin almacenamiento solo se pierde la comodidad
+  }
+});
+function recuperarPosicion() {
+  try {
+    const guardada = JSON.parse(sessionStorage.getItem(CLAVE_POSICION) ?? "null");
+    sessionStorage.removeItem(CLAVE_POSICION);
+    // Después de que htmx haga su propio desplazamiento al cambiar la página
+    if (guardada && guardada.ruta === location.pathname) setTimeout(() => window.scrollTo(0, guardada.y), 0);
+  } catch {
+    // Igual que arriba
+  }
+}
+document.addEventListener("htmx:afterSettle", recuperarPosicion);
+document.addEventListener("DOMContentLoaded", recuperarPosicion);
+
 // Desplegables que guardan al cambiar (p. ej. la categoría de un movimiento)
 document.addEventListener("change", (evento) => {
   if (evento.target.matches?.("select[data-enviar-al-cambiar]")) evento.target.form?.requestSubmit();

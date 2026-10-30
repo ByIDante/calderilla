@@ -194,10 +194,18 @@ export function casilla(etiqueta: string, nombre: string, marcada: boolean, ayud
 }
 
 /** Botón que envía un POST pequeño (borrar, archivar…) con confirmación opcional. */
-export function botonAccion(ruta: string, texto: string, opciones: { confirmar?: string; estilo?: "peligro" | "secundario" | "enlace"; campos?: Record<string, string> } = {}): Html {
-  return html`<form method="post" action="${ruta}" class="en-linea" ${opciones.confirmar ? html`hx-confirm="${opciones.confirmar}"` : ""}>
+/**
+ * Botón que envía un POST pequeño (borrar, archivar…) con confirmación opcional. `mantenerPosicion` hace que,
+ * al volver a la misma página, no salte arriba del todo.
+ */
+export function botonAccion(
+  ruta: string,
+  texto: string,
+  opciones: { confirmar?: string; estilo?: "peligro" | "secundario" | "enlace"; campos?: Record<string, string>; pequeno?: boolean; mantenerPosicion?: boolean } = {},
+): Html {
+  return html`<form method="post" action="${ruta}" class="en-linea" ${opciones.confirmar ? html`hx-confirm="${opciones.confirmar}"` : ""} ${opciones.mantenerPosicion ? html`data-mantener-posicion` : ""}>
     ${Object.entries(opciones.campos ?? {}).map(([nombre, valor]) => html`<input type="hidden" name="${nombre}" value="${valor}" />`)}
-    <button type="submit" class="boton boton-${opciones.estilo ?? "secundario"}">${texto}</button>
+    <button type="submit" class="boton boton-${opciones.estilo ?? "secundario"} ${opciones.pequeno ? "boton-pequeno" : ""}">${texto}</button>
   </form>`;
 }
 
