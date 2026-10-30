@@ -54,7 +54,7 @@ function tabla(titulo: string, lista: RecurrenteCompleto[], hoy: Fecha, mensual:
   </div>`;
 }
 
-export function vistaLista(recurrentes: RecurrenteCompleto[], hoy: Fecha, mensual: Map<number, number>): Html {
+export function vistaLista(recurrentes: RecurrenteCompleto[], hoy: Fecha, mensual: Map<number, number>, propuestas = 0): Html {
   const vivos = recurrentes.filter((r) => estadoEn(r, hoy) !== "finalizado");
   const finalizados = recurrentes.filter((r) => estadoEn(r, hoy) === "finalizado");
   const ingresos = vivos.filter((r) => r.tipo === "ingreso");
@@ -67,6 +67,7 @@ export function vistaLista(recurrentes: RecurrenteCompleto[], hoy: Fecha, mensua
       <a class="boton boton-principal" href="/gastos/nuevo">Añadir gasto</a>
       <a class="boton" href="/gastos/nuevo?tipo=ingreso">Añadir ingreso</a>
       <a class="boton" href="/gastos/nuevo?prestamo=1">Añadir préstamo</a>
+      <a class="boton" href="/gastos/detectar">Buscar en mis movimientos${propuestas ? html` <span class="numero-pestana">${propuestas}</span>` : ""}</a>
     </div>
     <p class="apagado">
       Los gastos que no son mensuales (seguros, IBI, ITV…) se reparten entre los meses anteriores a cada cargo: así el «al mes» refleja lo que deberías ir apartando.
@@ -116,6 +117,7 @@ export function valoresDe(r: RecurrenteCompleto, hoy: Fecha): Valores {
     esencial: r.esencial ? "1" : "",
     clase: r.clase,
     nota: r.nota ?? "",
+    patron: r.patron ?? "",
     prestamo: r.prestamo ? "1" : "",
     capital: importeEditable(r.prestamo?.capital),
     tin: numeroEditable(r.prestamo?.tin),
@@ -180,6 +182,13 @@ export function vistaFormulario(opciones: { accion: string; valores: Valores; ca
 
       ${r ? campo({ etiqueta: "Si cambia el importe, aplicarlo desde", nombre: "desde", valor: v.desde, tipo: "date", ayuda: "Los meses anteriores conservan el importe que tenían." }) : ""}
       ${campo({ etiqueta: "Nota (opcional)", nombre: "nota", valor: v.nota })}
+      ${campo({
+        etiqueta: "Cómo aparece en el banco (opcional)",
+        nombre: "patron",
+        valor: v.patron,
+        marcador: "netflix, iberdrola…",
+        ayuda: "Palabras del concepto de sus cargos. Con ellas se reconocen al importar aunque cambie el importe o se adelanten unos días.",
+      })}
 
       <div class="botones">
         <button type="submit" class="boton boton-principal">Guardar</button>

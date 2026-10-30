@@ -22,6 +22,7 @@ export class VersionNuevaError extends Error {}
 export class BaseDatos {
   readonly ruta: string;
   readonly #db: DatabaseSync;
+  #profundidad = 0;
 
   constructor(ruta: string, opciones: { soloLectura?: boolean } = {}) {
     this.ruta = ruta;
@@ -48,14 +49,19 @@ export class BaseDatos {
     this.#db.exec(sql);
   }
 
+  /** Se puede anidar: dentro de otra transacción usa un punto de guardado (si falla, solo se deshace lo de dentro). */
   transaccion<T>(fn: () => T): T {
-    this.#db.exec("BEGIN");
+    const nombre = `punto${this.#profundidad}`;
+    this.#db.exec(this.#profundidad ? `SAVEPOINT ${nombre}` : "BEGIN");
+    this.#profundidad++;
     try {
       const resultado = fn();
-      this.#db.exec("COMMIT");
+      this.#profundidad--;
+      this.#db.exec(this.#profundidad ? `RELEASE ${nombre}` : "COMMIT");
       return resultado;
     } catch (error) {
-      this.#db.exec("ROLLBACK");
+      this.#profundidad--;
+      this.#db.exec(this.#profundidad ? `ROLLBACK TO ${nombre}; RELEASE ${nombre}` : "ROLLBACK");
       throw error;
     }
   }

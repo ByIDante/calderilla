@@ -25,7 +25,7 @@ it("se apuntan, recategorizan y editan movimientos, y una regla se aplica a los 
   assert.equal(bd.uno<{ c: number }>("SELECT categoria_id AS c FROM apuntes WHERE id = ?", primero!.id)?.c, categoria("Restaurantes"));
 
   const edicion = await (await pedir(`/movimientos/${primero!.id}`)).text();
-  assert.match(edicion, /value="tpv bar"/, "propone una regla a partir del concepto");
+  assert.match(edicion, /value="bar pepe"/, "propone una regla a partir del concepto (sin «pago tpv»)");
   const regla = await pedir("/movimientos/reglas", { patron: "bar pepe", categoria: String(categoria("Restaurantes")), aplicar: "1", volver: "/movimientos?mes=2026-10" });
   assert.match(decodeURIComponent(regla.headers.get("location") ?? "").replace(/\+/g, " "), /aplicada a 2 movimientos/);
   assert.equal(bd.uno<{ n: number }>("SELECT count(*) AS n FROM apuntes WHERE categoria_id = ?", categoria("Restaurantes"))?.n, 2);

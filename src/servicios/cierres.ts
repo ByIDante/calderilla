@@ -3,6 +3,7 @@ import type { Centimos } from "../dominio/dinero.ts";
 import { sumarMesesAMes, ultimoDia, type Mes } from "../dominio/fechas.ts";
 import { ocioSobrante } from "../reglas/ocio.ts";
 import { guardarSaldo } from "./cuentas.ts";
+import { provisiones } from "./finanzas.ts";
 import { contexto, ocioGastadoEn } from "./situacion.ts";
 
 export interface Cierre {
@@ -40,9 +41,16 @@ export function cerrarMes(bd: BaseDatos, mes: Mes, saldos: { cuentaId: number; s
     for (const { cuentaId, saldo } of saldos) guardarSaldo(bd, cuentaId, fecha, saldo, "cierre");
     const ctx = contexto(bd, fecha);
     const p = ctx.resultado.presupuesto;
-    const anterior = bd.uno<Cierre>("SELECT * FROM cierres_mes WHERE mes = ?", sumarMesesAMes(mes, -1));
+    const anterior = bd.uno<Cierre & { resumen: string | null }>("SELECT * FROM cierres_mes WHERE mes = ?", sumarMesesAMes(mes, -1));
     const gastado = ocioGastadoEn(bd, fecha);
     const patrimonio = ctx.patrimonioACoste - ctx.situacion.provisiones;
+    // El cierre anterior se mide con los gastos fijos de ahora: si después añadiste un seguro anual, lo que
+    // ya tendrías que llevar apartado para él no debe parecer «este mes ahorraste menos»
+    const provisionesAntes = anterior ? (JSON.parse(anterior.resumen ?? "{}") as { provisiones?: number }).provisiones : undefined;
+    const patrimonioAnterior =
+      anterior && provisionesAntes !== undefined
+        ? anterior.patrimonio + provisionesAntes - provisiones(ctx.recurrentes, ultimoDia(sumarMesesAMes(mes, -1)))
+        : anterior?.patrimonio;
     const cierre: Cierre = {
       mes,
       cerrado: new Date().toISOString(),
@@ -50,7 +58,7 @@ export function cerrarMes(bd: BaseDatos, mes: Mes, saldos: { cuentaId: number; s
       gastos_esenciales: p.esenciales,
       gastos_no_esenciales: p.noEsenciales,
       ahorro_plan: p.objetivoAhorro,
-      ahorro_real: anterior ? patrimonio - anterior.patrimonio : null,
+      ahorro_real: patrimonioAnterior === undefined ? null : patrimonio - patrimonioAnterior,
       patrimonio,
       liquidez_libre: ctx.resultado.liquidezLibre,
       fondo_objetivo: ctx.resultado.fondoObjetivo,

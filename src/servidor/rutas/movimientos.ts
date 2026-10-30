@@ -2,7 +2,10 @@ import type { Hono } from "hono";
 import { html } from "hono/html";
 import { importeEditable } from "../../dominio/dinero.ts";
 import { formatoFecha, mesDe, nombreMes, primerDia, sumarMesesAMes, ultimoDia } from "../../dominio/fechas.ts";
+import { estadoEn } from "../../dominio/recurrencia.ts";
+import { claveConcepto } from "../../importar/periodicos.ts";
 import { leerCuentas } from "../../servicios/cuentas.ts";
+import { leerRecurrentes } from "../../servicios/finanzas.ts";
 import { guardarLimites, presupuestoPorCategoria } from "../../servicios/presupuesto.ts";
 import { bd, render, type Estado } from "../app.ts";
 import { Formulario, idDe, redirigir } from "../formulario.ts";
@@ -20,7 +23,10 @@ interface Movimiento {
   cuenta: string | null;
   cuenta_id: number | null;
   recurrente: string | null;
+  recurrente_id: number | null;
   origen: string;
+  traspaso: number | null;
+  vinculo_manual: number;
 }
 
 interface Categoria {
@@ -36,15 +42,6 @@ function volverA(destino: string): string {
   return destino.startsWith("/movimientos") && !destino.startsWith("//") ? destino : "/movimientos";
 }
 
-/** Primeras palabras del concepto, para proponer una regla («COMPRA MERCADONA VALENCIA» → «mercadona valencia»). */
-function patronSugerido(concepto: string): string {
-  const palabras = concepto
-    .toLowerCase()
-    .replace(/[^a-záéíóúüñ0-9 ]/gi, " ")
-    .split(/\s+/)
-    .filter((p) => p.length > 2 && !/^(compra|pago|recibo|transferencia|tarjeta|bizum|de|del|con|en)$/.test(p) && !/^\d+$/.test(p));
-  return palabras.slice(0, 2).join(" ");
-}
 
 function opcionesCategoria(categorias: Categoria[]) {
   return [["", "Sin categoría"] as const, ...categorias.map((c) => [String(c.id), `${c.nombre}${c.tipo === "ocio" ? " (ocio)" : ""}`] as const)];
@@ -120,23 +117,24 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
     }
     const cuentas = leerCuentas(base, hoy);
     const movimientos = base.todos<Movimiento>(
-      `SELECT a.id, a.fecha, a.importe, a.concepto, a.categoria_id, a.cuenta_id, a.origen, c.nombre AS categoria, c.tipo AS tipo_categoria,
-              cu.nombre AS cuenta, r.nombre AS recurrente
+      `SELECT a.id, a.fecha, a.importe, a.concepto, a.categoria_id, a.cuenta_id, a.origen, a.traspaso, a.recurrente_id, a.vinculo_manual,
+              c.nombre AS categoria, c.tipo AS tipo_categoria, cu.nombre AS cuenta, r.nombre AS recurrente
        FROM apuntes a LEFT JOIN categorias c ON c.id = a.categoria_id LEFT JOIN cuentas cu ON cu.id = a.cuenta_id LEFT JOIN recurrentes r ON r.id = a.recurrente_id
        WHERE ${condiciones.join(" AND ")} ORDER BY a.fecha DESC, a.id DESC`,
       ...parametros,
     );
     const lista = categorias();
     const cifras = base.uno<{ ingresos: number | null; gastos: number | null; sin: number }>(
+      // Los traspasos entre tus cuentas no son ni entradas ni salidas de verdad
       `SELECT sum(CASE WHEN a.importe > 0 THEN a.importe END) AS ingresos, -sum(CASE WHEN a.importe < 0 THEN a.importe END) AS gastos,
               count(CASE WHEN a.categoria_id IS NULL THEN 1 END) AS sin
-       FROM apuntes a LEFT JOIN cuentas cu ON cu.id = a.cuenta_id WHERE ${condicionesCifras.join(" AND ")}`,
+       FROM apuntes a LEFT JOIN cuentas cu ON cu.id = a.cuenta_id WHERE coalesce(a.traspaso, 0) = 0 AND ${condicionesCifras.join(" AND ")}`,
       ...parametrosCifras,
     );
     const ingresos = cifras?.ingresos ?? 0;
     const gastos = cifras?.gastos ?? 0;
     const porCategoria = new Map<string, number>();
-    for (const m of movimientos.filter((x) => x.importe < 0)) porCategoria.set(m.categoria ?? "Sin categoría", (porCategoria.get(m.categoria ?? "Sin categoría") ?? 0) - m.importe);
+    for (const m of movimientos.filter((x) => x.importe < 0 && x.traspaso !== 1)) porCategoria.set(m.categoria ?? "Sin categoría", (porCategoria.get(m.categoria ?? "Sin categoría") ?? 0) - m.importe);
     const sinCategoria = cifras?.sin ?? 0;
     const filtros = { ...(tipo ? { tipo } : {}), ...(banco ? { banco } : {}), ...(/^\d+$/.test(filtroCuenta) ? { cuenta: filtroCuenta } : {}), ...(filtroCategoria ? { categoria: filtroCategoria } : {}), ...(buscar ? { buscar } : {}) };
     const enlace = (cambios: Record<string, string>) => {
@@ -249,7 +247,11 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
                         <td class="m-fecha">${formatoFecha(m.fecha)}</td>
                         <td class="m-concepto">
                           <a href="/movimientos/${m.id}?volver=${encodeURIComponent(aqui)}">${m.concepto}</a>
-                          <div class="apagado pequeno">${[m.cuenta, ORIGEN[m.origen] ?? m.origen, m.recurrente ? `es «${m.recurrente}» (gasto fijo, ya contado)` : null].filter(Boolean).join(" · ")}</div>
+                          <div class="apagado pequeno">
+                            ${[m.cuenta, ORIGEN[m.origen] ?? m.origen, m.recurrente ? `es «${m.recurrente}» (gasto fijo, ya contado)` : null, m.traspaso === 1 ? "traspaso entre tus cuentas (no cuenta como gasto ni ingreso)" : null]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </div>
                         </td>
                         <td class="numero m-importe ${m.importe > 0 ? "positivo" : ""}">${eur(m.importe)}</td>
                         <td class="m-categoria">
@@ -327,6 +329,7 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
     if (!m) return c.notFound();
     const volver = volverA(c.req.query("volver") ?? `/movimientos?mes=${mesDe(m.fecha)}`);
     const lista = categorias();
+    const fijos = leerRecurrentes(base).filter((r) => r.tipo === (m.importe < 0 ? "gasto" : "ingreso") && (r.id === m.recurrente_id || estadoEn(r, m.fecha) !== "finalizado"));
     return render(
       c,
       estado,
@@ -339,12 +342,30 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
           ${formularioMovimiento(`/movimientos/${m.id}?volver=${encodeURIComponent(volver)}`, lista, leerCuentas(base, estado.hoy()), m)}
         </section>
         <section class="tarjeta">
+          <h2>¿Es un gasto fijo o un traspaso?</h2>
+          <p class="apagado">
+            Si es el cargo de un gasto o ingreso fijo (el alquiler, Netflix, la nómina…), únelo a él: ya está contado en tu presupuesto y no se suma otra vez. Si es dinero
+            que pasas de una cuenta tuya a otra, márcalo como traspaso: no es ni gasto ni ingreso.
+          </p>
+          <form method="post" action="/movimientos/${m.id}/vinculo" class="formulario">
+            <input type="hidden" name="volver" value="${volver}" />
+            ${selector(
+              m.importe < 0 ? "Gasto fijo" : "Ingreso fijo",
+              "recurrente",
+              [["", m.importe < 0 ? "Ninguno: es un gasto suelto" : "Ninguno"], ...fijos.map((r) => [String(r.id), r.nombre] as const)],
+              m.recurrente_id ? String(m.recurrente_id) : "",
+            )}
+            ${casilla("Es un traspaso entre mis cuentas (no cuenta como gasto ni ingreso)", "traspaso", m.traspaso === 1)}
+            <div class="botones"><button class="boton" type="submit">Guardar</button></div>
+          </form>
+        </section>
+        <section class="tarjeta">
           <h2>Que se categorice solo la próxima vez</h2>
           <p class="apagado">Crea una regla: los movimientos que importes cuyo concepto contenga este texto irán a la categoría que elijas.</p>
           <form method="post" action="/movimientos/reglas" class="formulario">
             <input type="hidden" name="volver" value="${volver}" />
             <div class="fila-campos">
-              ${campo({ etiqueta: "Si el concepto contiene", nombre: "patron", valor: patronSugerido(m.concepto), requerido: true })}
+              ${campo({ etiqueta: "Si el concepto contiene", nombre: "patron", valor: claveConcepto(m.concepto).clave, requerido: true })}
               ${selector("Categoría", "categoria", opcionesCategoria(lista).slice(1), m.categoria_id ? String(m.categoria_id) : String(lista[0]?.id ?? ""))}
             </div>
             ${casilla("Aplicarla también a los movimientos que ya tengo con ese texto", "aplicar", true)}
@@ -409,6 +430,34 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
     if (categoria !== null && !categorias().some((x) => x.id === categoria)) return redirigir(c, volverA(f.texto("volver")), { error: "Esa categoría no existe." });
     bd(estado).ejecutar("UPDATE apuntes SET categoria_id = ? WHERE id = ?", categoria, idDe(c));
     return redirigir(c, volverA(f.texto("volver")));
+  });
+
+  // Unir a mano un movimiento a su gasto fijo (o separarlo) y marcarlo como traspaso: la detección lo respeta
+  app.post("/movimientos/:id/vinculo", async (c) => {
+    const f = await Formulario.de(c);
+    const id = idDe(c);
+    const volver = volverA(f.texto("volver"));
+    const base = bd(estado);
+    const m = base.uno<{ importe: number; recurrente_id: number | null; traspaso: number | null; traspaso_par: number | null }>(
+      "SELECT importe, recurrente_id, traspaso, traspaso_par FROM apuntes WHERE id = ?",
+      id,
+    );
+    if (!m) return c.notFound();
+    const traspaso = f.casilla("traspaso");
+    const elegido = traspaso ? null : f.entero("recurrente");
+    if (elegido !== null && !leerRecurrentes(base, elegido).some((r) => r.tipo === (m.importe < 0 ? "gasto" : "ingreso"))) {
+      return redirigir(c, `/movimientos/${id}?volver=${encodeURIComponent(volver)}`, { error: "Ese gasto fijo no existe." });
+    }
+    // Solo se toca lo que cambias: guardar sin cambios no debe fijar nada a mano
+    base.transaccion(() => {
+      if (elegido !== m.recurrente_id) base.ejecutar("UPDATE apuntes SET recurrente_id = ?, vinculo_manual = 1 WHERE id = ?", elegido, id);
+      if (traspaso !== (m.traspaso === 1)) {
+        base.ejecutar("UPDATE apuntes SET traspaso = ?, traspaso_par = NULL WHERE id = ?", traspaso ? 1 : 0, id);
+        // Si dices que no es un traspaso, su pareja de la otra cuenta tampoco
+        if (!traspaso && m.traspaso_par !== null) base.ejecutar("UPDATE apuntes SET traspaso = 0, traspaso_par = NULL WHERE id = ?", m.traspaso_par);
+      }
+    });
+    return redirigir(c, volver, { ok: "Movimiento guardado." });
   });
 
   app.post("/movimientos/:id/borrar", async (c) => {

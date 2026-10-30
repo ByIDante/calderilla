@@ -30,14 +30,15 @@ export function presupuestoPorCategoria(bd: BaseDatos, mes: Mes, hoy: Fecha): Li
   const gastos = new Map(
     bd
       .todos<{ categoria_id: number; gastado: number }>(
-        "SELECT categoria_id, -sum(importe) AS gastado FROM apuntes WHERE importe < 0 AND recurrente_id IS NULL AND categoria_id IS NOT NULL AND fecha BETWEEN ? AND ? GROUP BY categoria_id",
+        "SELECT categoria_id, -sum(importe) AS gastado FROM apuntes WHERE importe < 0 AND recurrente_id IS NULL AND coalesce(traspaso, 0) = 0 AND categoria_id IS NOT NULL AND fecha BETWEEN ? AND ? GROUP BY categoria_id",
         primerDia(mes),
         ultimoDia(mes),
       )
       .map((f) => [f.categoria_id, f.gastado]),
   );
   const estimados = new Map<number, number>();
-  for (const r of leerRecurrentes(bd).filter((x) => x.tipo === "gasto" && x.clase === "estimacion" && x.categoriaId)) {
+  // Las estimaciones con patrón (la luz de Iberdrola) ya tienen sus cargos unidos: no cuentan como «gastado» aquí
+  for (const r of leerRecurrentes(bd).filter((x) => x.tipo === "gasto" && x.clase === "estimacion" && x.categoriaId && !x.patron)) {
     estimados.set(r.categoriaId!, (estimados.get(r.categoriaId!) ?? 0) + mensualEn(r, r.versiones, mes));
   }
   const enCurso = mes === mesDe(hoy);
@@ -96,7 +97,7 @@ export function gastoPorCategoriaMeses(bd: BaseDatos, hasta: Mes, numeroMeses = 
   const meses = Array.from({ length: numeroMeses }, (_, i) => sumarMesesAMes(hasta, i - (numeroMeses - 1)));
   const filas = bd.todos<{ mes: string; categoria: string | null; total: number }>(
     `SELECT substr(a.fecha, 1, 7) AS mes, c.nombre AS categoria, -sum(a.importe) AS total FROM apuntes a LEFT JOIN categorias c ON c.id = a.categoria_id
-     WHERE a.importe < 0 AND a.fecha BETWEEN ? AND ? GROUP BY mes, categoria`,
+     WHERE a.importe < 0 AND coalesce(a.traspaso, 0) = 0 AND a.fecha BETWEEN ? AND ? GROUP BY mes, categoria`,
     primerDia(meses[0]!),
     ultimoDia(hasta),
   );

@@ -11,6 +11,8 @@ export interface RecurrenteCompleto extends Recurrente {
   categoria: string | null;
   clase: "fijo" | "estimacion";
   nota: string | null;
+  /** Palabras con las que se reconocen sus cargos en el banco (p. ej. «netflix»); null si no se sabe. */
+  patron: string | null;
   versiones: VersionImporte[];
   prestamo: (Prestamo & { id: number }) | null;
 }
@@ -27,6 +29,7 @@ interface FilaRecurrente {
   esencial: number;
   clase: "fijo" | "estimacion";
   nota: string | null;
+  patron: string | null;
 }
 
 interface FilaPrestamo {
@@ -69,6 +72,7 @@ export function leerRecurrentes(bd: BaseDatos, id?: number): RecurrenteCompleto[
       esencial: fila.esencial === 1,
       clase: fila.clase,
       nota: fila.nota,
+      patron: fila.patron,
       versiones: versiones.get(fila.id) ?? [],
       prestamo: prestamo
         ? {
@@ -99,6 +103,8 @@ export interface DatosRecurrente {
   nota: string | null;
   importe: Centimos;
   prestamo: Omit<Prestamo, "primeraCuota"> | null;
+  /** Si no se indica, al guardar se conserva el que tenga */
+  patron?: string | null;
 }
 
 /** Con préstamo, la fecha de fin y la cuota salen del préstamo (la cuota se puede corregir a mano). */
@@ -139,7 +145,7 @@ export function crearRecurrente(bd: BaseDatos, entrada: DatosRecurrente): number
   const datos = normalizar(entrada);
   return bd.transaccion(() => {
     const { id } = bd.ejecutar(
-      "INSERT INTO recurrentes (tipo, nombre, categoria_id, frecuencia, inicio, fin, esencial, clase, nota) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+      "INSERT INTO recurrentes (tipo, nombre, categoria_id, frecuencia, inicio, fin, esencial, clase, nota, patron) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       datos.tipo,
       datos.nombre,
       datos.categoriaId,
@@ -149,6 +155,7 @@ export function crearRecurrente(bd: BaseDatos, entrada: DatosRecurrente): number
       datos.esencial ? 1 : 0,
       datos.clase,
       datos.nota,
+      datos.patron || null,
     );
     bd.ejecutar("INSERT INTO recurrentes_importes (recurrente_id, valido_desde, importe) VALUES (?, ?, ?)", id, datos.inicio, datos.importe);
     guardarPrestamo(bd, id, datos);
@@ -178,6 +185,7 @@ export function actualizarRecurrente(bd: BaseDatos, id: number, entrada: DatosRe
       datos.nota,
       id,
     );
+    if (datos.patron !== undefined) bd.ejecutar("UPDATE recurrentes SET patron = ? WHERE id = ?", datos.patron || null, id);
     if (importeEn(actual.versiones, desde) !== datos.importe) {
       if (desde <= datos.inicio) {
         bd.ejecutar("DELETE FROM recurrentes_importes WHERE recurrente_id = ? AND valido_desde <= ?", id, datos.inicio);

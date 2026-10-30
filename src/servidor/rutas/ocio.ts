@@ -16,6 +16,7 @@ interface Apunte {
   concepto: string;
   categoria: string | null;
   tipo: string | null;
+  traspaso?: number | null;
 }
 
 /** El ocio de un mes ya pasado: lo previsto en su cierre y lo gastado. */
@@ -24,11 +25,12 @@ function ocioPasado(c: Context, estado: Estado, mes: string) {
   const cierre = base.uno<{ ocio_plan: number; ocio_gastado: number; ocio_sobrante: number }>("SELECT ocio_plan, ocio_gastado, ocio_sobrante FROM cierres_mes WHERE mes = ?", mes);
   const apuntes = base.todos<Apunte>(
     `SELECT a.id, a.fecha, a.importe, a.concepto, c.nombre AS categoria, c.tipo FROM apuntes a JOIN categorias c ON c.id = a.categoria_id
-     WHERE c.tipo = 'ocio' AND a.recurrente_id IS NULL AND a.fecha BETWEEN ? AND ? ORDER BY a.fecha DESC`,
+     WHERE c.tipo = 'ocio' AND a.recurrente_id IS NULL AND coalesce(a.traspaso, 0) = 0 AND a.fecha BETWEEN ? AND ? ORDER BY a.fecha DESC`,
     primerDia(mes),
     ultimoDia(mes),
   );
-  const gastado = ocioGastadoEn(base, ultimoDia(mes));
+  // Si el mes se cerró, lo que quedó congelado (vincular después cargos pasados no lo cambia)
+  const gastado = cierre ? cierre.ocio_gastado : ocioGastadoEn(base, ultimoDia(mes));
   const siguiente = sumarMesesAMes(mes, 1);
   return render(
     c,
@@ -67,7 +69,7 @@ export function rutasOcio(app: Hono, estado: Estado) {
     const p = ctx.resultado.presupuesto;
     const mes = mesDe(hoy);
     const apuntes = base.todos<Apunte>(
-      `SELECT a.id, a.fecha, a.importe, a.concepto, c.nombre AS categoria, c.tipo FROM apuntes a LEFT JOIN categorias c ON c.id = a.categoria_id
+      `SELECT a.id, a.fecha, a.importe, a.concepto, c.nombre AS categoria, c.tipo, a.traspaso FROM apuntes a LEFT JOIN categorias c ON c.id = a.categoria_id
        WHERE a.fecha BETWEEN ? AND ? ORDER BY a.fecha DESC, a.id DESC`,
       primerDia(mes),
       ultimoDia(mes),
@@ -161,7 +163,7 @@ export function rutasOcio(app: Hono, estado: Estado) {
                   <tbody>
                     ${apuntes.map(
                       (a) => html`<tr>
-                        <td>${formatoFecha(a.fecha)}</td><td>${a.concepto}</td><td>${a.categoria ?? "—"}${a.tipo === "ocio" ? "" : html` <span class="apagado pequeno">(no es ocio)</span>`}</td>
+                        <td>${formatoFecha(a.fecha)}</td><td>${a.concepto}</td><td>${a.categoria ?? "—"}${a.traspaso === 1 ? html` <span class="apagado pequeno">(traspaso entre tus cuentas)</span>` : a.tipo === "ocio" ? "" : html` <span class="apagado pequeno">(no es ocio)</span>`}</td>
                         <td class="numero">${eur(-a.importe)}</td>
                         <td class="celda-boton">${botonAccion(`/apuntes/${a.id}/borrar`, "Borrar", { estilo: "peligro", pequeno: true, mantenerPosicion: true, confirmar: "¿Borrar este apunte?" })}</td>
                       </tr>`,

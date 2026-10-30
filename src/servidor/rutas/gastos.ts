@@ -2,10 +2,13 @@ import type { Context, Hono } from "hono";
 import { html } from "hono/html";
 import { esFecha, formatoFecha, mesDe, type Fecha } from "../../dominio/fechas.ts";
 import { finPorCuotas, mensualEn, type Frecuencia } from "../../dominio/recurrencia.ts";
+import { claveConcepto } from "../../importar/periodicos.ts";
 import { actualizarRecurrente, amortizar, borrarRecurrente, crearRecurrente, leerRecurrentes, terminarRecurrente, type DatosRecurrente } from "../../servicios/finanzas.ts";
+import { aceptarPropuestas, calcularPropuestas, ignorarPropuesta, marcarTraspasos, type Eleccion } from "../../servicios/periodicos.ts";
 import { bd, render, type Estado } from "../app.ts";
 import { Formulario, idDe, redirigir } from "../formulario.ts";
 import { aviso, eurR } from "../vistas/comun.ts";
+import { vistaDetectar } from "../vistas/detectar.ts";
 import { valoresDe, vistaCuadro, vistaFormulario, vistaLista, type Categoria, type Valores } from "../vistas/gastos.ts";
 
 const FRECUENCIAS: Frecuencia[] = ["mensual", "trimestral", "semestral", "anual"];
@@ -62,6 +65,8 @@ export function leerGasto(f: Formulario, categorias: Categoria[]): { datos: Dato
       esencial: tipo === "gasto" && (esPrestamo || f.casilla("esencial")),
       clase: f.texto("clase") === "estimacion" ? "estimacion" : "fijo",
       nota: f.opcional("nota"),
+      // Mismo formato que la detección: minúsculas y sin acentos, solo palabras
+      patron: claveConcepto(f.texto("patron")).palabras.join(" ") || null,
       importe: importe ?? 0,
       prestamo,
     },
@@ -82,7 +87,51 @@ export function rutasGastos(app: Hono, estado: Estado) {
     const hoy = estado.hoy();
     const recurrentes = leerRecurrentes(bd(estado));
     const mensual = new Map(recurrentes.map((r) => [r.id, mensualEn(r, r.versiones, mesDe(hoy))]));
-    return render(c, estado, { titulo: "Ingresos y gastos", seccion: "gastos" }, vistaLista(recurrentes, hoy, mensual));
+    const propuestas = calcularPropuestas(bd(estado), hoy).total;
+    return render(c, estado, { titulo: "Ingresos y gastos", seccion: "gastos" }, vistaLista(recurrentes, hoy, mensual, propuestas));
+  });
+
+  // Lo que se repite en tus movimientos (va antes de /gastos/:id para que «detectar» no se tome por un id)
+  app.get("/gastos/detectar", (c) => {
+    const base = bd(estado);
+    marcarTraspasos(base, estado.hoy());
+    return render(c, estado, { titulo: "Encontrado en tus movimientos", seccion: "gastos" }, vistaDetectar(calcularPropuestas(base, estado.hoy())));
+  });
+
+  app.post("/gastos/detectar", async (c) => {
+    const f = await Formulario.de(c);
+    const elecciones: Eleccion[] = f.textos("ids").map((id) => {
+      // «nuevo», «unir:<id del gasto que ya tienes>» o «ahorro:<id de la cuenta>»
+      const [como, numero] = f.texto(`como_${id}`).split(":");
+      const referencia = /^\d+$/.test(numero ?? "") ? Number(numero) : null;
+      return {
+        id,
+        nombre: f.texto(`nombre_${id}`) || undefined,
+        esencial: f.casilla(`esencial_${id}`),
+        como: como === "ahorro" ? "ahorro" : "gasto",
+        destino: como === "ahorro" ? referencia : null,
+        unir: como === "unir" ? referencia : null,
+      };
+    });
+    if (!elecciones.length) return redirigir(c, "/gastos/detectar", { error: "Marca primero lo que quieres añadir." });
+    const r = aceptarPropuestas(bd(estado), estado.hoy(), elecciones);
+    const partes = [
+      r.creados && `${r.creados} ${r.creados === 1 ? "añadido" : "añadidos"} a ingresos y gastos`,
+      r.vinculados && `${r.vinculados} ${r.vinculados === 1 ? "unido" : "unidos"} a lo que ya tenías`,
+      r.ahorros && `${r.ahorros} como ahorro automático`,
+      r.precios && `${r.precios} ${r.precios === 1 ? "precio actualizado" : "precios actualizados"}`,
+      r.estimaciones && `${r.estimaciones} ${r.estimaciones === 1 ? "estimación" : "estimaciones"} de gasto variable`,
+    ].filter(Boolean);
+    return redirigir(c, "/gastos/detectar", {
+      ok: partes.length ? `Hecho: ${partes.join(", ")}.` : undefined,
+      error: r.errores.length ? r.errores.join(" ") : undefined,
+    });
+  });
+
+  app.post("/gastos/detectar/ignorar", async (c) => {
+    const f = await Formulario.de(c);
+    const hecho = ignorarPropuesta(bd(estado), estado.hoy(), f.texto("id"));
+    return redirigir(c, "/gastos/detectar", hecho ? { ok: "Ignorado: no volverá a salir." } : { error: "Eso ya no está en la lista." });
   });
 
   app.get("/gastos/nuevo", (c) => {

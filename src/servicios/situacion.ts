@@ -27,14 +27,15 @@ export interface Contexto {
 }
 
 /** Gasto en ocio de un mes: apuntes con categoría de ocio (los gastos son importes negativos). Los que son el
- * cargo de un gasto fijo no cuentan: ese gasto ya está en el presupuesto. */
+ * cargo de un gasto fijo no cuentan (ese gasto ya está en el presupuesto), ni los traspasos entre tus cuentas. */
 export function ocioGastadoEn(bd: BaseDatos, mes: string): number {
-  return -(
-    bd.uno<{ total: number | null }>(
-      "SELECT sum(a.importe) AS total FROM apuntes a JOIN categorias c ON c.id = a.categoria_id WHERE c.tipo = 'ocio' AND a.recurrente_id IS NULL AND a.fecha BETWEEN ? AND ?",
+  return (
+    0 -
+    (bd.uno<{ total: number | null }>(
+      "SELECT sum(a.importe) AS total FROM apuntes a JOIN categorias c ON c.id = a.categoria_id WHERE c.tipo = 'ocio' AND a.recurrente_id IS NULL AND coalesce(a.traspaso, 0) = 0 AND a.fecha BETWEEN ? AND ?",
       primerDia(mesDe(mes)),
       ultimoDia(mesDe(mes)),
-    )?.total ?? 0
+    )?.total ?? 0)
   );
 }
 

@@ -1210,3 +1210,17 @@ button {
     font-size: 22px;
   }
 }
+
+/* Encontrado en tus movimientos: campos dentro de las filas */
+.entrada-corta {
+  width: 100%;
+  min-width: 10rem;
+  margin: 2px 0;
+}
+.casilla-fila {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  cursor: pointer;
+}

@@ -21,6 +21,8 @@ interface DatosResumen {
   /** Lo que traspasas cada mes a otra cuenta o a un fondo (Cuentas → Ahorro automático) */
   automatico: number;
   ultimoCierre: { mes: string; plan: number; real: number | null } | null;
+  /** Cosas que se repiten en tus movimientos y aún no están en el presupuesto */
+  propuestas: number;
 }
 
 /** A qué va el ahorro que pide cada etapa de la escalera */
@@ -166,6 +168,13 @@ export function vistaMesPasado({ mes, plan, cierre, ocioGastado, gastos, hoy }: 
   `;
 }
 
+function avisoPropuestas(n: number, ocultos: ReadonlySet<string>): Html | string {
+  if (!n) return "";
+  const texto = `He encontrado ${n === 1 ? "algo que se repite" : `${n} cosas que se repiten`} en tus movimientos y aún no ${n === 1 ? "está" : "están"} en tu presupuesto: gastos fijos, tu nómina, lo que gastas de media…`;
+  const clave = claveAviso(texto);
+  return ocultos.has(clave) ? "" : aviso("info", texto, { ruta: "/gastos/detectar", texto: "Revisarlo" }, { clave });
+}
+
 function avisoCierre(mes: string | null, ocultos: ReadonlySet<string>): Html | string {
   if (!mes) return "";
   const texto = `Aún no has cerrado ${nombreMes(mes)}. Actualizar los saldos una vez al mes permite comparar lo que ahorras de verdad con lo previsto.`;
@@ -173,7 +182,7 @@ function avisoCierre(mes: string | null, ocultos: ReadonlySet<string>): Html | s
   return ocultos.has(clave) ? "" : aviso("info", texto, { ruta: `/cierre?mes=${mes}`, texto: "Cerrar el mes" }, { clave });
 }
 
-export function vistaResumen({ ctx, cierrePendiente, ocultos, presupuesto, proximos, cierres, porCategoria, gastoMeses, automatico, ultimoCierre }: DatosResumen): Html {
+export function vistaResumen({ ctx, cierrePendiente, ocultos, presupuesto, proximos, cierres, porCategoria, gastoMeses, automatico, ultimoCierre, propuestas }: DatosResumen): Html {
   const r = ctx.resultado;
   const p = r.presupuesto;
   const sinDatos = ctx.recurrentes.length === 0 && ctx.cuentas.length === 0;
@@ -192,7 +201,7 @@ export function vistaResumen({ ctx, cierrePendiente, ocultos, presupuesto, proxi
   }
 
   return html`
-    ${navegacionMes(mesDe(ctx.hoy), ctx.hoy)} ${avisoCierre(cierrePendiente, ocultos)} ${listaAvisos(r, ocultos)}
+    ${navegacionMes(mesDe(ctx.hoy), ctx.hoy)} ${avisoCierre(cierrePendiente, ocultos)} ${avisoPropuestas(propuestas, ocultos)} ${listaAvisos(r, ocultos)}
 
     ${tarjetaMes(p, r.etapa, automatico, ultimoCierre)}
 

@@ -137,9 +137,16 @@ Todo esto es gratis y funciona solo con conexión a internet, sin cuentas de pag
   - Yahoo no es una API oficial y algunos fondos españoles no aparecen: el precio manual funciona siempre, y si pones uno a mano para un día, ese día gana el tuyo.
 - **Importar un extracto** (Ocio → Importar, o Ajustes). Sirve para cualquier banco:
   - Sube el CSV o Excel. La primera vez se adivinan las columnas y las puedes corregir; el formato se recuerda.
-  - Los cargos de tus gastos fijos (±5 % del importe y ±5 días) se reconocen y no se cuentan dos veces.
+  - Los cargos de tus gastos fijos se reconocen y no se cuentan dos veces: por el texto con el que aparecen en el banco (aunque cambie el importe) o, si no se sabe, por importe (±5 %) y fecha (±5 días).
   - El resto se categoriza con reglas del tipo «si el concepto contiene *mercadona* → Alimentación», que puedes ampliar.
   - Si subes el mismo extracto dos veces, no se duplica nada.
+  - Lo que pasas de una cuenta tuya a otra (de BBVA a Trade Republic, por ejemplo) se reconoce como **traspaso** cuando están importadas las dos: no cuenta ni como gasto ni como ingreso. En cada movimiento se puede marcar o desmarcar a mano.
+- **Encontrado en tus movimientos** (Ingresos y gastos → Buscar en mis movimientos). No hace falta apuntar a mano lo que ya está en tus extractos. Calderilla busca lo que se repite y te lo propone; **nada se crea sin que lo confirmes**:
+  - **Gastos e ingresos que se repiten** cada mes, cada 2, 3 o 6 meses o cada año: alquiler, suscripciones, la luz, el seguro, la nómina… Si ya lo tienes apuntado, se une a él; si podría ser uno tuyo (misma categoría, importe parecido), te pregunta. Las subidas de precio se guardan con su fecha, sin cambiar los meses pasados. Lo que se cobra cada 2 meses se apunta como mensual estimado, a mitad de importe.
+  - **Gasto variable de cada mes** (súper, gasolina…): lo normal de los últimos meses completos que has importado, como estimación de cada categoría.
+  - **Traspasos de cada mes a otra cuenta tuya**, como ahorro automático.
+  - **Precios que han cambiado** en tus gastos fijos.
+  - Hacen falta al menos 3 cargos para reconocer algo mensual; un seguro o un impuesto que solo aparece una vez se pregunta como posible anual. Lo que ignores no vuelve a salir.
 - **Conectar el banco** (Ajustes → Bancos). Se hace con [Enable Banking](https://enablebanking.com):
   - **Qué necesitas:** una cuenta gratuita y una aplicación registrada en su web, que te da un ID y un archivo de clave `.pem`. Después autorizas cada banco desde su propia app o web.
   - **Coste:** es gratis para uso personal («modo restringido»: solo lee tus propias cuentas).

@@ -27,6 +27,11 @@ export class Formulario {
     return new Formulario(campos, listas);
   }
 
+  /** Todos los valores de un campo que se repite */
+  textos(nombre: string): string[] {
+    return (this.#listas[nombre] ?? []).map((v) => v.trim()).filter(Boolean);
+  }
+
   /** Los números enteros de un campo que se repite (las casillas marcadas de una lista) */
   enteros(nombre: string): number[] {
     return (this.#listas[nombre] ?? []).filter((v) => /^\d+$/.test(v)).map(Number);

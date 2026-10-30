@@ -4,6 +4,7 @@ import { importeEn, ocurrencias } from "../../dominio/recurrencia.ts";
 import { NOMBRE_ETAPA, type Etapa } from "../../reglas/tipos.ts";
 import { leerAportaciones, totalMensual } from "../../servicios/aportaciones.ts";
 import { leerRecurrentes, presupuestoMes } from "../../servicios/finanzas.ts";
+import { calcularPropuestas } from "../../servicios/periodicos.ts";
 import { avisosPresupuesto, gastoPorCategoriaMeses, presupuestoPorCategoria } from "../../servicios/presupuesto.ts";
 import { contexto, ocioGastadoEn } from "../../servicios/situacion.ts";
 import { bd, render, type Estado } from "../app.ts";
@@ -75,6 +76,7 @@ export function rutasResumen(app: Hono, estado: Estado) {
         porCategoria: [...porCategoria].sort((a, b) => b[1] - a[1]),
         gastoMeses: gastoPorCategoriaMeses(base, mes),
         automatico: totalMensual(leerAportaciones(base), mes),
+        propuestas: calcularPropuestas(base, hoy).total,
         ultimoCierre: cierres.length ? { mes: cierres.at(-1)!.mes, plan: cierres.at(-1)!.ahorro_plan, real: cierres.at(-1)!.ahorro_real } : null,
       }),
     );
@@ -92,7 +94,7 @@ function mesPasado(c: Context, estado: Estado, mes: string) {
   );
   const gastos = base.todos<{ categoria: string | null; total: number }>(
     `SELECT c.nombre AS categoria, -sum(a.importe) AS total FROM apuntes a LEFT JOIN categorias c ON c.id = a.categoria_id
-     WHERE a.importe < 0 AND a.fecha BETWEEN ? AND ? GROUP BY c.nombre ORDER BY total DESC`,
+     WHERE a.importe < 0 AND coalesce(a.traspaso, 0) = 0 AND a.fecha BETWEEN ? AND ? GROUP BY c.nombre ORDER BY total DESC`,
     primerDia(mes),
     ultimoDia(mes),
   );

@@ -5,6 +5,7 @@ import { formatoFecha } from "../../dominio/fechas.ts";
 import { adivinar, firma, interpretar, leerArchivo, type Configuracion, type Filas } from "../../importar/extracto.ts";
 import { leerCuentas } from "../../servicios/cuentas.ts";
 import { importar, leerReglas, perfilPorFirma, proponer } from "../../servicios/importacion.ts";
+import { calcularPropuestas } from "../../servicios/periodicos.ts";
 import { bd, render, type Estado } from "../app.ts";
 import { Formulario, idDe, redirigir } from "../formulario.ts";
 import { botonAccion, campo, casilla, eur, selector, vacio } from "../vistas/comun.ts";
@@ -249,7 +250,10 @@ export function rutasImportar(app: Hono, estado: Estado) {
       perfil: nombrePerfil ? { nombre: nombrePerfil, firma: firma(pendiente.filas, cfg.filaCabecera), configuracion: cfg } : null,
     });
     pendientes.delete(token);
-    return redirigir(c, "/ocio", { ok: `Importados ${resultado.nuevas} movimientos${resultado.duplicadas ? ` (${resultado.duplicadas} ya estaban)` : ""}.` });
+    const importados = `Importados ${resultado.nuevas} movimientos${resultado.duplicadas ? ` (${resultado.duplicadas} ya estaban)` : ""}.`;
+    // Si hay cosas que se repiten y aún no están en el presupuesto, se enseñan para añadirlas
+    if (calcularPropuestas(base, estado.hoy()).total) return redirigir(c, "/gastos/detectar", { ok: `${importados} Esto es lo que se repite en tus movimientos:` });
+    return redirigir(c, "/ocio", { ok: importados });
   });
 }
 

@@ -84,6 +84,16 @@ const gastos: [string, number, string, number | null, string | null][] = [
 for (const [fecha, importe, concepto, cuentaId, categoria] of gastos) {
   bd.ejecutar("INSERT INTO apuntes (fecha, importe, concepto, cuenta_id, categoria_id) VALUES (?, ?, ?, ?, ?)", fecha, importe, concepto, cuentaId, categoria ? cat(categoria) : null);
 }
+// Extractos importados de los dos bancos con cosas que se repiten, para «Encontrado en tus movimientos»
+const importado = (fecha: string, importe: number, concepto: string, cuentaId: number, categoria: string | null) =>
+  bd.ejecutar("INSERT INTO apuntes (fecha, importe, concepto, cuenta_id, categoria_id, origen) VALUES (?, ?, ?, ?, ?, 'csv')", fecha, importe, concepto, cuentaId, categoria ? cat(categoria) : null);
+for (const [i, mes] of ["2026-06", "2026-07", "2026-08", "2026-09", "2026-10"].entries()) {
+  importado(`${mes}-07`, -1099, "COMPRA TARJ 4589 SPOTIFY P3F2A1", nomina, "Suscripciones");
+  importado(`${mes}-01`, -30000, "TRANSFERENCIA A TRADE REPUBLIC", nomina, null);
+  importado(`${mes}-02`, 30000, "Ingreso", ahorro, null);
+  importado(`${mes}-14`, -(4200 + i * 300), "RECIBO IBERDROLA CLIENTES SAU FACTURA DEL PERIODO", nomina, "Suministros");
+  for (const dia of ["06", "13", "20", "27"]) importado(`${mes}-${dia}`, -(3500 + ((Number(dia) + i * 7) % 5) * 900), "COMPRA TARJ 4589 CONSUM COOP VALENCIA", nomina, "Alimentación");
+}
 const fondo = bd.ejecutar("INSERT INTO activos (nombre, isin, tipo, renta) VALUES ('Fondo indexado mundial', 'IE00B03HCZ61', 'fondo', 'variable')").id;
 bd.ejecutar("INSERT INTO movimientos_cartera (activo_id, fecha, tipo, cantidad, importe) VALUES (?, '2026-01-15', 'compra', 50, 150000)", fondo);
 bd.ejecutar("INSERT INTO precios (activo_id, fecha, precio, fuente) VALUES (?, '2026-10-29', 34.5, 'manual')", fondo);
@@ -101,6 +111,7 @@ const PAGINAS = [
   "/",
   "/?mes=2026-09",
   "/gastos",
+  "/gastos/detectar",
   "/gastos/nuevo",
   `/gastos/${coche}`,
   `/gastos/${coche}/cuadro`,
@@ -128,7 +139,7 @@ const TAMANOS = [
   { nombre: "grande", ancho: 2560, alto: 1440 },
 ];
 // Capturas de las pantallas principales (todas las páginas en todos los tamaños serían demasiadas)
-const CON_CAPTURA = new Set(["/", "/ocio", "/movimientos", "/cuentas", "/inversiones", "/gastos", "/ajustes"]);
+const CON_CAPTURA = new Set(["/", "/ocio", "/movimientos", "/cuentas", "/inversiones", "/gastos", "/gastos/detectar", "/ajustes"]);
 
 function revisar() {
   const problemas: string[] = [];
