@@ -3,7 +3,8 @@ import { rmSync } from "node:fs";
 import { after, it } from "node:test";
 import { appDePrueba } from "./ayuda-app.ts";
 
-const { bd, pedir, carpeta, estado } = appDePrueba(5197);
+const app = appDePrueba(5197);
+const { bd, pedir, carpeta, estado } = app;
 after(() => {
   estado.sync?.cerrar();
   rmSync(carpeta, { recursive: true, force: true });
@@ -108,4 +109,27 @@ it("mostrar solo gastos o solo ingresos, y las cifras de arriba filtran", async 
   assert.match(sinCategoria, /SIN CATEGORIA/);
   assert.doesNotMatch(sinCategoria, /Cena con amigos/, "los que ya tienen categoría no salen");
   assert.match(todos, /<details class="tarjeta" id="presupuesto" open data-recordar-plegado/, "el presupuesto se puede plegar");
+});
+
+it("al importar un Excel dice qué filas no entiende y enseña un ejemplo", async () => {
+  const XLSX = await import("xlsx");
+  const libro = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(
+    libro,
+    XLSX.utils.aoa_to_sheet([
+      ["Fecha", "Concepto", "Importe"],
+      ["03/10/2026", "MERCADONA", "-200 EUR"],
+      ["04/10/2026", "CINE", "pendiente"],
+    ]),
+    "Hoja",
+  );
+  const formulario = new FormData();
+  formulario.set("archivo", new File([XLSX.write(libro, { type: "buffer", bookType: "xlsx" })], "extracto.xlsx"));
+  const subida = await app.enviarArchivo("/importar", formulario);
+  assert.equal(subida.status, 303);
+  const revision = await (await pedir(subida.headers.get("location")!)).text();
+  assert.match(revision, /1 movimientos/);
+  assert.match(revision, /-200,00|−200,00/);
+  assert.match(revision, /1 fila no tiene un importe que se entienda/);
+  assert.match(revision, /en la fila 3 el importe es «pendiente»/);
 });
