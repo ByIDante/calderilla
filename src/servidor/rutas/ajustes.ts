@@ -6,6 +6,7 @@ import { carpetaAjustes, carpetasSugeridas } from "../../config/ajustes.ts";
 import { importeEditable, numeroEditable } from "../../dominio/dinero.ts";
 import { formatoFecha } from "../../dominio/fechas.ts";
 import { PARAMETROS, type ClaveParametro } from "../../reglas/parametros.ts";
+import { PREGUNTAS, puntuar } from "../../reglas/cuestionario.ts";
 import { NOMBRE_ESTABILIDAD, NOMBRE_RIESGO } from "../../reglas/tipos.ts";
 import { ESTABILIDADES, guardarParametros, guardarPerfil, leerMercado, leerParametros, leerPerfil, RIESGOS, type PerfilCompleto } from "../../servicios/configuracion.ts";
 import { bd, render, type Estado } from "../app.ts";
@@ -35,7 +36,7 @@ function formularioPerfil(perfil: PerfilCompleto): Html {
         "riesgo",
         RIESGOS.map((r) => [r, NOMBRE_RIESGO[r]] as const),
         perfil.riesgo,
-        "Conservador 25 % en bolsa · moderado 50 % · dinámico 70 % · agresivo 90 %. Elige el que podrías aguantar viendo tu inversión caer un 30 % sin vender.",
+        "Conservador 25 % en bolsa · moderado 50 % · dinámico 70 % · agresivo 90 %. Si dudas, haz el cuestionario.",
       )}
     </div>
     <div class="fila-campos">
@@ -44,7 +45,10 @@ function formularioPerfil(perfil: PerfilCompleto): Html {
       ${campo({ etiqueta: "Lo que aporta tu empresa a tu plan al año", nombre: "aportacionEmpresa", valor: importeEditable(perfil.aportacionEmpresa), sufijo: "€" })}
       ${campo({ etiqueta: "Comunidad autónoma", nombre: "comunidad", valor: perfil.comunidad, ayuda: "Solo como recordatorio: los tramos del IRPF cambian según la comunidad." })}
     </div>
-    <div class="botones"><button class="boton boton-principal" type="submit">Guardar perfil</button></div>
+    <div class="botones">
+      <button class="boton boton-principal" type="submit">Guardar perfil</button>
+      <a class="boton" href="/ajustes/cuestionario">Calcular mi perfil con 5 preguntas</a>
+    </div>
   </form>`;
 }
 
@@ -149,6 +153,21 @@ export function rutasAjustes(app: Hono, estado: Estado) {
             </details>
           </section>
           <section class="tarjeta">
+            <h2>Servicios vinculados</h2>
+            <p class="apagado pequeno">Se guardan solo en este ordenador: el otro tendrá los suyos.</p>
+            <form method="post" action="/ajustes/vinculos" class="formulario">
+              ${campo({
+                etiqueta: "Clave Demo de CoinGecko (opcional)",
+                nombre: "coingeckoClave",
+                valor: estado.ajustes.coingeckoClave,
+                tipo: "password",
+                ayuda: "Sin clave funciona, con un límite bajo de consultas. Es gratis: coingecko.com → Developers → Demo API.",
+              })}
+              <div class="botones"><button class="boton" type="submit">Guardar</button></div>
+            </form>
+            <p class="pequeno" style="margin-top:12px"><a href="/importar">Importar movimientos de un extracto (CSV o Excel)</a></p>
+          </section>
+          <section class="tarjeta">
             <h2>Categorías</h2>
             <ul class="lista-plana">${categorias.map((cat) => html`<li><span>${cat.nombre}</span><span class="apagado pequeno">${cat.tipo}</span></li>`)}</ul>
             <form method="post" action="/ajustes/categorias" class="formulario" style="margin-top:10px">
@@ -180,6 +199,53 @@ export function rutasAjustes(app: Hono, estado: Estado) {
       comunidad: f.texto("comunidad"),
     });
     return redirigir(c, "/ajustes", { ok: "Perfil guardado." });
+  });
+
+  app.get("/ajustes/cuestionario", (c) => {
+    return render(
+      c,
+      estado,
+      { titulo: "Tu perfil de riesgo", seccion: "ajustes" },
+      html`
+        <p><a href="/ajustes">← Ajustes</a></p>
+        <p class="apagado">
+          Mide cuánto riesgo aguantas y cuánto te puedes permitir; tu perfil es el menor de los dos. Responde pensando en lo que harías de verdad, no en lo que
+          te gustaría hacer.
+        </p>
+        <form method="post" action="/ajustes/cuestionario" class="formulario">
+          ${PREGUNTAS.map(
+            (pregunta, i) => html`<fieldset>
+              <legend>${i + 1}. ${pregunta.texto}</legend>
+              ${pregunta.respuestas.map(
+                (respuesta, j) => html`<div class="campo-casilla">
+                  <input type="radio" id="p${i}-${j}" name="p${i}" value="${j}" required />
+                  <label for="p${i}-${j}">${respuesta}</label>
+                </div>`,
+              )}
+            </fieldset>`,
+          )}
+          <div class="botones"><button class="boton boton-principal" type="submit">Calcular y guardar</button></div>
+        </form>
+      `,
+    );
+  });
+
+  app.post("/ajustes/cuestionario", async (c) => {
+    const f = await Formulario.de(c);
+    const respuestas = PREGUNTAS.map((_, i) => f.entero(`p${i}`));
+    if (respuestas.some((r) => r === null)) return redirigir(c, "/ajustes/cuestionario", { error: "Responde a las cinco preguntas." });
+    const resultado = puntuar(respuestas as number[]);
+    guardarPerfil(bd(estado), { riesgo: resultado.perfil, estabilidad: resultado.estabilidad });
+    return redirigir(c, "/ajustes", {
+      ok: `Tu perfil: ${NOMBRE_RIESGO[resultado.perfil].toLowerCase()} (tolerancia ${resultado.tolerancia.toFixed(1)} de 3, capacidad ${resultado.capacidad.toFixed(1)} de 3). Estabilidad: ${resultado.estabilidad}. Guardado.`,
+    });
+  });
+
+  app.post("/ajustes/vinculos", async (c) => {
+    const clave = (await Formulario.de(c)).opcional("coingeckoClave");
+    estado.ajustes.coingeckoClave = clave;
+    estado.guardarAjustes(estado.ajustes);
+    return redirigir(c, "/ajustes", { ok: clave ? "Clave de CoinGecko guardada en este ordenador." : "Clave de CoinGecko quitada." });
   });
 
   app.post("/ajustes/categorias", async (c) => {
