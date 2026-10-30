@@ -5,6 +5,7 @@ import { cliente, diasParaCaducar, guardarBancos, guardarClave, hayClave, leerBa
 import type { Banco } from "../../bancos/enablebanking.ts";
 import { formatoFecha } from "../../dominio/fechas.ts";
 import { leerCuentas } from "../../servicios/cuentas.ts";
+import type { BaseDatos } from "../../datos/db.ts";
 import { bd, render, type Estado } from "../app.ts";
 import { Formulario, redirigir } from "../formulario.ts";
 import { aviso, botonAccion, campo, selector, vacio } from "../vistas/comun.ts";
@@ -21,6 +22,29 @@ async function bancosDisponibles(): Promise<Banco[]> {
   if (!api) return [];
   if (!listaBancos || Date.now() - listaBancos.obtenida > 86_400_000) listaBancos = { bancos: await api.bancos("ES"), obtenida: Date.now() };
   return listaBancos.bancos;
+}
+
+/**
+ * Borra lo que trajo un banco: sus movimientos y saldos. La cuenta solo se borra si no queda nada tuyo en
+ * ella (otros movimientos, saldos apuntados a mano, metas o aportaciones); si unes el banco a una cuenta que ya
+ * tenías, esa cuenta se queda con lo suyo.
+ */
+export function borrarLoTraido(base: BaseDatos, cuentas: readonly number[]): number {
+  return base.transaccion(() => {
+    let movimientos = 0;
+    for (const cuenta of cuentas) {
+      movimientos += base.ejecutar("DELETE FROM apuntes WHERE cuenta_id = ? AND origen = 'banco'", cuenta).cambios;
+      base.ejecutar("DELETE FROM saldos WHERE cuenta_id = ? AND origen = 'banco'", cuenta);
+      base.ejecutar("DELETE FROM importaciones WHERE cuenta_id = ? AND archivo = 'Enable Banking'", cuenta);
+      const enUso = base.uno<{ n: number }>(
+        `SELECT (SELECT count(*) FROM apuntes WHERE cuenta_id = ?1) + (SELECT count(*) FROM saldos WHERE cuenta_id = ?1)
+              + (SELECT count(*) FROM metas WHERE cuenta_id = ?1) + (SELECT count(*) FROM aportaciones WHERE cuenta_id = ?1) AS n`,
+        cuenta,
+      )?.n;
+      if (!enUso) base.ejecutar("DELETE FROM cuentas WHERE id = ?", cuenta);
+    }
+    return movimientos;
+  });
 }
 
 /** Vuelta del banco: crea la sesión, da de alta una cuenta de Calderilla por cada cuenta del banco y trae los datos. */
@@ -157,6 +181,12 @@ export function rutasBancos(app: Hono, estado: Estado) {
                         </form>
                         <p style="margin-top:8px">
                           ${botonAccion("/bancos/desvincular", "Desvincular", { estilo: "enlace", campos: { sesion: conexion.sessionId }, confirmar: `¿Desvincular ${conexion.banco}? Los movimientos ya traídos se quedan.` })}
+                          ·
+                          ${botonAccion("/bancos/desvincular", "Desvincular y borrar lo que trajo", {
+                            estilo: "enlace",
+                            campos: { sesion: conexion.sessionId, borrar: "1" },
+                            confirmar: `¿Desvincular ${conexion.banco} y borrar los saldos y movimientos que trajo? Lo que apuntaste tú no se toca. Útil tras probar con un banco de prueba.`,
+                          })}
                         </p>
                       </article>`;
                     })
@@ -273,8 +303,12 @@ export function rutasBancos(app: Hono, estado: Estado) {
   });
 
   app.post("/bancos/desvincular", async (c) => {
-    const sesion = (await Formulario.de(c)).texto("sesion");
+    const f = await Formulario.de(c);
+    const sesion = f.texto("sesion");
     const config = leerBancos();
+    const conexion = config.conexiones.find((x) => x.sessionId === sesion);
+    let borrados = 0;
+    if (conexion && f.casilla("borrar")) borrados = borrarLoTraido(bd(estado), conexion.cuentas.map((x) => x.cuentaId).filter((id): id is number => id !== null));
     try {
       await cliente()?.borrarSesion(sesion);
     } catch {
@@ -282,6 +316,6 @@ export function rutasBancos(app: Hono, estado: Estado) {
     }
     config.conexiones = config.conexiones.filter((x) => x.sessionId !== sesion);
     guardarBancos(config);
-    return redirigir(c, "/bancos", { ok: "Banco desvinculado." });
+    return redirigir(c, "/bancos", { ok: f.casilla("borrar") ? `Banco desvinculado y borrado lo que trajo (${borrados} movimientos).` : "Banco desvinculado." });
   });
 }

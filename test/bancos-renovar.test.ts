@@ -63,5 +63,17 @@ it("renovar el permiso de un banco reutiliza sus cuentas y no duplica nada", asy
     [["nueva", cuentaId]],
     "la conexión nueva sustituye a la vieja y apunta a la misma cuenta",
   );
+
+  // Tras probar, se puede desvincular borrando lo que trajo; lo apuntado a mano se queda
+  const otra = bd.ejecutar("INSERT INTO cuentas (nombre, tipo) VALUES ('Mía', 'corriente')").id;
+  bd.ejecutar("INSERT INTO apuntes (fecha, importe, concepto) VALUES ('2026-10-10', -1000, 'A MANO')");
+  assert.ok((bd.uno<{ n: number }>("SELECT count(*) AS n FROM apuntes WHERE origen = 'banco'")?.n ?? 0) > 0);
+  const desvincular = await app.request("http://127.0.0.1:5198/bancos/desvincular", { method: "POST", headers: cabeceras, body: "sesion=nueva&borrar=1" });
+  assert.equal(desvincular.status, 303);
+  assert.equal(bd.uno<{ n: number }>("SELECT count(*) AS n FROM apuntes WHERE origen = 'banco'")?.n, 0);
+  assert.equal(bd.uno<{ n: number }>("SELECT count(*) AS n FROM apuntes WHERE concepto = 'A MANO'")?.n, 1);
+  assert.equal(bd.uno("SELECT 1 FROM cuentas WHERE id = ?", cuentaId), undefined, "la cuenta que solo tenía datos del banco desaparece");
+  assert.ok(bd.uno("SELECT 1 FROM cuentas WHERE id = ?", otra), "las demás cuentas no se tocan");
+  assert.equal(leerBancos().conexiones.length, 0);
   estado.sync.cerrar();
 });
