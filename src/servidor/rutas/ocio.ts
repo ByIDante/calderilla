@@ -90,7 +90,7 @@ export function rutasOcio(app: Hono, estado: Estado) {
           </section>
         </div>
         <section class="tarjeta" style="margin-top:16px">
-          <h2>Gastos sueltos de este mes</h2>
+          <div class="tarjeta-cabecera"><h2>Movimientos de este mes</h2><a href="/importar">Importar un extracto del banco</a></div>
           ${apuntes.length
             ? html`<div class="tabla-contenedor">
                 <table>
@@ -106,7 +106,7 @@ export function rutasOcio(app: Hono, estado: Estado) {
                   </tbody>
                 </table>
               </div>`
-            : vacio("Aún no has apuntado gastos de ocio este mes.")}
+            : vacio("Aún no hay movimientos este mes. Apunta tus gastos de ocio o importa el extracto de tu banco.")}
         </section>
       `,
     );

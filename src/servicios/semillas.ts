@@ -21,6 +21,20 @@ const CATEGORIAS: [string, "esencial" | "ocio" | "otro" | "ingreso"][] = [
   ["Viajes", "ocio"],
 ];
 
+// Reglas para categorizar los extractos importados: «si el concepto contiene…»
+const REGLAS: [string, string][] = [
+  ...["mercadona", "carrefour", "lidl", "supermercados dia", "alcampo", "eroski", "consum s coop", "aldi", "bonpreu", "hipercor"].map((p): [string, string] => [p, "Alimentación"]),
+  ...["netflix", "spotify", "hbo", "disney", "prime video", "youtube premium", "icloud"].map((p): [string, string] => [p, "Suscripciones"]),
+  ...["repsol", "cepsa", "galp", "gasolinera", "renfe", "metro", "cabify", "uber "].map((p): [string, string] => [p, "Transporte"]),
+  ...["restaurante", "glovo", "just eat", "uber eats", "burger", "mcdonald", "telepizza"].map((p): [string, string] => [p, "Restaurantes"]),
+  ...["iberdrola", "endesa", "naturgy", "holaluz", "aigues", "canal de isabel", "movistar", "vodafone", "orange", "digi mobil"].map((p): [string, string] => [p, "Suministros"]),
+  ...["amazon", "zara", "decathlon", "ikea", "el corte ingles"].map((p): [string, string] => [p, "Compras"]),
+  ...["farmacia", "dentista", "clinica"].map((p): [string, string] => [p, "Salud"]),
+  ...["cine", "teatro", "ticketmaster", "entradas"].map((p): [string, string] => [p, "Ocio"]),
+  ...["booking", "ryanair", "vueling", "iberia", "airbnb"].map((p): [string, string] => [p, "Viajes"]),
+  ...["nomina", "nómina"].map((p): [string, string] => [p, "Nómina"]),
+];
+
 /** Prepara una base recién abierta: migraciones, categorías por defecto y datos de mercado nuevos. */
 export function prepararBase(bd: BaseDatos) {
   bd.migrar();
@@ -48,6 +62,12 @@ export function prepararBase(bd: BaseDatos) {
       );
     }
   });
+  if (bd.leerMeta("reglas_sembradas") === null) {
+    for (const [patron, categoria] of REGLAS) {
+      bd.ejecutar("INSERT OR IGNORE INTO reglas_categoria (patron, categoria_id) SELECT ?, id FROM categorias WHERE nombre = ?", patron, categoria);
+    }
+    bd.escribirMeta("reglas_sembradas", "1");
+  }
   if (nueva) {
     // Las semillas no cuentan como cambios: así un ordenador nuevo trae los datos del otro en vez de pisarlos
     bd.escribirMeta("creada", new Date().toISOString());

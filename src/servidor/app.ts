@@ -8,6 +8,7 @@ import type { Fecha } from "../dominio/fechas.ts";
 import { rutasAjustes } from "./rutas/ajustes.ts";
 import { rutasCuentas } from "./rutas/cuentas.ts";
 import { rutasGastos } from "./rutas/gastos.ts";
+import { rutasImportar } from "./rutas/importar.ts";
 import { rutasInversiones } from "./rutas/inversiones.ts";
 import { rutasMetas } from "./rutas/metas.ts";
 import { rutasOcio } from "./rutas/ocio.ts";
@@ -94,6 +95,7 @@ export function crearApp(estado: Estado): Hono {
   rutasResumen(app, estado);
   rutasGastos(app, estado);
   rutasOcio(app, estado);
+  rutasImportar(app, estado);
   rutasCuentas(app, estado);
   rutasInversiones(app, estado);
   rutasMetas(app, estado);
