@@ -600,6 +600,118 @@ table.tabla-fija col.col-mes {
 table.tabla-fija col.col-fin {
   width: 24%;
 }
+/* Tablas con desplegables y botones en la fila: todo centrado en vertical y los botones enteros */
+table.tabla-acciones td {
+  vertical-align: middle;
+}
+td.celda-boton {
+  width: 1%;
+  white-space: nowrap;
+}
+/* Pestañas para elegir banco o cuenta */
+.pestanas {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.pestanas a {
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--linea-fuerte);
+  background: var(--superficie);
+  color: var(--tinta-suave);
+  text-decoration: none;
+  font-size: 14px;
+  white-space: nowrap;
+}
+.pestanas a:hover {
+  background: var(--superficie-2);
+  color: var(--tinta);
+}
+.pestanas a[aria-current="true"] {
+  background: var(--acento);
+  border-color: var(--acento);
+  color: var(--sobre-acento);
+  font-weight: 600;
+}
+.pestanas .numero-pestana {
+  opacity: 0.75;
+  font-size: 12px;
+  margin-left: 4px;
+}
+.pestanas-secundarias a {
+  font-size: 13px;
+  padding: 3px 10px;
+}
+/* Ocio: reparto de los ingresos y medidor de lo gastado */
+.reparto {
+  display: flex;
+  gap: 2px;
+  height: 22px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: var(--superficie-2);
+  margin: 8px 0 10px;
+}
+.tramo {
+  min-width: 3px;
+}
+.tramo-1 {
+  background: var(--serie-1);
+}
+.tramo-2 {
+  background: var(--serie-2);
+}
+.tramo-3 {
+  background: var(--serie-3);
+}
+.tramo-4 {
+  background: var(--serie-4);
+}
+.tramo-5 {
+  background: var(--serie-5);
+}
+.leyenda {
+  list-style: none;
+  padding: 0;
+  margin: 0 0 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  font-size: 13.5px;
+  color: var(--tinta-suave);
+}
+.leyenda b {
+  color: var(--tinta);
+}
+.muestra {
+  display: inline-block;
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  margin-right: 6px;
+}
+.medidor-ocio .aviso-icono {
+  display: inline-grid;
+  vertical-align: -4px;
+}
+.estado-bien {
+  background: var(--bien);
+}
+.estado-atencion {
+  background: var(--aviso);
+}
+.estado-mal {
+  background: var(--mal);
+}
+tr.fila-total td {
+  border-top: 2px solid var(--linea-fuerte);
+}
+tr.grupo td {
+  background: var(--superficie-2);
+  font-weight: 650;
+}
 tr.finalizado td {
   color: var(--apagado);
 }
@@ -701,6 +813,7 @@ button {
 }
 .boton {
   display: inline-block;
+  white-space: nowrap;
   border-radius: 8px;
   padding: 8px 14px;
   border: 1px solid var(--linea-fuerte);

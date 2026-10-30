@@ -75,19 +75,42 @@ export function rutasOcio(app: Hono, estado: Estado) {
     const automatico = totalMensual(leerAportaciones(base), mes);
     const proporcion = p.sobrante > 0 ? Math.round(((p.objetivoAhorro - p.cuotaLiberada) / Math.max(p.sobrante - p.cuotaLiberada, 1)) * 100) : 0;
 
-    const filasCalculo: [string, number, string?][] = [
+    // [texto, importe, nota, tramo de color de la barra de reparto]
+    type Fila = [string, number, string?, number?];
+    const filasCalculo: Fila[] = [
       ["Ingresos al mes", p.ingresos],
-      ["− Gastos esenciales", -p.esenciales],
-      ["− Gastos no esenciales", -p.noEsenciales],
+      ["− Gastos esenciales", -p.esenciales, undefined, 1],
+      ["− Gastos no esenciales", -p.noEsenciales, undefined, 2],
       ["= Te sobra", p.sobrante],
-      [`− Ahorro de la etapa «${NOMBRE_ETAPA[ctx.resultado.etapa]}»`, -(p.objetivoAhorro - p.paraMetas), [`un ${proporcion} % de lo que sobra`, p.cuotaLiberada ? `más la cuota liberada de ${eurR(p.cuotaLiberada)}` : "", automatico ? `tu ahorro automático cubre ${eurR(automatico)}` : ""].filter(Boolean).join(", ")],
-      ...(p.paraMetas ? [["− Para tus metas", -p.paraMetas] as [string, number]] : []),
-      ["= Ocio previsto", p.ocioPlan],
-      ...(p.correccion ? [["− Corrección por los cierres", -p.correccion, "ahorraste menos de lo previsto en 2 de los 3 últimos cierres"] as [string, number, string]] : []),
-      ...(p.ocioRemanente ? [["+ Lo que te sobró del mes pasado", p.ocioRemanente] as [string, number]] : []),
+      [
+        `− Ahorro de la etapa «${NOMBRE_ETAPA[ctx.resultado.etapa]}»`,
+        -(p.objetivoAhorro - p.paraMetas),
+        [`un ${proporcion} % de lo que sobra`, p.cuotaLiberada ? `más la cuota liberada de ${eurR(p.cuotaLiberada)}` : "", automatico ? `tu ahorro automático cubre ${eurR(automatico)}` : ""].filter(Boolean).join(", "),
+        3,
+      ],
+      ...(p.paraMetas ? [["− Para tus metas", -p.paraMetas, undefined, 4] as Fila] : []),
+      ["= Ocio previsto", p.ocioPlan, undefined, 5],
+      ...(p.correccion ? [["− Corrección por los cierres", -p.correccion, "ahorraste menos de lo previsto en 2 de los 3 últimos cierres"] as Fila] : []),
+      ...(p.ocioRemanente ? [["+ Lo que te sobró del mes pasado", p.ocioRemanente] as Fila] : []),
       ["− Ya gastado en ocio este mes", -p.ocioGastado],
       ["= Te queda", p.ocioQueda],
     ];
+    // Reparto de los ingresos en una barra (si gastas más de lo que ingresas, la barra es el total de gastos)
+    const tramos = [
+      { n: 1, nombre: "Esenciales", valor: p.esenciales },
+      { n: 2, nombre: "No esenciales", valor: p.noEsenciales },
+      { n: 3, nombre: "Ahorro", valor: Math.max(p.objetivoAhorro - p.paraMetas, 0) },
+      { n: 4, nombre: "Metas", valor: p.paraMetas },
+      { n: 5, nombre: "Ocio", valor: p.ocioPlan },
+    ].filter((t) => t.valor > 0);
+    const disponible = p.ocio + p.ocioRemanente;
+    const usado = disponible > 0 ? (p.ocioGastado / disponible) * 100 : p.ocioGastado > 0 ? 101 : 0;
+    const estadoOcio =
+      usado > 100
+        ? { clase: "mal", icono: "×", texto: "Te has pasado del ocio de este mes." }
+        : usado >= 75
+          ? { clase: "atencion", icono: "!", texto: "Ojo: te queda poco ocio este mes." }
+          : { clase: "bien", icono: "✓", texto: "Vas bien." };
 
     return render(
       c,
@@ -118,16 +141,41 @@ export function rutasOcio(app: Hono, estado: Estado) {
           </section>
           <section class="tarjeta">
             <h2>Cómo se calcula</h2>
-            <div class="tabla-contenedor"><table>
-              <tbody>
-                ${filasCalculo.map(
-                  ([texto, valor, nota]) => html`<tr>
-                    <td>${texto}${nota ? html`<div class="apagado pequeno">${nota}</div>` : ""}</td>
-                    <td class="numero ${texto.startsWith("=") ? "" : "apagado"}">${texto.startsWith("=") ? html`<b>${eur(valor)}</b>` : eur(valor)}</td>
-                  </tr>`,
-                )}
-              </tbody>
-            </table></div>
+            ${p.sobrante < 0
+              ? html`<p class="negativo"><b>Gastas ${eurR(-p.sobrante)} al mes más de lo que ingresas:</b> no queda nada para ahorro ni ocio.</p>`
+              : ""}
+            <div class="reparto" role="img" aria-label="Reparto de tus ingresos: ${tramos.map((t) => `${t.nombre} ${eurR(t.valor)}`).join(", ")}">
+              ${tramos.map((t) => html`<span class="tramo tramo-${t.n}" style="flex-grow: ${t.valor}" title="${t.nombre}: ${eurR(t.valor)}"></span>`)}
+            </div>
+            <ul class="leyenda">
+              ${tramos.map((t) => html`<li><span class="muestra tramo-${t.n}" aria-hidden="true"></span>${t.nombre} <b>${eurR(t.valor)}</b></li>`)}
+            </ul>
+            <div class="medidor-ocio">
+              <div class="tarjeta-cabecera" style="margin-bottom:0">
+                <span><span class="aviso-icono estado-${estadoOcio.clase}" aria-hidden="true">${estadoOcio.icono}</span> ${estadoOcio.texto}</span>
+                <span class="numero">${eurR(p.ocioGastado)} de ${eurR(disponible)}</span>
+              </div>
+              <div class="barra" role="progressbar" aria-label="Ocio gastado" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(Math.min(usado, 100))}">
+                <div class="barra-relleno estado-${estadoOcio.clase}" style="width: ${Math.min(usado, 100).toFixed(1)}%"></div>
+              </div>
+            </div>
+            <details class="como-tabla" style="margin-top:10px">
+              <summary>Ver el cálculo paso a paso</summary>
+              <div class="tabla-contenedor"><table>
+                <tbody>
+                  ${filasCalculo.map(
+                    ([texto, valor, nota, tramo]) => html`<tr class="${texto.startsWith("=") ? "fila-total" : ""}">
+                      <td>
+                        ${tramo ? html`<span class="muestra tramo-${tramo}" aria-hidden="true"></span>` : ""}${texto}${nota ? html`<div class="apagado pequeno">${nota}</div>` : ""}
+                      </td>
+                      <td class="numero ${texto === "= Te queda" ? (valor < 0 ? "negativo" : "positivo") : texto.startsWith("=") ? "" : "apagado"}">
+                        ${texto.startsWith("=") ? html`<b>${eur(valor)}</b>` : eur(valor)}
+                      </td>
+                    </tr>`,
+                  )}
+                </tbody>
+              </table></div>
+            </details>
             ${porque(
               "Primero se cubren los gastos y el ahorro que pide tu etapa de la escalera; lo que queda es para disfrutarlo sin culpa. Al subir de etapa se ahorra una parte menor de lo que sobra, así que el ocio crece. Si en los cierres de mes ahorras menos de lo previsto, es que hay gastos sin apuntar: el ocio baja hasta que cuadre. De lo que no gastes, la mitad pasa al mes siguiente.",
             )}
@@ -144,7 +192,7 @@ export function rutasOcio(app: Hono, estado: Estado) {
                       (a) => html`<tr>
                         <td>${formatoFecha(a.fecha)}</td><td>${a.concepto}</td><td>${a.categoria ?? "—"}${a.tipo === "ocio" ? "" : html` <span class="apagado pequeno">(no es ocio)</span>`}</td>
                         <td class="numero">${eur(-a.importe)}</td>
-                        <td>${botonAccion(`/apuntes/${a.id}/borrar`, "Borrar", { estilo: "enlace", confirmar: "¿Borrar este apunte?" })}</td>
+                        <td class="celda-boton">${botonAccion(`/apuntes/${a.id}/borrar`, "Borrar", { estilo: "peligro", pequeno: true, mantenerPosicion: true, confirmar: "¿Borrar este apunte?" })}</td>
                       </tr>`,
                     )}
                   </tbody>
