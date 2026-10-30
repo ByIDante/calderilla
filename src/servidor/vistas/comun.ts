@@ -10,6 +10,7 @@ export const SECCIONES = [
   { ruta: "/", id: "resumen", nombre: "Resumen" },
   { ruta: "/gastos", id: "gastos", nombre: "Ingresos y gastos" },
   { ruta: "/ocio", id: "ocio", nombre: "Ocio" },
+  { ruta: "/movimientos", id: "movimientos", nombre: "Movimientos" },
   { ruta: "/cuentas", id: "cuentas", nombre: "Cuentas y cierres" },
   { ruta: "/inversiones", id: "inversiones", nombre: "Inversiones" },
   { ruta: "/metas", id: "metas", nombre: "Metas" },

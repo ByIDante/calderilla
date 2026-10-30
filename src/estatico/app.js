@@ -84,6 +84,10 @@ function preparar(raiz) {
 }
 
 document.addEventListener("change", () => actualizarDependientes(document));
+// Desplegables que guardan al cambiar (p. ej. la categoría de un movimiento)
+document.addEventListener("change", (evento) => {
+  if (evento.target.matches?.("select[data-enviar-al-cambiar]")) evento.target.form?.requestSubmit();
+});
 // ✕ de los avisos que solo se esconden hasta recargar
 document.addEventListener("click", (evento) => {
   const boton = evento.target.closest?.("[data-cerrar-aviso]");

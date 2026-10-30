@@ -13,6 +13,7 @@ import { rutasGastos } from "./rutas/gastos.ts";
 import { rutasImportar } from "./rutas/importar.ts";
 import { rutasInversiones } from "./rutas/inversiones.ts";
 import { rutasMetas } from "./rutas/metas.ts";
+import { rutasMovimientos } from "./rutas/movimientos.ts";
 import { rutasOcio } from "./rutas/ocio.ts";
 import { rutasResumen } from "./rutas/resumen.ts";
 import { seguridad } from "./seguridad.ts";
@@ -108,6 +109,7 @@ export function crearApp(estado: Estado): Hono {
   rutasGastos(app, estado);
   rutasOcio(app, estado);
   rutasImportar(app, estado);
+  rutasMovimientos(app, estado);
   rutasCuentas(app, estado);
   rutasInversiones(app, estado);
   rutasMetas(app, estado);
