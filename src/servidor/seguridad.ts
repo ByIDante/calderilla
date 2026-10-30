@@ -9,6 +9,10 @@ export const COOKIE = "calderilla";
  * - solo se aceptan peticiones dirigidas a 127.0.0.1 o localhost con nuestro puerto;
  * - los cambios (POST…) deben venir de la propia app (cabecera Origin) y traer el token de este arranque,
  *   guardado en una cookie SameSite=Strict que otras webs no pueden enviar.
+ *
+ * Algunos envíos de formulario normales (los que suben archivos) llegan con «Origin: null» si el navegador
+ * aplica una política de privacidad estricta. Se aceptan: la cookie SameSite=Strict sigue siendo obligatoria
+ * y ninguna otra web puede mandarla.
  */
 export function seguridad(puerto: number, token: string): MiddlewareHandler {
   const hosts = new Set([`127.0.0.1:${puerto}`, `localhost:${puerto}`]);
@@ -18,7 +22,7 @@ export function seguridad(puerto: number, token: string): MiddlewareHandler {
     const lectura = c.req.method === "GET" || c.req.method === "HEAD";
     if (!lectura) {
       const origen = c.req.header("origin");
-      if (origen && !origenes.has(origen)) return c.text("Origen no permitido", 403);
+      if (origen && origen !== "null" && !origenes.has(origen)) return c.text("Origen no permitido", 403);
       if (getCookie(c, COOKIE) !== token) {
         return c.text("La sesión ha caducado (¿se reinició Calderilla?). Vuelve atrás, recarga la página y repite el cambio.", 403);
       }
@@ -27,7 +31,7 @@ export function seguridad(puerto: number, token: string): MiddlewareHandler {
     }
     c.header("X-Frame-Options", "DENY");
     c.header("X-Content-Type-Options", "nosniff");
-    c.header("Referrer-Policy", "no-referrer");
+    c.header("Referrer-Policy", "same-origin");
     c.header("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-ancestors 'none'; form-action 'self'");
     await next();
   };

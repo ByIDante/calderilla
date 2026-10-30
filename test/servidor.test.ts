@@ -57,6 +57,13 @@ describe("seguridad de la web local", () => {
     assert.equal(respuesta.status, 403);
   });
 
+  it("acepta formularios con «Origin: null» (subida de archivos) solo si traen el token", async () => {
+    const sinToken = await pedir("/bienvenida", { metodo: "POST", cuerpo: { carpeta: "relativa" }, cabeceras: { origin: "null" }, conCookie: false });
+    assert.equal(sinToken.status, 403);
+    const conToken = await pedir("/bienvenida", { metodo: "POST", cuerpo: { carpeta: "relativa" }, cabeceras: { origin: "null" } });
+    assert.equal(conToken.status, 303, "pasa la seguridad (y luego se queja de la ruta, que no es completa)");
+  });
+
   it("rechaza cambios sin el token de este arranque", async () => {
     const respuesta = await pedir("/bienvenida", { metodo: "POST", cuerpo: { carpeta: "/tmp/x" }, conCookie: false });
     assert.equal(respuesta.status, 403);
