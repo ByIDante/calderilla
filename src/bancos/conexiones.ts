@@ -29,6 +29,12 @@ export interface Conexion {
 
 export interface ConfigBancos {
   appId: string | null;
+  /**
+   * Dirección de vuelta registrada en la aplicación de Enable Banking. No acepta direcciones locales, así que
+   * suele ser una página pública en https: el banco te deja allí y pegas la dirección en Calderilla.
+   * null = la de esta app (http://127.0.0.1:puerto/bancos/volver), por si algún día la aceptan.
+   */
+  redireccion?: string | null;
   conexiones: Conexion[];
 }
 

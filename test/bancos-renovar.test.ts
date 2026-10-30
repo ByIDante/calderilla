@@ -50,6 +50,13 @@ it("renovar el permiso de un banco reutiliza sus cuentas y no duplica nada", asy
 
   const app = crearApp(estado);
   const cabeceras = { host: "127.0.0.1:5198", cookie: "calderilla=t", "content-type": "application/x-www-form-urlencoded" };
+  // Con una dirección de vuelta pública (Enable Banking no acepta las locales), el pegado es el paso normal
+  guardarBancos({ ...leerBancos(), redireccion: "https://gist.github.com/yo/abc" });
+  const conPegado = await (await app.request("http://127.0.0.1:5198/bancos/conectar", { method: "POST", headers: cabeceras, body: "banco=CaixaBank" })).text();
+  assert.match(conPegado, /Cuando termines en el banco/);
+  assert.doesNotMatch(conPegado, /data-esperar-autorizacion/);
+  guardarBancos({ ...leerBancos(), redireccion: null });
+
   const conectar = await app.request("http://127.0.0.1:5198/bancos/conectar", { method: "POST", headers: cabeceras, body: "banco=CaixaBank" });
   assert.equal(conectar.status, 200);
   assert.ok(estadoAutorizacion);

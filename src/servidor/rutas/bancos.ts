@@ -15,6 +15,9 @@ const autorizaciones = new Map<string, { banco: Banco; creado: number }>();
 let listaBancos: { bancos: Banco[]; obtenida: number } | null = null;
 
 const redireccionLocal = (estado: Estado) => `http://127.0.0.1:${estado.ajustes.puerto}/bancos/volver`;
+/** La dirección de vuelta registrada en Enable Banking (tiene que coincidir exactamente con la de allí). */
+const redireccion = (estado: Estado) => leerBancos().redireccion || redireccionLocal(estado);
+const esLocal = (url: string) => /^http:\/\/(127\.0\.0\.1|localhost)[:/]/.test(url);
 const ocultarIban = (iban: string | null) => (iban ? `···· ${iban.slice(-4)}` : "");
 
 async function bancosDisponibles(): Promise<Banco[]> {
@@ -124,8 +127,9 @@ export function rutasBancos(app: Hono, estado: Estado) {
         descarga un archivo <code>.pem</code> que debes guardar.
       </li>
       <li>
-        Como dirección de vuelta (<i>redirect URL</i>) pon <code>${redireccionLocal(estado)}</code>. Si no la acepta, pon una tuya en https (p. ej.
-        <code>https://example.com/calderilla</code>): después de autorizar en el banco tendrás que copiar la dirección y pegarla aquí.
+        Como dirección de vuelta (<i>redirect URL</i>), Enable Banking no acepta direcciones de tu ordenador: pon una página pública tuya en https, por
+        ejemplo la de tu política de privacidad (el gist). Escribe <b>la misma</b> abajo, en «Dirección de vuelta». Al autorizar, el banco te dejará en esa
+        página: copias la dirección completa del navegador y la pegas en Calderilla.
       </li>
       <li>En el panel, vincula tus propias cuentas (<i>Link accounts</i>): así la aplicación queda en <b>modo restringido</b>, que es gratis para uso personal.</li>
       <li>Pega aquí el ID de la aplicación y sube el archivo <code>.pem</code>.</li>
@@ -133,6 +137,13 @@ export function rutasBancos(app: Hono, estado: Estado) {
     const formularioClave = html`<form method="post" action="/bancos/configurar" enctype="multipart/form-data" class="formulario" hx-boost="false">
       <div class="fila-campos">
         ${campo({ etiqueta: "ID de la aplicación", nombre: "appId", valor: config.appId, requerido: true, marcador: "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee" })}
+        ${campo({
+          etiqueta: "Dirección de vuelta (redirect URL)",
+          nombre: "redireccion",
+          valor: config.redireccion ?? "",
+          marcador: "https://gist.github.com/…",
+          ayuda: "Exactamente la misma que registraste en Enable Banking.",
+        })}
         <div class="campo">
           <label for="campo-pem">Clave privada (.pem)</label>
           <input id="campo-pem" type="file" name="pem" accept=".pem" ${configurado ? "" : html`required`} />
@@ -245,7 +256,9 @@ export function rutasBancos(app: Hono, estado: Estado) {
     } else if (!hayClave()) {
       return redirigir(c, "/bancos", { error: "Sube el archivo .pem de la aplicación." });
     }
-    guardarBancos({ ...leerBancos(), appId });
+    const vuelta = String(cuerpo.redireccion ?? "").trim();
+    if (vuelta && !/^https:\/\/\S+$/.test(vuelta) && !esLocal(vuelta)) return redirigir(c, "/bancos", { error: "La dirección de vuelta tiene que empezar por https://" });
+    guardarBancos({ ...leerBancos(), appId, redireccion: vuelta || null });
     listaBancos = null;
     return redirigir(c, "/bancos", { ok: "Guardado. Ya puedes conectar tu banco." });
   });
@@ -260,7 +273,7 @@ export function rutasBancos(app: Hono, estado: Estado) {
     autorizaciones.set(token, { banco, creado: Date.now() });
     let url: string;
     try {
-      url = await api.iniciar(banco, redireccionLocal(estado), token);
+      url = await api.iniciar(banco, redireccion(estado), token);
     } catch (error) {
       return redirigir(c, "/bancos", { error: (error as Error).message });
     }
@@ -271,17 +284,24 @@ export function rutasBancos(app: Hono, estado: Estado) {
       { titulo: `Autorizar ${banco.nombre}`, seccion: "ajustes" },
       html`<section class="tarjeta">
         <p>
-          Se abrirá ${banco.nombre} en una pestaña nueva para que autorices el acceso de solo lectura. Esta pestaña se queda esperando y se actualiza sola cuando
-          termines.
+          Se abrirá ${banco.nombre} en una pestaña nueva para que autorices el acceso de solo lectura.
+          ${esLocal(redireccion(estado))
+            ? "Esta pestaña se queda esperando y se actualiza sola cuando termines."
+            : "Cuando termines, vuelve a esta pestaña y pega la dirección en la que te haya dejado el banco."}
         </p>
         <p><a class="boton boton-principal" href="${url}" target="_blank" rel="noopener noreferrer">Ir a ${banco.nombre}</a></p>
-        <p class="apagado" data-esperar-autorizacion="${token}">Esperando a que autorices en la otra pestaña…</p>
-        <details style="margin-top:16px">
-          <summary>¿El banco te ha dejado en otra página?</summary>
-          <p class="apagado">Si registraste una dirección de vuelta que no es la de Calderilla, copia la dirección completa de esa página (la que lleva <code>?code=</code>) y pégala aquí.</p>
+        ${esLocal(redireccion(estado))
+          ? html`<p class="apagado" data-esperar-autorizacion="${token}">Esperando a que autorices en la otra pestaña…</p>`
+          : ""}
+        <details ${esLocal(redireccion(estado)) ? "" : html`open`} style="margin-top:16px">
+          <summary>${esLocal(redireccion(estado)) ? "¿El banco te ha dejado en otra página?" : "Cuando termines en el banco"}</summary>
+          <p class="apagado">
+            El banco te dejará en tu página de vuelta (${redireccion(estado)}) con una dirección que lleva <code>?code=</code>. Copia esa dirección completa de la barra del
+            navegador y pégala aquí.
+          </p>
           <form method="post" action="/bancos/volver-manual" class="formulario">
             ${campo({ etiqueta: "Dirección a la que te devolvió el banco", nombre: "url", requerido: true })}
-            <div class="botones"><button class="boton" type="submit">Terminar</button></div>
+            <div class="botones"><button class="boton boton-principal" type="submit">Terminar</button></div>
           </form>
         </details>
       </section>`,
