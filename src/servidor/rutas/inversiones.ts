@@ -308,7 +308,7 @@ export function rutasInversiones(app: Hono, estado: Estado) {
         <section class="tarjeta" style="margin-top:16px">
           <h2>Movimientos</h2>
           ${movimientos.length
-            ? html`<table>
+            ? html`<div class="tabla-contenedor"><table>
                 <thead><tr><th>Fecha</th><th>Operación</th><th class="numero">Unidades</th><th class="numero">Euros</th><th></th></tr></thead>
                 <tbody>
                   ${movimientos.map(
@@ -318,7 +318,7 @@ export function rutasInversiones(app: Hono, estado: Estado) {
                     </tr>`,
                   )}
                 </tbody>
-              </table>`
+              </table></div>`
             : vacio("Sin movimientos.")}
         </section>
         ${precios.length
