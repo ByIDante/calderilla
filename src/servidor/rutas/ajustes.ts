@@ -165,7 +165,10 @@ export function rutasAjustes(app: Hono, estado: Estado) {
               })}
               <div class="botones"><button class="boton" type="submit">Guardar</button></div>
             </form>
-            <p class="pequeno" style="margin-top:12px"><a href="/importar">Importar movimientos de un extracto (CSV o Excel)</a></p>
+            <ul class="lista-plana" style="margin-top:12px">
+              <li><a href="/bancos">Conectar tu banco (Enable Banking)</a><span class="apagado pequeno">saldos y movimientos automáticos</span></li>
+              <li><a href="/importar">Importar un extracto</a><span class="apagado pequeno">CSV o Excel, cualquier banco</span></li>
+            </ul>
           </section>
           <section class="tarjeta">
             <h2>Categorías</h2>

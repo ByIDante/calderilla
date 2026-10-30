@@ -23,7 +23,7 @@ export function leerReglas(bd: BaseDatos): (Regla & { id: number; categoria: str
   ).map((r) => ({ id: r.id, patron: r.patron, categoriaId: r.categoria_id, categoria: r.categoria }));
 }
 
-export function coincidencia(m: Movimiento, recurrentes: readonly RecurrenteCompleto[]): RecurrenteCompleto | null {
+export function coincidencia(m: Pick<Movimiento, "fecha" | "importe">, recurrentes: readonly RecurrenteCompleto[]): RecurrenteCompleto | null {
   const tipo = m.importe < 0 ? "gasto" : "ingreso";
   const importe = Math.abs(m.importe);
   return (
@@ -94,6 +94,33 @@ export function importar(
       );
     }
     return { nuevas: nuevas.length, duplicadas: propuestas.length - nuevas.length };
+  });
+}
+
+/** Movimientos traídos del banco (Enable Banking): se reconocen por la referencia que da el propio banco. */
+export function importarDelBanco(bd: BaseDatos, movimientos: readonly { idExterno: string; fecha: Fecha; importe: number; concepto: string }[], cuentaId: number, hoy: Fecha): number {
+  if (!movimientos.length) return 0;
+  const reglas = leerReglas(bd);
+  const recurrentes = leerRecurrentes(bd);
+  return bd.transaccion(() => {
+    let nuevos = 0;
+    for (const m of movimientos) {
+      const recurrente = coincidencia(m, recurrentes);
+      const { cambios } = bd.ejecutar(
+        "INSERT OR IGNORE INTO apuntes (fecha, importe, concepto, categoria_id, cuenta_id, recurrente_id, origen, id_externo, hash_dedupe) VALUES (?, ?, ?, ?, ?, ?, 'banco', ?, ?)",
+        m.fecha,
+        m.importe,
+        m.concepto,
+        recurrente?.categoriaId ?? categoriaPorReglas(m.concepto, reglas),
+        cuentaId,
+        recurrente?.id ?? null,
+        m.idExterno,
+        `eb:${cuentaId}:${m.idExterno}`,
+      );
+      nuevos += cambios;
+    }
+    if (nuevos) bd.ejecutar("INSERT INTO importaciones (fecha, archivo, cuenta_id, filas, nuevas) VALUES (?, 'Enable Banking', ?, ?, ?)", hoy, cuentaId, movimientos.length, nuevos);
+    return nuevos;
   });
 }
 

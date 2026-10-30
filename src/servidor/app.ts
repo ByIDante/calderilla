@@ -5,7 +5,9 @@ import type { Ajustes } from "../config/ajustes.ts";
 import type { BaseDatos } from "../datos/db.ts";
 import type { Sincronizador } from "../datos/sync.ts";
 import type { Fecha } from "../dominio/fechas.ts";
+import { diasParaCaducar, leerBancos } from "../bancos/conexiones.ts";
 import { rutasAjustes } from "./rutas/ajustes.ts";
+import { rutasBancos } from "./rutas/bancos.ts";
 import { rutasCuentas } from "./rutas/cuentas.ts";
 import { rutasGastos } from "./rutas/gastos.ts";
 import { rutasImportar } from "./rutas/importar.ts";
@@ -42,6 +44,16 @@ export function bandas(estado: Estado): Banda[] {
   if (sync.aviso) {
     lista.push({ nivel: "info", texto: sync.aviso });
     sync.aviso = null;
+  }
+  for (const conexion of leerBancos().conexiones) {
+    const dias = diasParaCaducar(conexion);
+    if (dias <= 14) {
+      lista.push({
+        nivel: "atencion",
+        texto: dias < 0 ? `El permiso de ${conexion.banco} ha caducado.` : `El permiso de ${conexion.banco} caduca en ${dias} días.`,
+        enlace: { ruta: "/bancos", texto: "Renovarlo" },
+      });
+    }
   }
   if (sync.estado.tipo === "error") {
     lista.push({ nivel: "error", texto: `No se puede usar la carpeta de datos: ${sync.estado.mensaje}`, enlace: { ruta: "/ajustes", texto: "Revisar en Ajustes" } });
@@ -100,6 +112,7 @@ export function crearApp(estado: Estado): Hono {
   rutasInversiones(app, estado);
   rutasMetas(app, estado);
   rutasAjustes(app, estado);
+  rutasBancos(app, estado);
 
   app.onError((error, c) => {
     console.error(error);

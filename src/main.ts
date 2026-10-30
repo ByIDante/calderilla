@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { serve } from "@hono/node-server";
 import { cargarAjustes, carpetaAjustes, guardarAjustes, rutaTrabajo } from "./config/ajustes.ts";
+import { haySincronizacionPendiente, sincronizarBancos } from "./bancos/conexiones.ts";
 import { Sincronizador } from "./datos/sync.ts";
 import { actualizarPrecios, hayQueActualizar } from "./precios/actualizar.ts";
 import { hoy } from "./dominio/fechas.ts";
@@ -91,10 +92,26 @@ function actualizarPreciosSiToca() {
 }
 actualizarPreciosSiToca();
 
+/** Saldos y movimientos de los bancos vinculados, como mucho cada 12 horas. */
+let sincronizandoBancos = false;
+function sincronizarBancosSiToca() {
+  if (sincronizandoBancos || !estado.sync || !haySincronizacionPendiente()) return;
+  sincronizandoBancos = true;
+  sincronizarBancos(() => estado.sync!.bd, hoy())
+    .then((informe) => {
+      if (informe.errores.length) console.warn("Bancos:", informe.errores.join(" · "));
+      estado.sync?.programarEnvio();
+    })
+    .catch((error: Error) => console.warn("No se pudo sincronizar con el banco:", error.message))
+    .finally(() => (sincronizandoBancos = false));
+}
+sincronizarBancosSiToca();
+
 // Cada minuto se mira si hay cambios de otro ordenador y se guarda lo pendiente
 setInterval(() => {
   estado.sync?.comprobar();
   actualizarPreciosSiToca();
+  sincronizarBancosSiToca();
 }, 60_000);
 
 let cerrando = false;

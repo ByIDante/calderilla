@@ -9,6 +9,8 @@ import { crearApp, type Estado } from "../src/servidor/app.ts";
 import { prepararBase } from "../src/servicios/semillas.ts";
 
 const carpeta = mkdtempSync(path.join(os.tmpdir(), "calderilla-servidor-"));
+// Los ajustes de este ordenador (bancos, claves…) también en la carpeta temporal
+process.env.CALDERILLA_CONFIG_DIR = carpeta;
 after(() => rmSync(carpeta, { recursive: true, force: true }));
 
 const PUERTO = 5199;
@@ -113,7 +115,7 @@ describe("recorrido básico", () => {
   });
 
   it("todas las páginas responden", async () => {
-    for (const ruta of ["/", "/gastos", "/gastos/nuevo", "/gastos/3/cuadro", "/ocio", "/cuentas", "/cierre", "/inversiones", "/metas", "/ajustes", "/ajustes/mercado", "/ajustes/parametros"]) {
+    for (const ruta of ["/", "/gastos", "/gastos/nuevo", "/gastos/3/cuadro", "/ocio", "/cuentas", "/cierre", "/inversiones", "/metas", "/ajustes", "/ajustes/mercado", "/ajustes/parametros", "/ajustes/cuestionario", "/importar", "/bancos"]) {
       assert.equal((await pedir(ruta)).status, 200, ruta);
     }
   });
