@@ -12,7 +12,7 @@ export function barrasPresupuesto(lineas: readonly LineaPresupuesto[]): Html {
         <span class="numero ${l.gastado > l.limite! ? "negativo" : ""}">${eur(l.gastado)} de ${eurR(l.limite!)}</span>
       </div>
       ${barra(l.gastado, l.limite!, `Gastado en ${l.nombre}`, { limite: true })}
-      ${l.proyeccion !== null && l.gastado <= l.limite! ? html`<p class="apagado pequeno" style="margin:0">A este ritmo, unos ${eurR(l.proyeccion)} a final de mes.</p>` : ""}
+      ${l.proyeccion !== null && l.gastado > 0 && l.gastado <= l.limite! ? html`<p class="apagado pequeno" style="margin:0">A este ritmo, unos ${eurR(l.proyeccion)} a final de mes.</p>` : ""}
     </div>`,
   )}`;
 }
