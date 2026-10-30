@@ -480,6 +480,12 @@ th {
   background: var(--acento);
   border-radius: 999px;
 }
+.barra-limite {
+  background: var(--info);
+}
+.barra-pasada {
+  background: var(--mal);
+}
 
 .accion {
   padding: 12px 0;

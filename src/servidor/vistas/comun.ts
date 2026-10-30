@@ -115,10 +115,12 @@ export function porque(texto: string): Html {
   return html`<details class="porque"><summary>¿Por qué?</summary><p>${texto}</p></details>`;
 }
 
-export function barra(actual: number, objetivo: number, etiqueta: string): Html {
+/** `limite: true` la pinta en rojo al pasarse (presupuestos); si no, es progreso hacia un objetivo. */
+export function barra(actual: number, objetivo: number, etiqueta: string, opciones: { limite?: boolean } = {}): Html {
   const pct = objetivo > 0 ? Math.max(0, Math.min(100, (actual / objetivo) * 100)) : 0;
+  const pasada = opciones.limite && actual > objetivo;
   return html`<div class="barra" role="progressbar" aria-label="${etiqueta}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${Math.round(pct)}">
-    <div class="barra-relleno" style="width: ${pct.toFixed(1)}%"></div>
+    <div class="barra-relleno ${pasada ? "barra-pasada" : opciones.limite ? "barra-limite" : ""}" style="width: ${pct.toFixed(1)}%"></div>
   </div>`;
 }
 

@@ -1,6 +1,7 @@
 import type { Hono } from "hono";
 import { mesDe, nombreMes, nombreMesCorto, sumarDias, sumarMesesAMes } from "../../dominio/fechas.ts";
 import { importeEn, ocurrencias } from "../../dominio/recurrencia.ts";
+import { avisosPresupuesto, presupuestoPorCategoria } from "../../servicios/presupuesto.ts";
 import { contexto } from "../../servicios/situacion.ts";
 import { bd, render, type Estado } from "../app.ts";
 import { Formulario, redirigir } from "../formulario.ts";
@@ -34,6 +35,8 @@ export function rutasResumen(app: Hono, estado: Estado) {
     const primerSaldo = base.uno<{ fecha: string | null }>("SELECT min(fecha) AS fecha FROM saldos")?.fecha ?? null;
     const empezado = primerSaldo !== null && mesAnterior >= mesDe(primerSaldo);
     const cierrePendiente = empezado && !base.uno("SELECT 1 FROM cierres_mes WHERE mes = ?", mesAnterior) ? mesAnterior : null;
+    const presupuesto = presupuestoPorCategoria(base, mes, hoy);
+    ctx.resultado.avisos.push(...avisosPresupuesto(presupuesto));
     const ocultos = new Set(base.todos<{ clave: string }>("SELECT clave FROM avisos_ocultos").map((f) => f.clave));
 
     const proximos = ctx.recurrentes
@@ -55,6 +58,7 @@ export function rutasResumen(app: Hono, estado: Estado) {
         ctx,
         cierrePendiente,
         ocultos,
+        presupuesto,
         proximos,
         cierres: cierres.map((cierre) => ({
           etiqueta: nombreMesCorto(cierre.mes),

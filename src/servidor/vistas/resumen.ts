@@ -2,12 +2,15 @@ import { html } from "hono/html";
 import { formatoFecha, nombreMes } from "../../dominio/fechas.ts";
 import type { Contexto } from "../../servicios/situacion.ts";
 import { aviso, cifra, claveAviso, eur, eurR, grafico, vacio, type Html } from "./comun.ts";
+import type { LineaPresupuesto } from "../../servicios/presupuesto.ts";
 import { listaAvisos, tarjetaEtapa } from "./escalera.ts";
+import { barrasPresupuesto } from "./presupuesto.ts";
 
 interface DatosResumen {
   ctx: Contexto;
   cierrePendiente: string | null;
   ocultos: ReadonlySet<string>;
+  presupuesto: LineaPresupuesto[];
   proximos: { nombre: string; fecha: string; importe: number }[];
   cierres: { etiqueta: string; plan: number; real: number | null; patrimonio: number }[];
   porCategoria: [string, number][];
@@ -20,7 +23,7 @@ function avisoCierre(mes: string | null, ocultos: ReadonlySet<string>): Html | s
   return ocultos.has(clave) ? "" : aviso("info", texto, { ruta: `/cierre?mes=${mes}`, texto: "Cerrar el mes" }, { clave });
 }
 
-export function vistaResumen({ ctx, cierrePendiente, ocultos, proximos, cierres, porCategoria }: DatosResumen): Html {
+export function vistaResumen({ ctx, cierrePendiente, ocultos, presupuesto, proximos, cierres, porCategoria }: DatosResumen): Html {
   const r = ctx.resultado;
   const p = r.presupuesto;
   const sinDatos = ctx.recurrentes.length === 0 && ctx.cuentas.length === 0;
@@ -99,6 +102,13 @@ export function vistaResumen({ ctx, cierrePendiente, ocultos, proximos, cierres,
               <tbody>${cierres.map((c) => html`<tr><td>${c.etiqueta}</td><td class="numero">${eur(c.patrimonio)}</td></tr>`)}</tbody>
             </table>`,
           )}
+        </section>`
+      : ""}
+
+    ${presupuesto.some((l) => l.limite)
+      ? html`<section class="tarjeta" style="margin-top:16px">
+          <div class="tarjeta-cabecera"><h2>Presupuesto por categorías</h2><a href="/movimientos#presupuesto">Ver movimientos</a></div>
+          ${barrasPresupuesto(presupuesto)}
         </section>`
       : ""}
 

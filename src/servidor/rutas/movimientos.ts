@@ -3,9 +3,11 @@ import { html } from "hono/html";
 import { importeEditable } from "../../dominio/dinero.ts";
 import { formatoFecha, mesDe, nombreMes, primerDia, sumarMesesAMes, ultimoDia } from "../../dominio/fechas.ts";
 import { leerCuentas } from "../../servicios/cuentas.ts";
+import { guardarLimites, presupuestoPorCategoria } from "../../servicios/presupuesto.ts";
 import { bd, render, type Estado } from "../app.ts";
 import { Formulario, idDe, redirigir } from "../formulario.ts";
 import { botonAccion, campo, casilla, eur, selector, vacio, type Html } from "../vistas/comun.ts";
+import { tarjetaPresupuesto } from "../vistas/presupuesto.ts";
 
 interface Movimiento {
   id: number;
@@ -134,6 +136,7 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
           <div class="cifra"><div class="cifra-etiqueta">Salidas</div><div class="cifra-valor">${eur(gastos)}</div></div>
           <div class="cifra"><div class="cifra-etiqueta">Sin categoría</div><div class="cifra-valor">${sinCategoria}</div></div>
         </div>
+        ${tarjetaPresupuesto(presupuestoPorCategoria(base, mes, hoy), aqui)}
         <section class="tarjeta">
           <form method="get" action="/movimientos" class="fila-campos">
             <input type="hidden" name="mes" value="${mes}" />
@@ -187,6 +190,19 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
         </div>
       `,
     );
+  });
+
+  app.post("/presupuesto", async (c) => {
+    const f = await Formulario.de(c);
+    const limites = new Map<number, number | null>();
+    for (const categoria of categorias().filter((x) => x.tipo !== "ingreso")) {
+      const texto = f.texto(`limite_${categoria.id}`);
+      const valor = texto ? f.importe(`limite_${categoria.id}`) : null;
+      if (texto && (valor === null || valor < 0)) return redirigir(c, volverA(f.texto("volver")), { error: `El límite de ${categoria.nombre} no es un número.` });
+      limites.set(categoria.id, valor);
+    }
+    guardarLimites(bd(estado), limites);
+    return redirigir(c, `${volverA(f.texto("volver"))}#presupuesto`, { ok: "Límites guardados." });
   });
 
   app.post("/movimientos", async (c) => {
