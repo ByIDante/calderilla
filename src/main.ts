@@ -1,5 +1,7 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
+import { appendFileSync, existsSync, rmSync, statSync } from "node:fs";
+import path from "node:path";
 import { serve } from "@hono/node-server";
 import { cargarAjustes, carpetaAjustes, guardarAjustes, rutaTrabajo } from "./config/ajustes.ts";
 import { haySincronizacionPendiente, sincronizarBancos } from "./bancos/conexiones.ts";
@@ -10,6 +12,21 @@ import { crearApp, type Estado } from "./servidor/app.ts";
 import { prepararBase } from "./servicios/semillas.ts";
 
 const ajustes = cargarAjustes();
+
+// Abierta sin ventana (acceso directo), lo que escribe en la consola se pierde: también va a un archivo
+const registro = path.join(carpetaAjustes(), "calderilla.log");
+if (existsSync(registro) && statSync(registro).size > 1_000_000) rmSync(registro);
+for (const nivel of ["log", "warn", "error"] as const) {
+  const original = console[nivel].bind(console);
+  console[nivel] = (...partes: unknown[]) => {
+    original(...partes);
+    try {
+      appendFileSync(registro, `${new Date().toISOString()} ${partes.map((p) => (p instanceof Error ? (p.stack ?? p.message) : String(p))).join(" ")}\n`);
+    } catch {
+      // sin registro no pasa nada
+    }
+  };
+}
 
 const estado: Estado = {
   ajustes,
@@ -35,6 +52,7 @@ const estado: Estado = {
     guardarAjustes(ajustes);
   },
   guardarAjustes,
+  salir: () => salir(),
 };
 
 if (ajustes.carpetaDatos) {

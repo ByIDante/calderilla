@@ -29,6 +29,8 @@ export interface Estado {
   /** Cambia la carpeta de datos de este ordenador y abre (o crea) los datos que haya en ella. */
   usarCarpeta: (carpeta: string) => void;
   guardarAjustes: (ajustes: Ajustes) => void;
+  /** Cierra el programa guardando lo pendiente (botón «Cerrar Calderilla»: sin ventana no hay otra forma). */
+  salir?: () => void;
 }
 
 /** La base de datos de esta petición (solo existe con una carpeta de datos elegida). */
@@ -115,6 +117,16 @@ export function crearApp(estado: Estado): Hono {
   rutasMetas(app, estado);
   rutasAjustes(app, estado);
   rutasBancos(app, estado);
+
+  app.post("/salir", (c) => {
+    setTimeout(() => estado.salir?.(), 300);
+    return c.html(
+      pagina(
+        { titulo: "Calderilla se ha cerrado", seccion: "bienvenida" },
+        aviso("logro", "Tus datos están guardados. Ya puedes cerrar esta pestaña. Para volver a abrirla, usa el acceso directo o «Calderilla.cmd»."),
+      ),
+    );
+  });
 
   app.onError((error, c) => {
     console.error(error);

@@ -39,3 +39,15 @@ it("restaurar una copia anterior y volver atrás; exportar e importar el JSON", 
   assert.deepEqual(cuentas(), ["Antigua", "Nueva"], "el JSON sustituye los datos");
   assert.equal(bd().uno<{ n: number }>("SELECT count(*) AS n FROM categorias")?.n, 17, "con todas sus tablas");
 });
+
+it("«Cerrar Calderilla» cierra el programa después de responder", async () => {
+  let cerrada = false;
+  estado.salir = () => {
+    cerrada = true;
+  };
+  const respuesta = await pedir("/salir", {});
+  assert.equal(respuesta.status, 200);
+  assert.match(await respuesta.text(), /Calderilla se ha cerrado/);
+  await new Promise((r) => setTimeout(r, 400));
+  assert.ok(cerrada);
+});

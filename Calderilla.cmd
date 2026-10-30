@@ -30,4 +30,5 @@ if errorlevel 1 (
 )
 
 node src\main.ts
-if errorlevel 1 pause
+rem Sin ventana (Calderilla.vbs) no se puede pulsar ninguna tecla: no se espera
+if errorlevel 1 if not defined CALDERILLA_OCULTO pause

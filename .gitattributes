@@ -1,3 +1,5 @@
 * text=auto eol=lf
 *.cmd text eol=crlf
+*.vbs text eol=crlf
+*.ico binary
 test/fixtures/** -text

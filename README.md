@@ -32,6 +32,20 @@ npm start
 
 La app escucha solo en `http://127.0.0.1:5180`, así que nadie de tu red puede verla.
 
+### Abrirla sin terminal
+
+- **Windows:** haz doble clic una vez en **`Crear acceso directo.cmd`** y tendrás «Calderilla» en el escritorio, que la abre sin la ventana negra.
+- **Linux:** ejecuta una vez `bash scripts/acceso-linux.sh` y la tendrás en el menú de aplicaciones y en el escritorio.
+
+Para cerrarla, usa **Ajustes → Cerrar Calderilla**: guarda todo antes de salir. Si la abres cuando ya está abierta, solo se abre la pestaña. Lo que va pasando se apunta en `calderilla.log`, dentro de la carpeta de ajustes de cada ordenador.
+
+### Actualizar
+
+- **Windows:** haz doble clic en **`Actualizar.cmd`**. La primera vez necesita [Git](https://git-scm.com/download/win), instalado con las opciones por defecto, y te pedirá entrar en GitHub. Después, cierra Calderilla y vuelve a abrirla.
+- **Linux:** `git pull` en la carpeta del programa.
+
+Tus datos no se tocan al actualizar: están en tu carpeta de datos, no en la del programa.
+
 ## Tus datos
 
 La primera vez te pide una **carpeta de datos**. Elige una que se sincronice entre tus ordenadores, como Google Drive, Dropbox, OneDrive o Syncthing, por ejemplo `G:\Mi unidad\Calderilla`. En el otro ordenador, elige la misma carpeta y se cargarán tus datos.

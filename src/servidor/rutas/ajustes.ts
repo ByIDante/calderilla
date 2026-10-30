@@ -145,6 +145,7 @@ export function rutasAjustes(app: Hono, estado: Estado) {
             <div class="botones" style="margin-top:10px">
               ${botonAccion("/ajustes/copiar", "Guardar copia ahora")}
               <a class="boton" href="/ajustes/copias">Copias de seguridad</a>
+              ${botonAccion("/salir", "Cerrar Calderilla", { estilo: "peligro", confirmar: "¿Cerrar Calderilla? Se guarda todo antes de salir." })}
               <a class="boton" href="/ajustes/exportar" hx-boost="false">Exportar a JSON</a>
             </div>
             <details style="margin-top:12px">
