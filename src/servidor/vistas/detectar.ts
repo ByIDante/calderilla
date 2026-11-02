@@ -127,7 +127,7 @@ const conMayuscula = (texto: string) => texto.charAt(0).toUpperCase() + texto.sl
 function casillaPagas(c: PropuestaCargo): Html {
   const pagas = c.periodico.pagasExtra!;
   const sinVer = pagas.meses.filter((m) => !pagas.vistos.includes(m));
-  return html`<label class="casilla-fila"
+  return html`<label class="casilla-fila casilla-larga"
       ><input type="checkbox" name="pagas_${c.id}" value="1" form="${FORMULARIO}" checked /> Con sus pagas extra: ${nombreMeses(pagas.meses)}, ${eurR(pagas.importe)}
       cada una</label
     >

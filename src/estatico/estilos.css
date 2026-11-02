@@ -1224,6 +1224,11 @@ button {
   white-space: nowrap;
   cursor: pointer;
 }
+/* Una casilla con una frase larga («Con sus pagas extra: junio y diciembre…») parte la línea */
+.casilla-fila.casilla-larga {
+  white-space: normal;
+  align-items: flex-start;
+}
 
 /* Pagas extra: cada paga en su bloque, con los meses en una rejilla */
 .paga-extra {
