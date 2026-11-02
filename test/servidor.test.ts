@@ -138,12 +138,12 @@ describe("recorrido básico", () => {
 
     const lista = await (await pedir("/gastos")).text();
     assert.match(lista, /dos veces al mes/);
-    assert.match(lista, /1600,00/, "800 € dos veces al mes");
+    assert.match(lista, /1\.600,00/, "800 € dos veces al mes");
     assert.match(lista, /\+ 2 pagas extra al año/);
-    assert.match(lista, /1750,00/, "1.500 € con 2 pagas extra");
+    assert.match(lista, /1\.750,00/, "1.500 € con 2 pagas extra");
     assert.match(lista, /Tus ingresos mes a mes/);
     const previa = await (await pedir("/gastos/al-mes?tipo=ingreso&importe=1500&frecuencia=mensual&pagas=1&paga_cuando_1=bimestral&inicio=2026-01-28")).text();
-    assert.match(previa, /2250\s€ al mes/, "una extra cada 2 meses: 1.500 + 6 × 1.500 ÷ 12");
+    assert.match(previa, /2\.250\s€ al mes/, "una extra cada 2 meses: 1.500 + 6 × 1.500 ÷ 12");
 
     const bd = estado.sync!.bd;
     const ids = bd.todos<{ id: number }>("SELECT id FROM recurrentes WHERE nombre IN ('Clases', 'Nómina con extras')").map((r) => r.id);
@@ -154,7 +154,7 @@ describe("recorrido básico", () => {
     assert.match(await (await pedir("/calculadora")).text(), /Solo para probar/);
     const resultado = await (await pedir(`/calculadora/resultado?importe_${ids[0]}=900`)).text();
     assert.match(resultado, /Con 1 cambio/);
-    assert.match(resultado, new RegExp(`id="al-mes-${ids[0]}" hx-swap-oob="true">= 1800\\s€ al mes`), "y al lado de la línea, lo que cuenta al mes");
+    assert.match(resultado, new RegExp(`id="al-mes-${ids[0]}" hx-swap-oob="true">= 1\\.800\\s€ al mes`), "y al lado de la línea, lo que cuenta al mes");
     assert.equal(bd.leerMeta("sucio"), "0");
 
     for (const id of ids) await pedir(`/gastos/${id}/borrar`, { metodo: "POST" });

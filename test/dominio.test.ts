@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { leerImporte, leerNumero } from "../src/dominio/dinero.ts";
+import { euros, eurosRedondos, leerImporte, leerNumero } from "../src/dominio/dinero.ts";
 import { diferenciaMeses, sumarDias, sumarMeses } from "../src/dominio/fechas.ts";
 import { cuadroAmortizacion, cuotaMensual, finPrestamo, pendienteEn, type Prestamo } from "../src/dominio/prestamo.ts";
 import {
@@ -42,6 +42,17 @@ describe("importes y números", () => {
     assert.equal(leerImporte("2 x 3,50"), null, "con dos números no adivina");
     assert.equal(leerImporte("03/10/2026"), null);
     assert.equal(leerImporte("EUR"), null);
+  });
+});
+
+describe("cómo se escriben los importes", () => {
+  it("siempre con punto de miles, también con 4 cifras", () => {
+    const sinEspacios = (texto: string) => texto.replace(/[\u00a0\u202f]/g, " ");
+    assert.equal(sinEspacios(euros(175000)), "1.750,00 €");
+    assert.equal(sinEspacios(eurosRedondos(274833)), "2.748 €");
+    assert.equal(sinEspacios(eurosRedondos(2180000)), "21.800 €");
+    assert.equal(sinEspacios(euros(99900)), "999,00 €");
+    assert.equal(leerImporte(euros(175000)), 175000, "y se vuelve a leer igual");
   });
 });
 

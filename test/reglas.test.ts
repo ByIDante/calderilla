@@ -163,7 +163,7 @@ describe("escalera: seis casos", () => {
     assert.equal(opcion("especulativo")?.disponible, true);
     assert.ok(r.avisos.some((a) => /supera el tope/.test(txt(a.texto))));
     assert.equal(opcion("reequilibrar")?.disponible, true);
-    assert.match(txt(opcion("reequilibrar")?.texto), /traspaso entre fondos de unos 8100 €/);
+    assert.match(txt(opcion("reequilibrar")?.texto), /traspaso entre fondos de unos 8\.100 €/);
     assert.equal(opcion("letras")?.disponible, false, "solo 2.000 € de exceso");
   });
 });

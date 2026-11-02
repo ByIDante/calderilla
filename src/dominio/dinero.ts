@@ -1,9 +1,10 @@
 // Los importes se guardan en céntimos (enteros) para no arrastrar errores de coma flotante.
 export type Centimos = number;
 
-const conDecimales = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR" });
-const sinDecimales = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
-const numero = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 2 });
+// Siempre con punto de miles: en español, Intl no agrupa las cifras de 4 dígitos («2748 €» junto a «21.800 €»)
+const conDecimales = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", useGrouping: "always" });
+const sinDecimales = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0, useGrouping: "always" });
+const numero = new Intl.NumberFormat("es-ES", { maximumFractionDigits: 2, useGrouping: "always" });
 
 export function euros(c: Centimos): string {
   return conDecimales.format(c / 100);
@@ -15,7 +16,7 @@ export function eurosRedondos(c: Centimos): string {
 
 /** "3,04 %" */
 export function porcentaje(valor: number, decimales = 2): string {
-  return `${new Intl.NumberFormat("es-ES", { maximumFractionDigits: decimales }).format(valor)} %`;
+  return `${new Intl.NumberFormat("es-ES", { maximumFractionDigits: decimales, useGrouping: "always" }).format(valor)} %`;
 }
 
 export function formatoNumero(valor: number): string {

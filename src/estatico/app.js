@@ -5,7 +5,7 @@ function color(variable) {
   return getComputedStyle(document.documentElement).getPropertyValue(variable).trim();
 }
 
-const formatoEuros = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0 });
+const formatoEuros = new Intl.NumberFormat("es-ES", { style: "currency", currency: "EUR", maximumFractionDigits: 0, useGrouping: "always" });
 
 function pintarGraficos(raiz) {
   if (!window.Chart) return;
