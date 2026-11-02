@@ -138,8 +138,10 @@ Si la aportación va a un fondo, al cerrar el mes se apunta la compra sola: las 
 
 Sirve para comprobar los números y para preguntarte «¿y si…?». Parte de tus datos de verdad y nada de lo que cambies se guarda: «Volver a mis números» lo deja todo como estaba.
 
+- **Botones «¿Y si…?»:** «Me suben el sueldo un 5 %», «Todo sube un 10 %» (menos las cuotas de los préstamos), «Quito lo no esencial» y «Me quedo sin ingresos». Rellenan la prueba y se suman a lo que ya hayas cambiado.
 - **Lo que puedes cambiar:**
   - el importe de cada ingreso y gasto, o quitarlo;
+  - cuánto adelantar de un préstamo, y si reduces el plazo o la cuota;
   - hasta 3 ingresos o gastos de prueba;
   - el dinero de tus cuentas y lo ya gastado en ocio;
   - tus metas, o una de prueba;
@@ -147,6 +149,9 @@ Sirve para comprobar los números y para preguntarte «¿y si…?». Parte de tu
 - **Lo que ves:**
   - cada cifra **ahora** y **con tu prueba**, con la diferencia y la pantalla en la que aparece;
   - si cambiarías de etapa;
+  - cuántos meses aguantarías si dejaras de cobrar, pagando solo lo esencial con lo que tienes en las cuentas;
+  - al adelantar un préstamo, los intereses que te ahorras (también contando la comisión), la fecha de fin o la cuota nueva y si la regla dice que compensa;
+  - **los próximos 2 años:** un gráfico con lo que tendrías ahorrado y cuándo llegas al colchón, al fondo de emergencia, a invertir y a cada meta. Si gastas más de lo que ingresas, también cuándo te quedarías sin dinero en las cuentas. Supone que cada mes ahorras lo que pide la regla (cambiando de etapa cuando toca) y no cuenta intereses ni la bolsa;
   - el cálculo del ocio paso a paso, con tus números y con los de la prueba.
 - **Mismas cuentas.** Usa las mismas fórmulas que el resto de la app: sin cambios, sale exactamente lo mismo que en el Resumen y en Ocio.
 
@@ -179,6 +184,7 @@ Todo esto es gratis y funciona solo con conexión a internet, sin cuentas de pag
   - **Gasto variable de cada mes** (súper, gasolina…): lo normal de los últimos meses completos que has importado, como estimación de cada categoría.
   - **Traspasos de cada mes a otra cuenta tuya**, como ahorro automático.
   - **Precios que han cambiado** en tus gastos fijos.
+  - **Pagas extra:** si la nómina de un mes llega doble, o con otro movimiento aparte, se propone con sus pagas extra. Si solo se ve la de verano porque lo importado no llega a diciembre, también se propone la de diciembre. Si la nómina ya la tienes apuntada, se proponen las pagas que le faltan.
   - Hacen falta al menos 3 cargos para reconocer algo mensual; un seguro o un impuesto que solo aparece una vez se pregunta como posible anual. Lo que ignores no vuelve a salir.
 - **Conectar el banco** (Ajustes → Bancos). Se hace con [Enable Banking](https://enablebanking.com):
   - **Qué necesitas:** una cuenta gratuita y una aplicación registrada en su web, que te da un ID y un archivo de clave `.pem`. Después autorizas cada banco desde su propia app o web.
@@ -205,12 +211,23 @@ npm run paquete-windows                  # crea dist/Calderilla-Windows.zip (con
 
 `probar-recorridos` usa los mismos datos de ejemplo y hace con Playwright lo que haría una persona, comprobando las cifras en pantalla:
 - apunta un cobro dos veces al mes y una nómina con pagas extra, y mira lo que cuentan al mes, el desglose y el mes a mes;
-- en la Calculadora sube el sueldo, quita un gasto, añade otro y una meta, y cambia una regla;
+- encuentra en los movimientos una nómina con su paga extra y la acepta;
+- en la Calculadora:
+  - sube el sueldo, quita un gasto, añade otro y una meta, y cambia una regla;
+  - prueba los botones «¿Y si…?» y adelanta parte del préstamo del coche;
+  - mira la proyección a 2 años;
 - comprueba que después el Resumen y Ocio siguen igual y que no se ha guardado nada.
 
 Si algo no cuadra, termina con error.
 
-`revisar-pantallas` arranca la app con datos de ejemplo en una carpeta temporal y la abre con Playwright en el Chrome del sistema (390, 820, 1366, 1920 y 2560 px). Avisa si la página se desplaza de lado, si algo se sale de su tarjeta, si un texto baja de línea antes de tiempo, si una tabla no cabe, si la sección actual queda fuera del menú o si en el móvil hay botones demasiado pequeños para el dedo. Guarda capturas de las pantallas principales en la carpeta que le digas.
+`revisar-pantallas` arranca la app con datos de ejemplo en una carpeta temporal y la abre con Playwright en el Chrome del sistema (390, 820, 1366, 1920 y 2560 px, y en modo oscuro a 390 y 1366). Avisa si:
+- la página se desplaza de lado, algo se sale de su tarjeta o una tabla no cabe;
+- un texto baja de línea antes de tiempo;
+- la sección actual queda fuera del menú;
+- en el móvil hay botones demasiado pequeños para el dedo;
+- un texto casi no se lee contra su fondo (contraste menor de 3 a 1).
+
+Guarda capturas de las pantallas principales en la carpeta que le digas (las de modo oscuro empiezan por `oscuro-`).
 
 - **Ejecución:** Node ejecuta el TypeScript directamente, sin compilar.
 - **Servidor web:** Hono, con plantillas HTML y htmx; los gráficos son de Chart.js.
