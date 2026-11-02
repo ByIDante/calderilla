@@ -1,5 +1,5 @@
 import type { Context, Hono } from "hono";
-import { importeEditable, numeroEditable } from "../../dominio/dinero.ts";
+import { importeEditable, leerImporte, numeroEditable } from "../../dominio/dinero.ts";
 import { mesDe } from "../../dominio/fechas.ts";
 import { FRECUENCIAS } from "../../dominio/recurrencia.ts";
 import { leerAportaciones, totalMensual } from "../../servicios/aportaciones.ts";
@@ -81,7 +81,33 @@ export function leerPrueba(f: Formulario, base: Base): Prueba {
     const valor = f.numero(`p_${clave}`);
     if (valor !== null && valor >= 0 && valor <= MAXIMO[clave] && valor !== base.parametros[clave]) prueba.parametros[clave] = valor;
   }
+  for (const { recurrente: r } of base.presupuesto.lineas.filter((l) => l.recurrente.prestamo)) {
+    const importe = f.importe(`adelantar_${r.id}`);
+    if (importe && importe > 0) prueba.adelantos.set(r.id, { importe, modo: f.texto(`modo_${r.id}`) === "cuota" ? "cuota" : "plazo" });
+  }
   return prueba;
+}
+
+/**
+ * Aplica un botón rápido sobre lo que ya hay en el formulario (se suma a lo que hayas cambiado): sube los
+ * ingresos un 5 % o los gastos un 10 % (no las cuotas de los préstamos, que son fijas), o quita lo no esencial
+ * o todos los ingresos.
+ */
+export function aplicarRapido(valores: Record<string, string>, rapido: string, base: Base) {
+  const lineas = base.presupuesto.lineas.map((l) => l.recurrente);
+  const multiplicar = (lista: typeof lineas, factor: number) => {
+    for (const r of lista) {
+      const actual = leerImporte(valores[`importe_${r.id}`] ?? "") ?? importeDelMes(r, base.hoy);
+      valores[`importe_${r.id}`] = importeEditable(Math.round(actual * factor));
+    }
+  };
+  const quitar = (lista: typeof lineas) => {
+    for (const r of lista) valores[`quitar_${r.id}`] = "1";
+  };
+  if (rapido === "sueldo") multiplicar(lineas.filter((r) => r.tipo === "ingreso"), 1.05);
+  if (rapido === "precios") multiplicar(lineas.filter((r) => r.tipo === "gasto" && !r.prestamo), 1.1);
+  if (rapido === "no_esenciales") quitar(lineas.filter((r) => r.tipo === "gasto" && !r.esencial));
+  if (rapido === "sin_ingresos") quitar(lineas.filter((r) => r.tipo === "ingreso"));
 }
 
 /** Lo que sale en cada campo al abrir la Calculadora: tus números de verdad */
@@ -104,8 +130,11 @@ export function rutasCalculadora(app: Hono, estado: Estado) {
   // Solo lee: por eso todo va por GET (nada que guardar, y no se programa ninguna copia de los datos)
   const calcular = (c: Context): { datos: DatosCalculadora; valores: Record<string, string> } => {
     const base = construir(bd(estado), estado.hoy());
-    const f = Formulario.deConsulta(c);
-    const prueba = leerPrueba(f, base);
+    // Lo que llega encima de tus números de verdad; un botón rápido lo cambia antes de leerlo
+    const { rapido, ...escrito } = Formulario.deConsulta(c).todos();
+    const valores = { ...valoresReales(base), ...escrito };
+    if (rapido) aplicarRapido(valores, rapido, base);
+    const prueba = leerPrueba(new Formulario(valores), base);
     return {
       datos: {
         base,
@@ -114,7 +143,7 @@ export function rutasCalculadora(app: Hono, estado: Estado) {
         simulada: simular(base, prueba),
         automatico: totalMensual(leerAportaciones(bd(estado)), mesDe(base.hoy)),
       },
-      valores: { ...valoresReales(base), ...f.todos() },
+      valores,
     };
   };
 

@@ -1335,6 +1335,28 @@ button {
   grid-area: quitar;
   font-size: 13.5px;
 }
+.linea-prueba.con-adelanto {
+  grid-template-areas:
+    "nombre importe quitar"
+    "nombre detalle detalle"
+    "adelanto adelanto adelanto";
+}
+/* «¿Y si adelantas [ ] € y acabas antes?», debajo de cada préstamo */
+.linea-adelanto {
+  grid-area: adelanto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  font-size: 13.5px;
+}
+.linea-adelanto .entrada {
+  width: 8rem;
+}
+.linea-adelanto select {
+  width: auto;
+  max-width: 100%;
+}
 .linea-detalle {
   grid-area: detalle;
   min-width: 0;
@@ -1436,5 +1458,12 @@ button {
       "nombre nombre"
       "importe quitar"
       "detalle detalle";
+  }
+  .linea-prueba.con-adelanto {
+    grid-template-areas:
+      "nombre nombre"
+      "importe quitar"
+      "detalle detalle"
+      "adelanto adelanto";
   }
 }

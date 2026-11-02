@@ -1,10 +1,13 @@
 import { html, raw } from "hono/html";
+import { formatoNumero } from "../../dominio/dinero.ts";
+import { formatoFecha, nombreMes, nombreMesCorto } from "../../dominio/fechas.ts";
 import { ETIQUETA_FRECUENCIA, FRECUENCIAS, NOMBRE_FRECUENCIA } from "../../dominio/recurrencia.ts";
+import { veredictoDeuda, type Veredicto } from "../../reglas/deuda.ts";
 import { NOMBRE_ESTABILIDAD, NOMBRE_ETAPA, type Etapa } from "../../reglas/tipos.ts";
-import { cambios, type Base, type ParametroPrueba, type Prueba, type Simulacion } from "../../servicios/calculadora.ts";
+import { cambios, mesesSinIngresos, proyectar, type Base, type Hito, type ParametroPrueba, type Prueba, type ResultadoAdelanto, type Simulacion } from "../../servicios/calculadora.ts";
 import type { RecurrenteCompleto } from "../../servicios/finanzas.ts";
 import { necesitaDesglose } from "./cobros.ts";
-import { campo, casilla, cifra, eurR, porque, selector, type Html } from "./comun.ts";
+import { campo, casilla, cifra, eur, eurR, grafico, porque, selector, type Html } from "./comun.ts";
 import { barraReparto, importePaso, pasosOcio } from "./reparto.ts";
 
 /*
@@ -34,6 +37,14 @@ const PROPORCION_ETAPA: Partial<Record<Etapa, ParametroPrueba>> = {
 
 const FONDO_ESTABILIDAD = { estable: "fondoMesesEstable", normal: "fondoMesesNormal", inestable: "fondoMesesInestable" } as const;
 
+/** Los botones «¿Y si…?» (qué hace cada uno: `aplicarRapido` en la ruta) */
+const RAPIDOS = [
+  ["sueldo", "Me suben el sueldo un 5 %"],
+  ["precios", "Todo sube un 10 %"],
+  ["no_esenciales", "Quito lo no esencial"],
+  ["sin_ingresos", "Me quedo sin ingresos"],
+] as const;
+
 // ── Lo que se puede cambiar ──
 
 /** «= 1.750 € al mes» al lado de cada línea, o «No cuenta» si la quitas */
@@ -52,7 +63,7 @@ function filaLinea(r: RecurrenteCompleto, v: Valores, d: DatosCalculadora): Html
   const id = r.id;
   const detalle = [r.categoria, r.clase === "estimacion" ? "estimación" : null, r.prestamo ? "préstamo: lo que debes no cambia" : null].filter(Boolean).join(" · ");
   const pagas = r.pagasExtra.reduce((suma, paga) => suma + paga.meses.length, 0);
-  return html`<div class="linea-prueba">
+  return html`<div class="linea-prueba ${r.prestamo ? "con-adelanto" : ""}">
     <label class="linea-nombre" for="importe-${id}">${r.nombre}${detalle ? html`<span class="apagado pequeno">${detalle}</span>` : ""}</label>
     <div class="entrada con-sufijo linea-importe">
       <input id="importe-${id}" name="importe_${id}" type="text" value="${v[`importe_${id}`] ?? ""}" inputmode="decimal" autocomplete="off" />
@@ -63,6 +74,19 @@ function filaLinea(r: RecurrenteCompleto, v: Valores, d: DatosCalculadora): Html
       <span class="apagado">${NOMBRE_FRECUENCIA[r.frecuencia]}${pagas ? ` + ${pagas} ${pagas === 1 ? "paga extra" : "pagas extra"} al año` : ""}</span>
       ${alMes(d, id)}
     </div>
+    ${r.prestamo
+      ? html`<div class="linea-adelanto">
+          <label for="adelantar-${id}">¿Y si adelantas</label>
+          <div class="entrada con-sufijo">
+            <input id="adelantar-${id}" name="adelantar_${id}" type="text" value="${v[`adelantar_${id}`] ?? ""}" inputmode="decimal" autocomplete="off" placeholder="0" />
+            <span class="sufijo">€</span>
+          </div>
+          <select name="modo_${id}" aria-label="Qué reducir al adelantar">
+            <option value="plazo">y acabas antes?</option>
+            <option value="cuota" ${v[`modo_${id}`] === "cuota" ? html`selected` : ""}>y pagas menos al mes?</option>
+          </select>
+        </div>`
+      : ""}
   </div>`;
 }
 
@@ -143,6 +167,11 @@ function reglas(d: DatosCalculadora, v: Valores): Html {
   </details>`;
 }
 
+/**
+ * La página entera. El primer botón del formulario es un «Calcular» oculto: al pulsar Intro en un campo, el
+ * navegador usa el primero, y no debe ser un «¿Y si…?». El formulario no hereda sus hx-* a lo de dentro: si
+ * no, los enlaces («Volver a mis números») abrirían la página nueva dentro de la caja de resultados.
+ */
 export function vistaCalculadora(d: DatosCalculadora, v: Valores): Html {
   const lineas = d.base.presupuesto.lineas.map((l) => l.recurrente);
   const metas = d.base.situacion.metas.filter((meta) => meta.id !== undefined);
@@ -161,7 +190,32 @@ export function vistaCalculadora(d: DatosCalculadora, v: Valores): Html {
         hx-swap="outerHTML"
         hx-trigger="input delay:400ms, change, submit"
         hx-sync="this:replace"
+        hx-disinherit="*"
       >
+        <button type="submit" class="sr" tabindex="-1" aria-hidden="true">Calcular</button>
+        <section class="tarjeta">
+          <h2>¿Y si…?</h2>
+          <div class="botones">
+            ${RAPIDOS.map(
+              ([valor, texto]) => html`<button
+                type="submit"
+                class="boton boton-pequeno"
+                name="rapido"
+                value="${valor}"
+                formaction="/calculadora"
+                hx-get="/calculadora"
+                hx-include="closest form"
+                hx-vals="${JSON.stringify({ rapido: valor })}"
+                hx-target="#contenido"
+                hx-select="#contenido"
+                hx-swap="outerHTML"
+              >
+                ${texto}
+              </button>`,
+            )}
+          </div>
+          <p class="apagado pequeno">Se suman a lo que ya hayas cambiado. «Todo sube un 10 %» no toca las cuotas de los préstamos, que son fijas.</p>
+        </section>
         <section class="tarjeta">
           <h2>Lo que entra y sale cada mes</h2>
           <p class="apagado pequeno">Cada importe es como lo cobras o lo pagas. Si no es una vez al mes, al lado ves lo que cuenta al mes.</p>
@@ -225,7 +279,80 @@ function diferencia(ahora: number | null, prueba: number | null, mejor: Mejor, f
   return html`<span class="cambio ${tono}"><span aria-hidden="true">${d > 0 ? "▲" : "▼"}</span> ${d > 0 ? "+" : "−"}${formato(Math.abs(d))}</span>`;
 }
 
-const meses = (n: number) => `${n} ${n === 1 ? "mes" : "meses"}`;
+const meses = (n: number) => `${formatoNumero(n)} ${n === 1 ? "mes" : "meses"}`;
+/** Con un decimal, para comparar «4,6 meses» sin diferencias de milésimas */
+const unDecimal = (n: number | null) => (n === null ? null : Math.round(n * 10) / 10);
+
+const VEREDICTO: Record<Veredicto, string> = {
+  prioridad: "compensa: es deuda cara y pagarla es lo primero.",
+  opcional: "es una opción, no una prioridad: te ahorras intereses, pero ese dinero también podría rendirte en otro sitio.",
+  no: "no compensa: el préstamo es más barato que lo que te da el dinero sin riesgo.",
+};
+
+/** Lo que supone adelantar un préstamo: lo que pagas, lo que te ahorras, cómo queda y qué dice la regla */
+function tarjetaAdelanto(a: ResultadoAdelanto, d: DatosCalculadora): Html {
+  const regla = a.deuda ? veredictoDeuda(a.deuda, d.real.resultado.rentabilidades, d.simulada.parametros) : null;
+  return html`<section class="tarjeta">
+    <h2>Adelantar «${a.nombre}»</h2>
+    <ul class="lista-plana">
+      <li><span>Pagas hoy</span><span class="numero">${eur(a.importe)}${a.comision ? ` + ${eur(a.comision)} de comisión` : ""}</span></li>
+      <li><span>Te ahorras de intereses</span><span class="numero positivo"><b>${eur(a.interesesAhorrados)}</b></span></li>
+      ${a.comision ? html`<li><span>Contando la comisión</span><span class="numero">${eur(a.interesesAhorrados - a.comision)}</span></li>` : ""}
+      ${a.modo === "plazo"
+        ? html`<li><span>Terminas</span><span class="numero">${formatoFecha(a.finDespues)} <span class="apagado pequeno">antes ${formatoFecha(a.finAntes)}</span></span></li>`
+        : html`<li><span>Cuota</span><span class="numero">${eur(a.cuotaDespues)} <span class="apagado pequeno">antes ${eur(a.cuotaAntes)}</span></span></li>`}
+    </ul>
+    ${a.vinculado ? html`<p class="negativo pequeno">Ojo: el precio dependía de mantener esta financiación. Si adelantas, podrías perder el descuento.</p>` : ""}
+    ${regla ? html`<p><b>La regla:</b> ${VEREDICTO[regla.veredicto]}</p>${porque(regla.porque)}` : ""}
+  </section>`;
+}
+
+/** Los próximos 2 años: lo que tendrías ahorrado y cuándo llegas a cada cosa, ahora y con la prueba */
+function proyeccion(d: DatosCalculadora, conPrueba: boolean): Html {
+  const ahora = proyectar(d.real);
+  const prueba = conPrueba ? proyectar(d.simulada) : ahora;
+  const cuando = (h: Hito | undefined) => (!h ? "—" : h.ya ? "Ya" : h.mes ? nombreMes(h.mes) : "Más de 2 años");
+  const claves = [...new Set([...ahora.hitos, ...prueba.hitos].map((h) => h.clave))];
+  const series = [
+    { nombre: conPrueba ? "Ahora" : "Tus números", valores: ahora.puntos.map((p) => p.ahorrado / 100) },
+    ...(conPrueba ? [{ nombre: "Con tu prueba", valores: prueba.puntos.map((p) => p.ahorrado / 100) }] : []),
+  ];
+  return html`<section class="tarjeta">
+    <h2>En los próximos 2 años</h2>
+    <p class="apagado pequeno" style="margin-top:0">Si cada mes ahorras lo que pide la regla. No cuenta intereses ni lo que haga la bolsa.</p>
+    ${grafico(
+      "grafico-proyeccion",
+      "Lo que tendrías ahorrado",
+      { tipo: "line", etiquetas: ahora.puntos.map((p) => nombreMesCorto(p.mes)), series },
+      html`<table>
+        <thead><tr><th>Mes</th>${series.map((serie) => html`<th class="numero">${serie.nombre}</th>`)}</tr></thead>
+        <tbody>
+          ${ahora.puntos.map(
+            (punto, i) => html`<tr><td>${nombreMes(punto.mes)}</td>${series.map((serie) => html`<td class="numero">${eurR(Math.round(serie.valores[i]! * 100))}</td>`)}</tr>`,
+          )}
+        </tbody>
+      </table>`,
+    )}
+    <h3>Cuándo llegas</h3>
+    <div class="tabla-contenedor">
+      <table class="tabla-apilable tabla-comparada" id="cuando-llegas">
+        <caption class="sr">Cuándo llegas a cada cosa</caption>
+        <thead><tr><th>Qué</th><th>Ahora</th>${conPrueba ? html`<th>Con tu prueba</th>` : ""}</tr></thead>
+        <tbody>
+          ${claves.map((clave) => {
+            const a = ahora.hitos.find((h) => h.clave === clave);
+            const b = prueba.hitos.find((h) => h.clave === clave);
+            return html`<tr class="${conPrueba && cuando(a) !== cuando(b) ? "cambiado" : ""}" data-hito="${clave}">
+              <td>${(b ?? a)!.nombre}</td>
+              <td>${cuando(a)}</td>
+              ${conPrueba ? html`<td><b>${cuando(b)}</b></td>` : ""}
+            </tr>`;
+          })}
+        </tbody>
+      </table>
+    </div>
+  </section>`;
+}
 
 interface Comparada {
   etiqueta: string;
@@ -320,7 +447,16 @@ export function resultadoCalculadora(d: DatosCalculadora, opciones: { conLineas:
     { etiqueta: "Colchón que necesitas", donde: "Resumen e Inversiones", ahora: a.colchonObjetivo, prueba: b.colchonObjetivo, mejor: null },
     { etiqueta: "Fondo de emergencia que necesitas", donde: "Resumen e Inversiones", ahora: a.fondoObjetivo, prueba: b.fondoObjetivo, mejor: null },
     { etiqueta: "Meses para llegar al objetivo de tu etapa", donde: "Resumen", ahora: a.progreso?.meses ?? null, prueba: b.progreso?.meses ?? null, mejor: "baja", formato: meses },
+    {
+      etiqueta: "Si dejaras de cobrar, aguantarías",
+      donde: "lo de tus cuentas entre tus gastos esenciales",
+      ahora: unDecimal(mesesSinIngresos(d.real)),
+      prueba: unDecimal(mesesSinIngresos(d.simulada)),
+      mejor: "sube",
+      formato: meses,
+    },
   ];
+  const aguantas = unDecimal(mesesSinIngresos(d.simulada));
   const lineas = opciones.conLineas
     ? [...d.base.presupuesto.lineas.map((l) => l.recurrente.id), -1, -2, -3].map((id) => alMes(d, id, true))
     : [];
@@ -339,12 +475,20 @@ export function resultadoCalculadora(d: DatosCalculadora, opciones: { conLineas:
           ${cifraComparada("Te sobra al mes", pa.sobrante, pb.sobrante, "sube")}
         </div>
         ${pb.sobrante < 0 ? html`<p class="negativo"><b>Gastarías ${eurR(-pb.sobrante)} al mes más de lo que ingresas:</b> no quedaría nada para ahorro ni ocio.</p>` : ""}
+        ${pb.ingresos === 0 && pa.ingresos > 0 && aguantas !== null
+          ? html`<p class="etapa-cambia">
+              Sin ingresos, con los ${eurR(Math.max(d.simulada.situacion.liquidez, 0))} de tus cuentas aguantarías unos <b>${meses(aguantas)}</b> pagando solo lo esencial
+              (${eurR(pb.esenciales)} al mes).
+            </p>`
+          : ""}
         ${barraReparto(pb)} ${fraseEtapa(d)}
       </section>
+      ${d.simulada.adelantos.map((adelanto) => tarjetaAdelanto(adelanto, d))}
       <section class="tarjeta">
         <h2>Todas las cifras</h2>
         ${tablaComparada(filas)}
       </section>
+      ${proyeccion(d, n > 0)}
       <section class="tarjeta">
         <h2>De dónde sale cada número</h2>
         <p class="apagado pequeno" style="margin-top:0">El mismo cálculo que en Ocio, paso a paso, con tus números y con la prueba.</p>

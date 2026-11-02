@@ -243,29 +243,39 @@ export function actualizarRecurrente(bd: BaseDatos, id: number, entrada: DatosRe
 }
 
 /**
+ * El préstamo tras un pago anticipado, sin guardar nada: su cuadro nuevo manda en la fecha de fin y, si se
+ * reduce la cuota, en el importe desde la siguiente cuota. Lo usan `amortizar` y la Calculadora.
+ */
+export function conAmortizacion(r: RecurrenteCompleto, a: Amortizacion): RecurrenteCompleto {
+  if (!r.prestamo) throw new Error("Ese gasto no es un préstamo.");
+  const prestamo = { ...r.prestamo, amortizaciones: [...(r.prestamo.amortizaciones ?? []), a] };
+  const siguiente = cuadroAmortizacion(prestamo).find((fila) => fila.fecha > a.fecha && fila.cuota > 0);
+  const versiones =
+    a.modo === "cuota" && siguiente ? [...r.versiones.filter((v) => v.validoDesde !== siguiente.fecha), { validoDesde: siguiente.fecha, importe: siguiente.cuota }] : r.versiones;
+  return { ...r, prestamo, fin: finPrestamo(prestamo), versiones };
+}
+
+/**
  * Pago anticipado de un préstamo. El préstamo manda: se recalcula su cuadro y, con él, la fecha de fin
  * del gasto y (si se reduce la cuota) el importe a partir de la siguiente cuota.
  */
 export function amortizar(bd: BaseDatos, recurrenteId: number, a: Amortizacion): { interesesAntes: number; interesesDespues: number; fin: Fecha } {
   const [r] = leerRecurrentes(bd, recurrenteId);
   if (!r?.prestamo) throw new Error("Ese gasto no es un préstamo.");
-  const antes = r.prestamo;
-  const despues = { ...antes, amortizaciones: [...(antes.amortizaciones ?? []), a] };
-  const fin = finPrestamo(despues);
+  const despues = conAmortizacion(r, a);
   bd.transaccion(() => {
-    bd.ejecutar("INSERT INTO amortizaciones (prestamo_id, fecha, importe, modo) VALUES (?, ?, ?, ?)", antes.id, a.fecha, a.importe, a.modo);
-    bd.ejecutar("UPDATE recurrentes SET fin = ? WHERE id = ?", fin, recurrenteId);
-    const siguiente = cuadroAmortizacion(despues).find((fila) => fila.fecha > a.fecha && fila.cuota > 0);
-    if (a.modo === "cuota" && siguiente) {
+    bd.ejecutar("INSERT INTO amortizaciones (prestamo_id, fecha, importe, modo) VALUES (?, ?, ?, ?)", r.prestamo!.id, a.fecha, a.importe, a.modo);
+    bd.ejecutar("UPDATE recurrentes SET fin = ? WHERE id = ?", despues.fin, recurrenteId);
+    for (const version of despues.versiones.filter((v) => !r.versiones.includes(v))) {
       bd.ejecutar(
         "INSERT INTO recurrentes_importes (recurrente_id, valido_desde, importe) VALUES (?, ?, ?) ON CONFLICT (recurrente_id, valido_desde) DO UPDATE SET importe = excluded.importe",
         recurrenteId,
-        siguiente.fecha,
-        siguiente.cuota,
+        version.validoDesde,
+        version.importe,
       );
     }
   });
-  return { interesesAntes: interesesTotales(antes), interesesDespues: interesesTotales(despues), fin };
+  return { interesesAntes: interesesTotales(r.prestamo), interesesDespues: interesesTotales(despues.prestamo!), fin: despues.fin! };
 }
 
 /** «Quitar»: deja de contar a partir de `fecha`, pero el historial se conserva. */
