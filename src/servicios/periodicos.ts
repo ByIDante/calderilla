@@ -2,19 +2,20 @@ import { createHash } from "node:crypto";
 import type { BaseDatos } from "../datos/db.ts";
 import type { Centimos } from "../dominio/dinero.ts";
 import { mesDe, primerDia, sumarDias, type Fecha } from "../dominio/fechas.ts";
-import { estadoEn, importeEn, MESES_FRECUENCIA, mensualEn } from "../dominio/recurrencia.ts";
+import { estadoEn, importeEn, MESES_FRECUENCIA, mensualEn, type PagaExtra } from "../dominio/recurrencia.ts";
 import {
   casaPatron,
   claveConcepto,
   detectarPeriodicos,
   emparejarTraspasos,
   estimacionesPorCategoria,
+  sugerirMesesPagas,
   type ApunteDetectable,
   type Estimacion,
   type Periodico,
 } from "../importar/periodicos.ts";
 import { leerAportaciones } from "./aportaciones.ts";
-import { actualizarRecurrente, crearRecurrente, leerRecurrentes, type RecurrenteCompleto } from "./finanzas.ts";
+import { actualizarRecurrente, crearRecurrente, guardarPagasExtra, leerRecurrentes, type RecurrenteCompleto } from "./finanzas.ts";
 
 /*
  * «Encontrado en tus movimientos»: convierte lo que se repite en tus movimientos importados en propuestas
@@ -84,6 +85,21 @@ export interface PropuestaPrecio {
   desde: Fecha;
 }
 
+/** Pagas extra de un ingreso que ya tienes: meses en que cobraste más con el mismo concepto */
+export interface PropuestaPaga {
+  id: string;
+  ignorar: string;
+  recurrente: { id: number; nombre: string };
+  /** Los que se apuntarán: los vistos y, si no se ve, su pareja habitual */
+  meses: number[];
+  vistos: number[];
+  /** De cada paga */
+  importe: Centimos;
+  /** Si es como un cobro normal se guarda sin importe propio, así sigue las subidas */
+  comoNormal: boolean;
+  apunteIds: number[];
+}
+
 export interface PropuestaEstimacion {
   id: string;
   ignorar: string;
@@ -102,6 +118,7 @@ export interface Propuestas {
   anuales: PropuestaCargo[];
   ahorros: PropuestaAhorro[];
   precios: PropuestaPrecio[];
+  pagas: PropuestaPaga[];
   estimaciones: PropuestaEstimacion[];
   /** Lo que gastas al mes sin categoría: no entra en las estimaciones */
   sinCategoria: Centimos;
@@ -292,6 +309,50 @@ function proponerPrecios(ctx: Contexto): PropuestaPrecio[] {
   return precios;
 }
 
+/**
+ * Pagas extra que no tienes apuntadas: en un ingreso mensual sin pagas extra, movimientos sueltos con su texto
+ * que llegan el mismo mes que su cobro (la extra aparte) o que son casi el doble de lo normal (sumada).
+ */
+function proponerPagas(ctx: Contexto): PropuestaPaga[] {
+  const libres = libresDe(ctx).filter((a) => a.importe > 0);
+  const pagas: PropuestaPaga[] = [];
+  for (const r of ctx.recurrentes.filter((x) => x.tipo === "ingreso" && x.frecuencia === "mensual" && !x.pagasExtra.length && estadoEn(x, ctx.hoy) !== "finalizado")) {
+    const unidos = ctx.apuntes.filter((a) => a.recurrente_id === r.id);
+    if (!unidos.length) continue;
+    const claves = new Set(unidos.map((a) => claveConcepto(a.concepto).clave));
+    const suyos = libres.filter((a) => (r.patron ? casaPatron(r.patron, a.concepto) : claves.has(claveConcepto(a.concepto).clave)));
+    const extras: { apunte: FilaApunte; importe: Centimos }[] = [];
+    for (const a of suyos) {
+      const normal = importeEn(r.versiones, a.fecha);
+      const conCobro = unidos.some((u) => mesDe(u.fecha) === mesDe(a.fecha));
+      if (conCobro && a.importe >= normal * 0.3) extras.push({ apunte: a, importe: a.importe });
+      else if (!conCobro && a.importe >= normal * 1.4 && a.importe <= normal * 3) extras.push({ apunte: a, importe: a.importe - normal });
+    }
+    const ignorar = `${VERSION}:paga:${r.id}`;
+    if (!extras.length || ctx.ignorados.has(ignorar)) continue;
+    const fechas = extras.map((e) => e.apunte.fecha);
+    const primero = [...unidos, ...suyos].map((a) => a.fecha).sort()[0]!;
+    const importes = extras.map((e) => e.importe).sort((a, b) => a - b);
+    const importe = importes[Math.floor(importes.length / 2)]!;
+    pagas.push({
+      id: corto(ignorar),
+      ignorar,
+      recurrente: { id: r.id, nombre: r.nombre },
+      meses: sugerirMesesPagas(fechas, primero, ctx.ultimoPorCuenta.get(extras[0]!.apunte.cuenta_id) ?? ctx.hoy),
+      vistos: [...new Set(fechas.map((f) => Number(f.slice(5, 7))))].sort((a, b) => a - b),
+      importe,
+      comoNormal: parecido(importe, importeEn(r.versiones, ctx.hoy), 0.05),
+      apunteIds: extras.map((e) => e.apunte.id),
+    });
+  }
+  return pagas;
+}
+
+/** La paga extra que se guarda: sin importe propio si es como un cobro normal (así sigue las subidas) */
+function pagaDe(meses: readonly number[], importe: Centimos, normal: Centimos): PagaExtra {
+  return { nombre: null, meses, importe: parecido(importe, normal, 0.05) ? null : importe };
+}
+
 /** La estimación de una categoría: crearla, actualizarla si se aleja más de un 15 % de lo normal, o nada */
 function estimacionDe(ctx: Contexto, e: Estimacion & { categoriaId: number }): PropuestaEstimacion | null {
   const categoria = ctx.categorias.get(e.categoriaId);
@@ -313,6 +374,7 @@ export function calcularPropuestas(bd: BaseDatos, hoy: Fecha): Propuestas {
   const { cargos, periodicos } = proponerCargos(ctx);
   const ahorros = proponerAhorros(ctx, leerAportaciones(bd).filter((a) => !a.fin || a.fin >= hoy));
   const precios = proponerPrecios(ctx);
+  const pagas = proponerPagas(ctx);
 
   // Gasto variable de cada mes, sin lo que ya es periódico (aunque aún no lo hayas aceptado)
   const importados = ctx.apuntes.filter((a) => a.origen !== "manual");
@@ -332,10 +394,11 @@ export function calcularPropuestas(bd: BaseDatos, hoy: Fecha): Propuestas {
     anuales: cargos.filter((c) => c.periodico.unico),
     ahorros,
     precios,
+    pagas,
     estimaciones,
     sinCategoria: calculadas.find((e) => e.categoriaId === null)?.mensual ?? 0,
     cuentas: ctx.cuentas,
-    total: cargos.length + ahorros.length + precios.length + estimaciones.length,
+    total: cargos.length + ahorros.length + precios.length + pagas.length + estimaciones.length,
   };
 }
 
@@ -349,6 +412,8 @@ export interface Eleccion {
   destino?: number | null;
   /** Unirlo a uno de los gastos que ya tienes (de los «posibles») en vez de crear otro */
   unir?: number | null;
+  /** Con las pagas extra que se han visto en sus movimientos */
+  pagas?: boolean;
 }
 
 export interface Aceptado {
@@ -356,6 +421,7 @@ export interface Aceptado {
   vinculados: number;
   ahorros: number;
   precios: number;
+  pagas: number;
   estimaciones: number;
   errores: string[];
 }
@@ -397,6 +463,11 @@ function aceptarCargo(bd: BaseDatos, c: PropuestaCargo, e: Eleccion, cuentas: Re
     if (!r.patron) bd.ejecutar("UPDATE recurrentes SET patron = ? WHERE id = ?", sinSigno(p.clave), r.id);
     // Si sus cargos varían (la luz), pasa a estimación: así se reconocen aunque cada factura sea distinta
     if (p.clase === "estimacion" && r.clase === "fijo" && !r.prestamo) bd.ejecutar("UPDATE recurrentes SET clase = 'estimacion' WHERE id = ?", r.id);
+    // Si el que ya tienes no tenía pagas extra y en sus movimientos se ven, se le añaden
+    if (p.pagasExtra && e.pagas && r.tipo === "ingreso" && !r.pagasExtra.length) {
+      guardarPagasExtra(bd, r.id, [pagaDe(p.pagasExtra.meses, p.pagasExtra.importe, importeEn(r.versiones, p.ultimo))]);
+      resultado.pagas++;
+    }
     unirMovimientos(bd, r.id, p, sumarDias(r.inicio, -p.tolerancia));
     resultado.vinculados++;
     return;
@@ -415,7 +486,9 @@ function aceptarCargo(bd: BaseDatos, c: PropuestaCargo, e: Eleccion, cuentas: Re
     importe: bimestral ? p.mensual : p.escalones[0]!.importe,
     prestamo: null,
     patron: sinSigno(p.clave),
+    pagasExtra: p.pagasExtra && e.pagas ? [pagaDe(p.pagasExtra.meses, p.pagasExtra.importe, p.escalones.at(-1)!.importe)] : undefined,
   });
+  if (p.pagasExtra && e.pagas) resultado.pagas++;
   // Cada cambio de precio, desde su fecha: los meses pasados conservan el importe que tenían
   for (const escalon of bimestral ? [] : p.escalones.slice(1)) {
     bd.ejecutar(
@@ -459,7 +532,7 @@ export function aceptarPropuestas(bd: BaseDatos, hoy: Fecha, elecciones: readonl
   const propuestas = calcularPropuestas(bd, hoy);
   const elegida = new Map(elecciones.map((e) => [e.id, e]));
   const cuentas = new Map(propuestas.cuentas.map((c) => [c.id, c.nombre]));
-  const resultado: Aceptado = { creados: 0, vinculados: 0, ahorros: 0, precios: 0, estimaciones: 0, errores: [] };
+  const resultado: Aceptado = { creados: 0, vinculados: 0, ahorros: 0, precios: 0, pagas: 0, estimaciones: 0, errores: [] };
   bd.transaccion(() => {
     for (const c of [...propuestas.ingresos, ...propuestas.gastos, ...propuestas.anuales]) {
       const e = elegida.get(c.id);
@@ -478,6 +551,13 @@ export function aceptarPropuestas(bd: BaseDatos, hoy: Fecha, elecciones: readonl
       );
       resultado.precios++;
     }
+    for (const p of propuestas.pagas.filter((x) => elegida.has(x.id))) {
+      const [r] = leerRecurrentes(bd, p.recurrente.id);
+      if (!r) continue;
+      guardarPagasExtra(bd, r.id, [{ nombre: null, meses: p.meses, importe: p.comoNormal ? null : p.importe }]);
+      for (const id of p.apunteIds) bd.ejecutar("UPDATE apuntes SET recurrente_id = ? WHERE id = ? AND recurrente_id IS NULL AND vinculo_manual = 0", r.id, id);
+      resultado.pagas++;
+    }
     for (const e of propuestas.estimaciones.filter((x) => elegida.has(x.id))) {
       aceptarEstimacion(bd, e, hoy);
       resultado.estimaciones++;
@@ -489,7 +569,7 @@ export function aceptarPropuestas(bd: BaseDatos, hoy: Fecha, elecciones: readonl
 /** «No, gracias»: esa propuesta no vuelve a salir. */
 export function ignorarPropuesta(bd: BaseDatos, hoy: Fecha, id: string): boolean {
   const p = calcularPropuestas(bd, hoy);
-  const encontrada = [...p.gastos, ...p.ingresos, ...p.anuales, ...p.ahorros, ...p.precios, ...p.estimaciones].find((x) => x.id === id);
+  const encontrada = [...p.gastos, ...p.ingresos, ...p.anuales, ...p.ahorros, ...p.precios, ...p.pagas, ...p.estimaciones].find((x) => x.id === id);
   if (!encontrada) return false;
   bd.ejecutar("INSERT OR REPLACE INTO periodicos_ignorados (clave, ignorado) VALUES (?, ?)", encontrada.ignorar, hoy);
   return true;

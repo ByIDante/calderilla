@@ -99,6 +99,10 @@ export async function arrancarEjemplo(puerto: number) {
     importado(`${mes}-14`, -(4200 + i * 300), "RECIBO IBERDROLA CLIENTES SAU FACTURA DEL PERIODO", cuentaNomina, "Suministros");
     for (const dia of ["06", "13", "20", "27"]) importado(`${mes}-${dia}`, -(3500 + ((Number(dia) + i * 7) % 5) * 900), "COMPRA TARJ 4589 CONSUM COOP VALENCIA", cuentaNomina, "Alimentación");
   }
+  // Un segundo sueldo con la paga extra de junio sumada: «Buscar en mis movimientos» lo propone con sus pagas
+  for (const mes of ["2026-06", "2026-07", "2026-08", "2026-09", "2026-10"]) {
+    importado(`${mes}-29`, mes === "2026-06" ? 220000 : 110000, "TRANSFERENCIA RECIBIDA RESTAURANTE MARE SL", cuentaNomina, null);
+  }
   // Un trabajo de fin de semana que paga cada 2 semanas: lo encuentra «Buscar en mis movimientos»
   for (let fecha = "2026-06-05"; fecha <= "2026-10-28"; fecha = sumarDias(fecha, 14)) importado(fecha, 18000, "TRANSFERENCIA RECIBIDA EVENTOS LEVANTE SL", cuentaNomina, null);
   const fondo = bd.ejecutar("INSERT INTO activos (nombre, isin, tipo, renta) VALUES ('Fondo indexado mundial', 'IE00B03HCZ61', 'fondo', 'variable')").id;

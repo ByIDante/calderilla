@@ -23,6 +23,7 @@ import { cerrarMes } from "../src/servicios/cierres.ts";
 import { guardarSaldo } from "../src/servicios/cuentas.ts";
 import { actualizarRecurrente, crearRecurrente, ingresosDelMes, leerRecurrentes } from "../src/servicios/finanzas.ts";
 import { coincidencia } from "../src/servicios/importacion.ts";
+import { aceptarPropuestas, calcularPropuestas } from "../src/servicios/periodicos.ts";
 import { prepararBase } from "../src/servicios/semillas.ts";
 
 const carpeta = mkdtempSync(path.join(os.tmpdir(), "calderilla-cobros-"));
@@ -191,6 +192,65 @@ describe("encontrar en los movimientos lo que se cobra varias veces al mes", () 
     const apuntes: ApunteDetectable[] = [];
     for (const mes of ["2026-06", "2026-07", "2026-08", "2026-09"]) apuntes.push(apunte(`${mes}-03`, -299, "APPLE.COM BILL"), apunte(`${mes}-18`, -1099, "APPLE.COM BILL"));
     assert.ok(detectarPeriodicos(apuntes, hasta).every((p) => p.frecuencia === "mensual"));
+  });
+});
+
+describe("pagas extra en los movimientos importados", () => {
+  let id = 1000;
+  const cobro = (fecha: string, importe: number): ApunteDetectable => ({ id: ++id, fecha, importe, concepto: "ABONO NOMINA EMPRESA SL", categoriaId: null, cuentaId: 1 });
+  const hasta = new Map<number | null, string>([[1, "2026-10-30"]]);
+  const meses = ["2026-05", "2026-06", "2026-07", "2026-08", "2026-09", "2026-10"];
+
+  it("una nómina con la extra de junio sumada: mensual, con pagas en junio y (aún sin ver) diciembre", () => {
+    const [nomina] = detectarPeriodicos(meses.map((mes) => cobro(`${mes}-28`, mes === "2026-06" ? 300000 : 150000)), hasta);
+    assert.deepEqual([nomina?.frecuencia, nomina?.importe, nomina?.mensual], ["mensual", 150000, 175000]);
+    assert.deepEqual(nomina?.pagasExtra, { meses: [6, 12], vistos: [6], importe: 150000 });
+    assert.equal(nomina?.apunteIds.length, 6, "se unen todos sus movimientos, también el de junio");
+  });
+
+  it("y con la extra en otro movimiento el mismo mes", () => {
+    const apuntes = meses.map((mes) => cobro(`${mes}-28`, 150000));
+    apuntes.push(cobro("2026-06-20", 140000));
+    const [nomina] = detectarPeriodicos(apuntes, hasta);
+    assert.deepEqual([nomina?.frecuencia, nomina?.importe, nomina?.pagasExtra?.importe, nomina?.apunteIds.length], ["mensual", 150000, 140000, 7]);
+  });
+
+  function base(nombre: string): { bd: BaseDatos; cuenta: number; apunte: (fecha: string, importe: number, recurrente?: number) => number } {
+    const bd = new BaseDatos(path.join(carpeta, `${nombre}.db`));
+    prepararBase(bd);
+    const cuenta = bd.ejecutar("INSERT INTO cuentas (nombre, tipo) VALUES ('Nómina', 'corriente')").id;
+    const apunte = (fecha: string, importe: number, recurrente?: number) =>
+      bd.ejecutar("INSERT INTO apuntes (fecha, importe, concepto, cuenta_id, recurrente_id, origen) VALUES (?, ?, 'ABONO NOMINA EMPRESA SL', ?, ?, 'csv')", fecha, importe, cuenta, recurrente ?? null).id;
+    return { bd, cuenta, apunte };
+  }
+
+  it("al aceptar la nómina encontrada, se crea con sus pagas extra", () => {
+    const { bd, apunte } = base("detectar-nueva");
+    for (const mes of meses) apunte(`${mes}-28`, mes === "2026-06" ? 300000 : 150000);
+    const [propuesta] = calcularPropuestas(bd, "2026-10-30").ingresos;
+    assert.deepEqual(propuesta?.periodico.pagasExtra?.meses, [6, 12]);
+    const hecho = aceptarPropuestas(bd, "2026-10-30", [{ id: propuesta!.id, pagas: true }]);
+    assert.deepEqual([hecho.creados, hecho.pagas], [1, 1]);
+    const [nomina] = leerRecurrentes(bd);
+    assert.deepEqual(nomina?.pagasExtra, [{ nombre: null, meses: [6, 12], importe: null }], "como un cobro normal: sin importe propio");
+    assert.equal(mensualEn(nomina!, nomina!.versiones, "2026-11"), 175000);
+    bd.cerrar();
+  });
+
+  it("si la nómina ya está apuntada, se proponen sus pagas extra y se unen sus movimientos", () => {
+    const { bd, apunte } = base("detectar-existente");
+    const nomina = crearRecurrente(bd, { ...fijo, tipo: "ingreso", nombre: "Nómina", frecuencia: "mensual", inicio: "2026-01-28", importe: 150000, patron: "nomina empresa" });
+    for (const mes of meses) apunte(`${mes}-28`, 150000, nomina);
+    const extra = apunte("2026-06-21", 150000);
+    const propuestas = calcularPropuestas(bd, "2026-10-30");
+    const [paga] = propuestas.pagas;
+    assert.deepEqual([paga?.recurrente.nombre, paga?.meses, paga?.vistos, paga?.comoNormal], ["Nómina", [6, 12], [6], true]);
+    assert.equal(propuestas.ingresos.length, 0, "no se propone otra nómina");
+    assert.equal(aceptarPropuestas(bd, "2026-10-30", [{ id: paga!.id }]).pagas, 1);
+    assert.deepEqual(leerRecurrentes(bd, nomina)[0]?.pagasExtra, [{ nombre: null, meses: [6, 12], importe: null }]);
+    assert.equal(bd.uno<{ id: number | null }>("SELECT recurrente_id AS id FROM apuntes WHERE id = ?", extra)?.id, nomina);
+    assert.equal(calcularPropuestas(bd, "2026-10-30").pagas.length, 0, "y ya no vuelve a salir");
+    bd.cerrar();
   });
 });
 

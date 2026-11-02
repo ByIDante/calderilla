@@ -178,6 +178,7 @@ export function rutasGastos(app: Hono, estado: Estado) {
         como: como === "ahorro" ? "ahorro" : "gasto",
         destino: como === "ahorro" ? referencia : null,
         unir: como === "unir" ? referencia : null,
+        pagas: f.casilla(`pagas_${id}`),
       };
     });
     if (!elecciones.length) return redirigir(c, "/gastos/detectar", { error: "Marca primero lo que quieres añadir." });
@@ -187,6 +188,7 @@ export function rutasGastos(app: Hono, estado: Estado) {
       r.vinculados && `${r.vinculados} ${r.vinculados === 1 ? "unido" : "unidos"} a lo que ya tenías`,
       r.ahorros && `${r.ahorros} como ahorro automático`,
       r.precios && `${r.precios} ${r.precios === 1 ? "precio actualizado" : "precios actualizados"}`,
+      r.pagas && `${r.pagas === 1 ? "pagas extra apuntadas en 1 ingreso" : `pagas extra apuntadas en ${r.pagas} ingresos`}`,
       r.estimaciones && `${r.estimaciones} ${r.estimaciones === 1 ? "estimación" : "estimaciones"} de gasto variable`,
     ].filter(Boolean);
     return redirigir(c, "/gastos/detectar", {

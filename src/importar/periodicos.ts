@@ -114,6 +114,11 @@ export interface Periodico {
   apunteIds: number[];
   /** Un único cargo grande (seguro, impuesto) que puede ser anual: se pregunta */
   unico: boolean;
+  /**
+   * Una nómina con pagas extra: los meses en que llegan (los vistos y, si no se ve su pareja, la que suele
+   * tener: diciembre para la de verano) y el importe de cada una. `mensual` ya las incluye repartidas.
+   */
+  pagasExtra?: { meses: number[]; vistos: number[]; importe: Centimos };
 }
 
 const PERIODOS = [
@@ -341,6 +346,52 @@ function reconocerVariasAlMes(clave: string, cargos: ApunteDetectable[], canal: 
   return undefined;
 }
 
+/**
+ * Los meses de unas pagas extra: los vistos y, si su pareja habitual no se ve porque lo importado no llega a
+ * ella, también esa (una paga de junio o julio sin diciembre: diciembre; una de diciembre sin verano: junio).
+ */
+export function sugerirMesesPagas(fechas: readonly Fecha[], desde: Fecha, hasta: Fecha): number[] {
+  const vistos = new Set(fechas.map((fecha) => Number(fecha.slice(5, 7))));
+  const ultima = [...fechas].sort().at(-1)!;
+  const anio = Number(ultima.slice(0, 4));
+  const meses = new Set(vistos);
+  if ([...vistos].every((m) => m === 6 || m === 7) && hasta < `${anio}-12-31`) meses.add(12);
+  if (vistos.size === 1 && vistos.has(12) && desde > `${anio}-06-01`) meses.add(6);
+  return [...meses].sort((a, b) => a - b);
+}
+
+/**
+ * Una nómina con pagas extra: los meses en que se cobra bastante más de lo normal, sumado en un movimiento o
+ * en otro aparte el mismo mes. Se reconoce con un cobro normal por mes (si la extra llegó sumada, con el
+ * importe normal) y las pagas se anotan aparte, con sus meses. null si no es eso.
+ */
+function reconocerConPagas(clave: string, cargos: readonly ApunteDetectable[], ultimoPorCuenta: ReadonlyMap<number | null, Fecha>): Periodico | null {
+  const porMes = new Map<number, ApunteDetectable[]>();
+  for (const cargo of cargos) porMes.set(indiceMes(cargo.fecha), [...(porMes.get(indiceMes(cargo.fecha)) ?? []), cargo]);
+  if (porMes.size < 3) return null;
+  const meses = [...porMes.values()].map((lista) => ({ lista, total: lista.reduce((suma, c) => suma + c.importe, 0) }));
+  const normal = mediana(meses.map((m) => m.total));
+  const conExtra = meses.filter((m) => m.total >= normal * 1.4);
+  if (!conExtra.length || conExtra.length * 2 > meses.length) return null;
+  // De cada mes, el cobro más parecido a lo normal; si es el único de un mes con extra, la lleva sumada
+  const normales = meses.map(({ lista, total }) => {
+    const cercano = [...lista].sort((a, b) => Math.abs(a.importe - normal) - Math.abs(b.importe - normal))[0]!;
+    return lista.length === 1 && total >= normal * 1.4 ? { ...cercano, importe: normal } : cercano;
+  });
+  const base = reconocer(clave, normales, ultimoPorCuenta);
+  if (!base || base.frecuencia !== "mensual" || base.tipo !== "ingreso") return null;
+  const fechas = conExtra.map((m) => m.lista[0]!.fecha);
+  const pagas = sugerirMesesPagas(fechas, cargos[0]!.fecha, ultimoPorCuenta.get(base.cuentaId) ?? base.ultimo);
+  const importe = mediana(conExtra.map((m) => m.total - normal));
+  return {
+    ...base,
+    mensual: Math.round(base.mensual + (importe * pagas.length) / 12),
+    veces: cargos.length,
+    apunteIds: cargos.map((c) => c.id),
+    pagasExtra: { meses: pagas, vistos: [...new Set(fechas.map((f) => Number(f.slice(5, 7))))].sort((a, b) => a - b), importe },
+  };
+}
+
 /** Separa por importe: «APPLE» puede ser iCloud a 2,99 y Apple Music a 10,99, cada uno con su mes */
 function porImporte(cargos: readonly ApunteDetectable[]): ApunteDetectable[][] {
   const orden = [...cargos].sort((a, b) => Math.abs(a.importe) - Math.abs(b.importe));
@@ -418,7 +469,8 @@ export function detectarPeriodicos(
   const encontrados: Periodico[] = [];
   for (const [clave, cargos] of grupos) {
     // Primero el grupo entero; si no encaja (dos cargos en el mismo mes), cada franja de importe por separado
-    const entero = reconocer(clave, [...cargos], ultimoPorCuenta);
+    // Una nómina con pagas extra no encaja entera (el mes de la extra se sale de lo normal): se prueba antes de partirla
+    const entero = reconocer(clave, [...cargos], ultimoPorCuenta) ?? (clave.startsWith("+") ? reconocerConPagas(clave, cargos, ultimoPorCuenta) : null);
     if (entero) {
       encontrados.push(entero);
       continue;

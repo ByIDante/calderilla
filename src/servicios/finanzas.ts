@@ -143,13 +143,17 @@ function normalizar(datos: DatosRecurrente, amortizaciones: readonly Amortizacio
   };
 }
 
-function guardarPagas(bd: BaseDatos, recurrenteId: number, datos: DatosRecurrente) {
-  if (datos.pagasExtra === undefined) return;
+/** Cambia las pagas extra de un ingreso por estas (sin ninguna, se quitan). */
+export function guardarPagasExtra(bd: BaseDatos, recurrenteId: number, pagas: readonly PagaExtra[]) {
   bd.ejecutar("DELETE FROM pagas_extra WHERE recurrente_id = ?", recurrenteId);
-  if (datos.tipo !== "ingreso") return;
-  for (const paga of datos.pagasExtra) {
+  for (const paga of pagas) {
     bd.ejecutar("INSERT INTO pagas_extra (recurrente_id, nombre, meses, importe) VALUES (?, ?, ?, ?)", recurrenteId, paga.nombre, paga.meses.join(","), paga.importe);
   }
+}
+
+function guardarPagas(bd: BaseDatos, recurrenteId: number, datos: DatosRecurrente) {
+  if (datos.pagasExtra === undefined) return;
+  guardarPagasExtra(bd, recurrenteId, datos.tipo === "ingreso" ? datos.pagasExtra : []);
 }
 
 function guardarPrestamo(bd: BaseDatos, recurrenteId: number, datos: DatosRecurrente) {

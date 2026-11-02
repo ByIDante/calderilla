@@ -1,7 +1,8 @@
 import { html } from "hono/html";
 import { formatoFecha, nombreMesCorto } from "../../dominio/fechas.ts";
 import { ETIQUETA_FRECUENCIA } from "../../dominio/recurrencia.ts";
-import type { PropuestaAhorro, PropuestaCargo, PropuestaEstimacion, PropuestaPrecio, Propuestas } from "../../servicios/periodicos.ts";
+import type { PropuestaAhorro, PropuestaCargo, PropuestaEstimacion, PropuestaPaga, PropuestaPrecio, Propuestas } from "../../servicios/periodicos.ts";
+import { nombreMeses } from "./cobros.ts";
 import { botonAccion, eur, eurR, vacio, type Html } from "./comun.ts";
 
 /*
@@ -29,7 +30,7 @@ function veces(c: PropuestaCargo): string {
 function importe(c: PropuestaCargo): Html {
   const p = c.periodico;
   const subida = p.clase === "fijo" && p.escalones.length > 1 ? html`<div class="apagado pequeno">antes ${eur(p.escalones.at(-2)!.importe)}</div>` : "";
-  const alMes = p.meses !== 1 ? html`<div class="apagado pequeno">${eurR(p.mensual)} al mes</div>` : "";
+  const alMes = p.meses !== 1 || p.pagasExtra ? html`<div class="apagado pequeno">${eurR(p.mensual)} al mes${p.pagasExtra ? " con las extras" : ""}</div>` : "";
   return html`${p.clase === "estimacion" ? "unos " : ""}${eur(p.importe)}${subida}${alMes}`;
 }
 
@@ -66,6 +67,7 @@ function filaCargo(c: PropuestaCargo, cuentas: Propuestas["cuentas"]): Html {
             ${p.tipo === "gasto"
               ? html`<label class="casilla-fila"><input type="checkbox" name="esencial_${c.id}" value="1" form="${FORMULARIO}" ${c.esencial ? html`checked` : ""} /> Esencial</label>`
               : ""}`}
+      ${p.pagasExtra ? casillaPagas(c) : ""}
       <div class="apagado pequeno">«${p.ejemplo}» · ${veces(c)}</div>
     </td>
     <td>${p.unico ? "¿Cada año?" : (CADA[p.meses] ?? ETIQUETA_FRECUENCIA[p.frecuencia])}${p.clase === "estimacion" ? html`<div class="apagado pequeno">varía</div>` : ""}</td>
@@ -113,6 +115,51 @@ function tablaAhorros(lista: readonly PropuestaAhorro[]): Html | string {
               <td class="celda-boton">${ignorar(a.id)}</td>
             </tr>`,
           )}
+        </tbody>
+      </table>
+    </div>
+  </section>`;
+}
+
+const conMayuscula = (texto: string) => texto.charAt(0).toUpperCase() + texto.slice(1);
+
+/** «Con sus pagas extra (junio y diciembre, 1.500 € cada una)»: marcada, se apuntan con el ingreso */
+function casillaPagas(c: PropuestaCargo): Html {
+  const pagas = c.periodico.pagasExtra!;
+  const sinVer = pagas.meses.filter((m) => !pagas.vistos.includes(m));
+  return html`<label class="casilla-fila"
+      ><input type="checkbox" name="pagas_${c.id}" value="1" form="${FORMULARIO}" checked /> Con sus pagas extra: ${nombreMeses(pagas.meses)}, ${eurR(pagas.importe)}
+      cada una</label
+    >
+    ${sinVer.length ? html`<div class="apagado pequeno">${conMayuscula(nombreMeses(sinVer))} aún no sale en tus movimientos: se propone porque esa paga suele ir en pareja.</div>` : ""}`;
+}
+
+/** Pagas extra de los ingresos que ya tienes y que no estaban apuntadas */
+function tablaPagas(lista: readonly PropuestaPaga[]): Html | string {
+  if (!lista.length) return "";
+  return html`<section class="tarjeta">
+    <h2>Pagas extra que no tienes apuntadas</h2>
+    <p class="apagado">
+      Esos meses cobraste bastante más con el mismo concepto que tu ingreso: en otro movimiento o sumado al de siempre. Si son pagas extra, apúntalas: se reparten
+      entre los 12 meses y los próximos se reconocen solos. Luego puedes cambiar los meses o el importe en el ingreso.
+    </p>
+    <div class="tabla-contenedor">
+      <table class="tabla-acciones tabla-apilable">
+        <thead><tr><th class="m-elegir" aria-label="Apuntar"></th><th>Ingreso</th><th>Meses</th><th class="numero">Cada paga</th><th></th></tr></thead>
+        <tbody>
+          ${lista.map((p) => {
+            const sinVer = p.meses.filter((m) => !p.vistos.includes(m));
+            return html`<tr>
+              <td class="m-elegir">${marcar(p.id, `las pagas extra de ${p.recurrente.nombre}`)}</td>
+              <td>${p.recurrente.nombre}</td>
+              <td>
+                ${nombreMeses(p.meses)}
+                ${sinVer.length ? html`<div class="apagado pequeno">${conMayuscula(nombreMeses(sinVer))} aún no sale en tus movimientos: suele ir en pareja</div>` : ""}
+              </td>
+              <td class="numero">${eur(p.importe)}${p.comoNormal ? html`<div class="apagado pequeno">como un cobro normal</div>` : ""}</td>
+              <td class="celda-boton">${ignorar(p.id)}</td>
+            </tr>`;
+          })}
         </tbody>
       </table>
     </div>
@@ -214,7 +261,7 @@ export function vistaDetectar(p: Propuestas): Html {
       p.cuentas,
     )}
     ${tablaCargos("Ingresos que se repiten", "Tu nómina y otros ingresos que llegan cada cierto tiempo.", p.ingresos, p.cuentas)}
-    ${tablaAhorros(p.ahorros)} ${tablaPrecios(p.precios)}
+    ${tablaPagas(p.pagas)} ${tablaAhorros(p.ahorros)} ${tablaPrecios(p.precios)}
     ${tablaCargos(
       "Cargos sueltos que pueden ser anuales",
       "Solo los he visto una vez, pero parecen un seguro o un impuesto. Si es anual, añádelo: se reparte entre los meses para que no te pille por sorpresa.",

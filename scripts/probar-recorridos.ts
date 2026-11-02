@@ -111,6 +111,15 @@ const navegador = await chromium.launch({ channel: "chrome" });
 
   await pagina.goto(`${base}/gastos/detectar`, { waitUntil: "networkidle" });
   comprobar(/Eventos levante[\s\S]*Cada 2 semanas/i.test((await pagina.textContent("main")) ?? ""), "en los movimientos encuentra el cobro cada 2 semanas");
+  const restaurante = pagina.locator("tr", { hasText: "RESTAURANTE MARE" }).first();
+  comprobar(/Con sus pagas extra: junio y diciembre/.test((await restaurante.textContent()) ?? ""), "encuentra el sueldo del restaurante con su paga extra de junio (y propone diciembre)");
+  await restaurante.screenshot({ path: path.join(capturas, "3b-paga-extra-encontrada.png") });
+  await restaurante.locator("input[name='ids']").check();
+  await pagina.click("button:has-text('Añadir lo marcado')");
+  await pagina.waitForLoadState("networkidle");
+  comprobar(/pagas extra apuntadas en 1 ingreso/.test((await pagina.textContent("main")) ?? ""), "al aceptarlo, avisa de que apunta sus pagas extra");
+  await pagina.goto(`${base}/gastos`, { waitUntil: "networkidle" });
+  comprobar(/1\.283,33/.test((await pagina.locator("tr", { hasText: "Restaurante mare" }).first().textContent()) ?? ""), "y «Al mes» las incluye: 1.100 € + 2 × 1.100 € ÷ 12 = 1.283,33 €");
   await contexto.close();
 }
 
