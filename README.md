@@ -3,8 +3,10 @@
 Web local para llevar el control de tu economía: ingresos, gastos fijos y a plazos, cuánto puedes gastar en ocio y qué hacer con lo que te sobra.
 
 - **Gastos fijos y a plazos.** El coche a 250 €/mes durante 5 años se apunta una vez y, cuando acaba, pasa solo a «Finalizados». Los gastos anuales (seguros, IBI, ITV…) se reparten mes a mes. Si cambia un importe, los meses anteriores conservan el que tenían.
+- **Cobros cada 15 días y pagas extra.** Una vez al mes, cada semana, cada 2 semanas o dos veces al mes, y con pagas extra en los meses que elijas (junio y diciembre, cada 2 meses…). Todo se reparte para que el presupuesto sea igual cada mes, y la app te enseña mes a mes lo que cobras de verdad.
 - **Resumen del mes.** Muestra lo que entra, lo que sale y lo que sobra, con gráficos y una tabla de cierres.
 - **Ocio.** Calcula cuánto te queda este mes para ocio y explica de dónde sale la cifra.
+- **Calculadora.** Cambia cualquier número (tu sueldo, un gasto, lo que tienes ahorrado, una meta…) y mira cómo quedarían el ocio, el ahorro y tu etapa. Es solo para probar: no se guarda nada.
 - **Escalera de inversión.** Según tus gastos y lo que te sobra, te dice en qué etapa estás y qué hacer. Cuando cumples los requisitos, pasas a la siguiente etapa o se desbloquean más opciones.
 - **Cartera.** Fondos, ETF, acciones, cripto y divisas, con su valor y lo que ganas o pierdes. Los precios se actualizan solos con fuentes gratuitas, y también puedes ponerlos a mano.
 - **Tus movimientos.** Importa el extracto del banco (CSV o Excel) o conecta el banco para que traiga saldos y movimientos solo.
@@ -102,6 +104,8 @@ Los tipos de interés de cuentas y Letras, los tramos del IRPF y los límites de
 | Qué | Dónde |
 |---|---|
 | Nómina, alquiler, recibos, el préstamo del coche | Ingresos y gastos |
+| Una nómina que cobras cada 15 días o cada semana | Ingresos y gastos, en «Cada cuánto»: dos veces al mes, cada 2 semanas o cada semana |
+| Las pagas extra (14 pagas, una extra cada 2 meses…) | En el mismo ingreso: «¿Cobras pagas extra?» y eliges los meses y el importe |
 | Tu cuenta de Trade Republic u otra cuenta que paga intereses | Cuentas, tipo «Cuenta remunerada», con su TAE |
 | Lo que traspasas cada mes a esa cuenta o a un fondo | Cuentas → Ahorro automático. **No es un gasto**: es ahorro |
 | Los intereses que te paga la cuenta | No hace falta: aparecen al actualizar el saldo (la app te enseña la estimación) |
@@ -116,6 +120,35 @@ Los tipos de interés de cuentas y Letras, los tramos del IRPF y los límites de
 - Solo si en 2 de los 3 últimos cierres ahorras menos de lo previsto, la app baja el presupuesto de ocio hasta que cuadre.
 
 Si la aportación va a un fondo, al cerrar el mes se apunta la compra sola: las participaciones se calculan con el último precio, o las pones tú.
+
+## Cobros que no son uno al mes y pagas extra
+
+- **Cada cuánto.** Además de una vez al mes (o cada 3, 6 o 12 meses), un ingreso o un gasto puede llegar **dos veces al mes** (el día del primer cobro y 15 días después: el 1 y el 16, el 15 y el 30…), **cada 2 semanas** (26 al año: dos meses al año llegan 3) o **cada semana** (52 al año). Cuenta su media: 800 € dos veces al mes son 1.600 € al mes.
+- **Pagas extra.** En un ingreso puedes añadir hasta 3, cada una con sus meses (junio y diciembre, julio y diciembre, cada 3 meses, cada 2 meses o los que elijas), su importe y un nombre. Si dejas el importe vacío, es como un cobro normal y sube cuando sube tu sueldo.
+- **Se reparten entre los 12 meses**, como los gastos anuales: 14 pagas de 1.500 € cuentan 1.750 € todos los meses. Así el ocio y el ahorro no suben y bajan según el mes. El mes de la paga extra cobras más, pero ese dinero ya contaba repartido en los demás.
+- **Dónde se ve.**
+  - Mientras rellenas el formulario, te dice cuánto cuenta al mes.
+  - La ficha de cada ingreso desglosa el año: cobros, pagas extra, total y lo que cuenta cada mes.
+  - En **Ingresos y gastos → Tus ingresos mes a mes** ves, para los próximos 12 meses, lo que cobras de verdad, lo que cuenta tu presupuesto y la diferencia.
+  - El Resumen te avisa el mes que cobras de más.
+- **Cierres.** Al medir lo que ahorraste de verdad, se tiene en cuenta lo que el presupuesto ya ha contado de tus pagas extra y aún no has cobrado. Sin eso, los meses sin extra parecería que ahorras menos y se bajaría el ocio sin motivo.
+- **Al importar** se reconoce la nómina de junio aunque llegue con la extra sumada o en otro movimiento, y «Buscar en mis movimientos» encuentra lo que se cobra cada semana, cada 2 semanas o dos veces al mes.
+
+## Calculadora
+
+Sirve para comprobar los números y para preguntarte «¿y si…?». Parte de tus datos de verdad y nada de lo que cambies se guarda: «Volver a mis números» lo deja todo como estaba.
+
+- **Lo que puedes cambiar:**
+  - el importe de cada ingreso y gasto, o quitarlo;
+  - hasta 3 ingresos o gastos de prueba;
+  - el dinero de tus cuentas y lo ya gastado en ocio;
+  - tus metas, o una de prueba;
+  - en «Las reglas (avanzado)», cuánto se ahorra de cada 100 € que te sobran en cada etapa, el ocio mínimo, el colchón y los meses del fondo de emergencia.
+- **Lo que ves:**
+  - cada cifra **ahora** y **con tu prueba**, con la diferencia y la pantalla en la que aparece;
+  - si cambiarías de etapa;
+  - el cálculo del ocio paso a paso, con tus números y con los de la prueba.
+- **Mismas cuentas.** Usa las mismas fórmulas que el resto de la app: sin cambios, sale exactamente lo mismo que en el Resumen y en Ocio.
 
 ## Cuánto puedo gastar en ocio
 
@@ -164,10 +197,18 @@ npm run dev        # arranca y se reinicia al cambiar el código
 npm test           # tests (node:test)
 npm run typecheck  # comprobación de tipos
 npm run revisar-pantallas -- capturas   # revisa todas las páginas en móvil, tablet, portátil y pantallas grandes
+npm run probar-recorridos -- capturas   # apunta pagas extra y juega con la Calculadora en el navegador, comprobando los números
 npm run paquete-windows                  # crea dist/Calderilla-Windows.zip (con Node y dependencias dentro)
 ```
 
 `paquete-windows` empaqueta el último commit (hay que tenerlo todo en commit) con Node 24 para Windows, comprobado con las sumas de nodejs.org, y las dependencias ya instaladas. Para que la gente lo descargue, súbelo a una release de GitHub con el nombre `Calderilla-Windows.zip`: el enlace de «la forma fácil» siempre apunta a la última. Solo hace falta un paquete nuevo si cambia la versión de Node; el código se actualiza solo desde la rama `main`, y las dependencias se reinstalan si cambia `package-lock.json`.
+
+`probar-recorridos` usa los mismos datos de ejemplo y hace con Playwright lo que haría una persona, comprobando las cifras en pantalla:
+- apunta un cobro dos veces al mes y una nómina con pagas extra, y mira lo que cuentan al mes, el desglose y el mes a mes;
+- en la Calculadora sube el sueldo, quita un gasto, añade otro y una meta, y cambia una regla;
+- comprueba que después el Resumen y Ocio siguen igual y que no se ha guardado nada.
+
+Si algo no cuadra, termina con error.
 
 `revisar-pantallas` arranca la app con datos de ejemplo en una carpeta temporal y la abre con Playwright en el Chrome del sistema (390, 820, 1366, 1920 y 2560 px). Avisa si la página se desplaza de lado, si algo se sale de su tarjeta, si un texto baja de línea antes de tiempo, si una tabla no cabe, si la sección actual queda fuera del menú o si en el móvil hay botones demasiado pequeños para el dedo. Guarda capturas de las pantallas principales en la carpeta que le digas.
 
