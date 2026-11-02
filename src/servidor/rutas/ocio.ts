@@ -1,13 +1,12 @@
 import type { Context, Hono } from "hono";
 import { html } from "hono/html";
 import { formatoFecha, mesDe, nombreMes, primerDia, sumarMesesAMes, ultimoDia } from "../../dominio/fechas.ts";
-import { NOMBRE_ETAPA } from "../../reglas/tipos.ts";
 import { leerAportaciones, totalMensual } from "../../servicios/aportaciones.ts";
 import { contexto, ocioGastadoEn } from "../../servicios/situacion.ts";
 import { bd, render, type Estado } from "../app.ts";
 import { Formulario, idDe, redirigir } from "../formulario.ts";
 import { botonAccion, campo, cifra, eur, eurR, porque, selector, vacio } from "../vistas/comun.ts";
-import { barraReparto, medidorOcio } from "../vistas/reparto.ts";
+import { barraReparto, medidorOcio, pasosOcio, tablaPasos } from "../vistas/reparto.ts";
 
 interface Apunte {
   id: number;
@@ -76,28 +75,6 @@ export function rutasOcio(app: Hono, estado: Estado) {
     );
     const categorias = base.todos<{ id: number; nombre: string; tipo: string }>("SELECT id, nombre, tipo FROM categorias WHERE archivada = 0 AND tipo != 'ingreso' ORDER BY tipo != 'ocio', nombre");
     const automatico = totalMensual(leerAportaciones(base), mes);
-    const proporcion = p.sobrante > 0 ? Math.round(((p.objetivoAhorro - p.cuotaLiberada) / Math.max(p.sobrante - p.cuotaLiberada, 1)) * 100) : 0;
-
-    // [texto, importe, nota, tramo de color de la barra de reparto]
-    type Fila = [string, number, string?, number?];
-    const filasCalculo: Fila[] = [
-      ["Ingresos al mes", p.ingresos],
-      ["− Gastos esenciales", -p.esenciales, undefined, 1],
-      ["− Gastos no esenciales", -p.noEsenciales, undefined, 2],
-      ["= Te sobra", p.sobrante],
-      [
-        `− Ahorro de la etapa «${NOMBRE_ETAPA[ctx.resultado.etapa]}»`,
-        -(p.objetivoAhorro - p.paraMetas),
-        [`un ${proporcion} % de lo que sobra`, p.cuotaLiberada ? `más la cuota liberada de ${eurR(p.cuotaLiberada)}` : "", automatico ? `tu ahorro automático cubre ${eurR(automatico)}` : ""].filter(Boolean).join(", "),
-        3,
-      ],
-      ...(p.paraMetas ? [["− Para tus metas", -p.paraMetas, undefined, 4] as Fila] : []),
-      ["= Ocio previsto", p.ocioPlan, undefined, 5],
-      ...(p.correccion ? [["− Corrección por los cierres", -p.correccion, "ahorraste menos de lo previsto en 2 de los 3 últimos cierres"] as Fila] : []),
-      ...(p.ocioRemanente ? [["+ Lo que te sobró del mes pasado", p.ocioRemanente] as Fila] : []),
-      ["− Ya gastado en ocio este mes", -p.ocioGastado],
-      ["= Te queda", p.ocioQueda],
-    ];
 
     return render(
       c,
@@ -134,21 +111,9 @@ export function rutasOcio(app: Hono, estado: Estado) {
             ${barraReparto(p)} ${medidorOcio(p)}
             <details class="como-tabla" style="margin-top:10px">
               <summary>Ver el cálculo paso a paso</summary>
-              <div class="tabla-contenedor"><table>
-                <tbody>
-                  ${filasCalculo.map(
-                    ([texto, valor, nota, tramo]) => html`<tr class="${texto.startsWith("=") ? "fila-total" : ""}">
-                      <td>
-                        ${tramo ? html`<span class="muestra tramo-${tramo}" aria-hidden="true"></span>` : ""}${texto}${nota ? html`<div class="apagado pequeno">${nota}</div>` : ""}
-                      </td>
-                      <td class="numero ${texto === "= Te queda" ? (valor < 0 ? "negativo" : "positivo") : texto.startsWith("=") ? "" : "apagado"}">
-                        ${texto.startsWith("=") ? html`<b>${eur(valor)}</b>` : eur(valor)}
-                      </td>
-                    </tr>`,
-                  )}
-                </tbody>
-              </table></div>
+              ${tablaPasos(pasosOcio(p, ctx.resultado.etapa, automatico))}
             </details>
+            <p class="pequeno"><a href="/calculadora">¿Y si cobraras o gastaras otra cosa? Pruébalo en la Calculadora</a></p>
             ${porque(
               "Primero se cubren los gastos y el ahorro que pide tu etapa de la escalera; lo que queda es para disfrutarlo sin culpa. Al subir de etapa se ahorra una parte menor de lo que sobra, así que el ocio crece. Si en los cierres de mes ahorras menos de lo previsto, es que hay gastos sin apuntar: el ocio baja hasta que cuadre. De lo que no gastes, la mitad pasa al mes siguiente.",
             )}

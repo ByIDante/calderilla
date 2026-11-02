@@ -8,6 +8,7 @@ import type { Fecha } from "../dominio/fechas.ts";
 import { diasParaCaducar, leerBancos } from "../bancos/conexiones.ts";
 import { rutasAjustes } from "./rutas/ajustes.ts";
 import { rutasBancos } from "./rutas/bancos.ts";
+import { rutasCalculadora } from "./rutas/calculadora.ts";
 import { rutasCuentas } from "./rutas/cuentas.ts";
 import { rutasGastos } from "./rutas/gastos.ts";
 import { rutasImportar } from "./rutas/importar.ts";
@@ -125,6 +126,7 @@ export function crearApp(estado: Estado): Hono {
   rutasCuentas(app, estado);
   rutasInversiones(app, estado);
   rutasMetas(app, estado);
+  rutasCalculadora(app, estado);
   rutasAjustes(app, estado);
   rutasBancos(app, estado);
 

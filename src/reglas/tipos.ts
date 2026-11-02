@@ -43,6 +43,8 @@ export interface Perfil {
 }
 
 export interface MetaSituacion {
+  /** Para la calculadora: qué meta de tus datos es (una de prueba no tiene) */
+  id?: number;
   nombre: string;
   objetivo: Centimos;
   ahorrado: Centimos;

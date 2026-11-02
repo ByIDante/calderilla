@@ -14,6 +14,7 @@ export const SECCIONES = [
   { ruta: "/cuentas", id: "cuentas", nombre: "Cuentas y cierres" },
   { ruta: "/inversiones", id: "inversiones", nombre: "Inversiones" },
   { ruta: "/metas", id: "metas", nombre: "Metas" },
+  { ruta: "/calculadora", id: "calculadora", nombre: "Calculadora" },
   { ruta: "/ajustes", id: "ajustes", nombre: "Ajustes" },
 ] as const;
 
