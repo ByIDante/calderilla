@@ -41,6 +41,15 @@ async function esperarTexto(pagina: Page, selector: string, buscado: RegExp): Pr
   }
 }
 
+const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
+/** «Ya» → −1, «mayo de 2027» → su número de mes, «Más de 2 años» → infinito: para comparar cuándo llegas */
+function cuando(texto: string | null): number {
+  const limpio = (texto ?? "").trim();
+  if (limpio === "Ya") return -1;
+  const [mes, anio] = limpio.split(" de ");
+  return MESES.includes(mes ?? "") ? Number(anio) * 12 + MESES.indexOf(mes!) : Infinity;
+}
+
 const cifra = async (pagina: Page, etiqueta: string) => euros(await pagina.locator("#calculadora-resultado .cifra", { hasText: etiqueta }).locator(".cifra-valor").textContent());
 /** Fila de «Todas las cifras»: [ahora, con tu prueba] */
 async function fila(pagina: Page, etiqueta: string): Promise<[number, number]> {
@@ -48,15 +57,25 @@ async function fila(pagina: Page, etiqueta: string): Promise<[number, number]> {
   return [euros(await celdas.nth(1).textContent()), euros(await celdas.nth(2).textContent())];
 }
 /**
+ * Espera a htmx: lo que se escribe pide los resultados 400 ms después y, mientras hay una petición en curso, htmx
+ * marca su elemento con .htmx-request. Luego, un momento para que se coloque y se pinte (los gráficos).
+ * (waitForLoadState("networkidle") no sirve: solo mira la carga de la página, no las peticiones de después.)
+ */
+async function esperarHtmx(pagina: Page) {
+  await pagina.waitForTimeout(450);
+  await pagina.waitForFunction(() => !document.querySelector(".htmx-request"), undefined, { timeout: 5000 });
+  await pagina.waitForTimeout(80);
+}
+
+/**
  * Cambia campos de la Calculadora y espera a los resultados del último cambio: al pasar de un campo a otro, el
  * primero ya pide los suyos (evento change), así que se espera a que no quede ninguna petición pendiente.
  */
 async function cambiar(pagina: Page, accion: () => Promise<void>) {
-  const respuesta = pagina.waitForResponse((r) => r.url().includes("/calculadora/resultado"));
+  const respuesta = pagina.waitForResponse((r) => r.url().includes("/calculadora"));
   await accion();
   await respuesta;
-  await pagina.waitForTimeout(450);
-  await pagina.waitForLoadState("networkidle");
+  await esperarHtmx(pagina);
 }
 
 const navegador = await chromium.launch({ channel: "chrome" });
@@ -116,7 +135,7 @@ const navegador = await chromium.launch({ channel: "chrome" });
   await restaurante.screenshot({ path: path.join(capturas, "3b-paga-extra-encontrada.png") });
   await restaurante.locator("input[name='ids']").check();
   await pagina.click("button:has-text('Añadir lo marcado')");
-  await pagina.waitForLoadState("networkidle");
+  await esperarHtmx(pagina);
   comprobar(/pagas extra apuntadas en 1 ingreso/.test((await pagina.textContent("main")) ?? ""), "al aceptarlo, avisa de que apunta sus pagas extra");
   await pagina.goto(`${base}/gastos`, { waitUntil: "networkidle" });
   comprobar(/1\.283,33/.test((await pagina.locator("tr", { hasText: "Restaurante mare" }).first().textContent()) ?? ""), "y «Al mes» las incluye: 1.100 € + 2 × 1.100 € ÷ 12 = 1.283,33 €");
@@ -187,11 +206,59 @@ for (const tamano of [
   await pagina.locator("#calculadora-resultado").screenshot({ path: path.join(capturas, `5-calculadora-resultado-${tamano.nombre}.png`) });
 
   await pagina.click(".calculadora-datos a:has-text('Volver a mis números')");
-  await pagina.waitForLoadState("networkidle");
+  await esperarHtmx(pagina);
   comprobar(
     /Aún no has cambiado nada/.test((await pagina.textContent("#calculadora-resultado")) ?? "") && (await cifra(pagina, "Para ocio este mes")) === realOcio,
     "«Volver a mis números» deja todo como estaba",
   );
+  comprobar(
+    (await pagina.locator("form.calculadora-datos").count()) === 1 && (await pagina.inputValue(`#importe-${ids.nomina}`)) === "2150",
+    "y vuelve a cargar la página entera: un solo formulario, con la nómina de verdad",
+  );
+
+  // Botones «¿Y si…?»: rellenan la prueba sobre lo que ya hay
+  const [ingresosAntes] = await fila(pagina, "Ingresos al mes");
+  await cambiar(pagina, () => pagina.click("button[value='sueldo']"));
+  const [, ingresosSueldo] = await fila(pagina, "Ingresos al mes");
+  // Un poco menos del 5 % en total: las pagas extra con importe propio («Beneficios») no suben con el sueldo
+  const subida = ingresosSueldo / ingresosAntes - 1;
+  comprobar(subida > 0.045 && subida <= 0.0505, `«Me suben el sueldo un 5 %»: ingresos de ${ingresosAntes} € a ${ingresosSueldo} € (+${(subida * 100).toFixed(2)} %)`);
+  comprobar((await pagina.inputValue(`#importe-${ids.nomina}`)) === "2257,50", "y el campo de la nómina ya dice 2257,50");
+  await cambiar(pagina, () => pagina.click("button[value='sin_ingresos']"));
+  const sinIngresos = (await pagina.textContent("#calculadora-resultado")) ?? "";
+  comprobar(/aguantarías unos [\d,]+ meses pagando solo lo esencial/.test(sinIngresos), "«Me quedo sin ingresos»: dice cuántos meses aguantas");
+  comprobar(/Te quedarías sin dinero en las cuentas/.test(sinIngresos), "y en qué mes te quedarías sin dinero");
+  await pagina.locator("#calculadora-resultado").screenshot({ path: path.join(capturas, `6-sin-ingresos-${tamano.nombre}.png`) });
+  await pagina.click(".calculadora-datos a:has-text('Volver a mis números')");
+  await esperarHtmx(pagina);
+
+  // Adelantar 2.000 € del coche reduciendo plazo
+  await cambiar(pagina, () => pagina.fill(`#adelantar-${ids.coche}`, "2000"));
+  const adelanto = pagina.locator("#calculadora-resultado section", { has: pagina.locator("h2", { hasText: "Adelantar «Coche»" }) });
+  const textoAdelanto = (await adelanto.textContent()) ?? "";
+  const [, finNuevo, finAntes] = /Terminas\s*(\d\d\/\d\d\/\d{4})\s*antes\s*(\d\d\/\d\d\/\d{4})/.exec(textoAdelanto) ?? [];
+  const fecha = (texto: string | undefined) => (texto ?? "").split("/").reverse().join("-");
+  comprobar(/Te ahorras de intereses\s*[\d.]+,\d\d/.test(textoAdelanto) && fecha(finNuevo) < fecha(finAntes), `adelantar 2.000 € del coche: intereses ahorrados y acabas antes (${finNuevo}, antes ${finAntes})`);
+  await adelanto.screenshot({ path: path.join(capturas, `7-adelantar-coche-${tamano.nombre}.png`) });
+  await cambiar(pagina, () => pagina.fill(`#adelantar-${ids.coche}`, ""));
+
+  // Proyección: empezando con las cuentas a cero, el fondo de emergencia tarda más; con más sueldo, ahorras más
+  comprobar((await pagina.locator("#grafico-proyeccion[data-pintado]").count()) === 1, "la proyección a 2 años tiene su gráfico");
+  await cambiar(pagina, () => pagina.fill("#campo-liquidez", "0"));
+  const hito = pagina.locator("#cuando-llegas tr[data-hito='fondo'] td");
+  const [fondoAhora, fondoPrueba] = [await hito.nth(1).textContent(), await hito.nth(2).textContent()];
+  comprobar(cuando(fondoPrueba) > cuando(fondoAhora), `con las cuentas a cero, el fondo de emergencia llega más tarde («${fondoAhora}» → «${fondoPrueba}»)`);
+  await cambiar(pagina, async () => {
+    await pagina.fill("#campo-liquidez", "");
+    await pagina.fill(`#importe-${ids.nomina}`, "4000");
+  });
+  const final = pagina.locator("#calculadora-resultado .grafico:has(#grafico-proyeccion) tbody tr").last().locator("td");
+  const [finalAhora, finalPrueba] = [euros(await final.nth(1).textContent()), euros(await final.nth(2).textContent())];
+  comprobar(finalPrueba > finalAhora, `con 4.000 € de nómina, a 2 años tendrías más ahorrado (${finalAhora} € → ${finalPrueba} €)`);
+  comprobar((await pagina.locator("#grafico-proyeccion[data-pintado]").count()) === 1, "y el gráfico se vuelve a pintar con los números nuevos");
+  await pagina.locator("#calculadora-resultado section", { has: pagina.locator("h2", { hasText: "En los próximos 2 años" }) }).screenshot({ path: path.join(capturas, `8-proyeccion-${tamano.nombre}.png`) });
+  const anchoFinal = await pagina.evaluate(() => document.documentElement.scrollWidth);
+  comprobar(anchoFinal <= tamano.ancho + 1, `con la proyección y el adelanto, la página no se sale de lado (${anchoFinal} px)`);
 
   await pagina.goto(`${base}/`, { waitUntil: "networkidle" });
   comprobar(euros(await frase.nth(0).textContent()) === realAhorro && euros(await frase.nth(1).textContent()) === realOcio, "el Resumen sigue igual");

@@ -98,7 +98,8 @@ function revisar() {
     // Las casillas y opciones se pulsan también por su texto (la etiqueta), así que no cuentan
     const pequenos = [...document.querySelectorAll("main a, main button, main select, main input:not([type=hidden]):not([type=checkbox]):not([type=radio]), main summary")].filter((x) => {
       const r = x.getBoundingClientRect();
-      return r.width > 0 && r.height < 31 && !x.closest("p, li, td div, .apagado");
+      // Lo que solo existe para lectores de pantalla (.sr) no se ve ni se pulsa
+      return r.width > 0 && r.height < 31 && !x.closest("p, li, td div, .apagado, .sr");
     });
     if (pequenos.length) problemas.push(`${pequenos.length} controles de menos de 32 px de alto (difíciles de pulsar con el dedo)`);
   }
