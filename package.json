@@ -15,6 +15,7 @@
     "check": "npm run typecheck && npm test",
     "prepare": "git config core.hooksPath .githooks || exit 0",
     "revisar-pantallas": "node scripts/revisar-pantallas.ts",
+    "probar-recorridos": "node scripts/probar-recorridos.ts",
     "paquete-windows": "node scripts/paquete-windows.ts"
   },
   "dependencies": {

@@ -5,107 +5,16 @@
 //   npm run revisar-pantallas [-- carpeta-de-capturas]
 //
 // Trabaja con datos de ejemplo en una carpeta temporal: no toca tus datos.
-import { mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import { mkdirSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { serve } from "@hono/node-server";
 import { chromium } from "playwright-core";
+import { arrancarEjemplo } from "./ejemplo.ts";
 
-const carpeta = mkdtempSync(path.join(os.tmpdir(), "calderilla-pantallas-"));
-process.env.CALDERILLA_CONFIG_DIR = carpeta;
 const capturas = path.resolve(process.argv[2] ?? path.join(os.tmpdir(), "calderilla-capturas"));
 mkdirSync(capturas, { recursive: true });
-
-const { Sincronizador } = await import("../src/datos/sync.ts");
-const { crearApp } = await import("../src/servidor/app.ts");
-const { prepararBase } = await import("../src/servicios/semillas.ts");
-const { crearRecurrente } = await import("../src/servicios/finanzas.ts");
-const { guardarSaldo } = await import("../src/servicios/cuentas.ts");
-const { guardarPerfil } = await import("../src/servicios/configuracion.ts");
-
-const PUERTO = 5190;
-const HOY = "2026-10-30";
-const estado = {
-  ajustes: { carpetaDatos: path.join(carpeta, "datos"), equipoId: "aaaaaaaa", equipoNombre: "Revisión", puerto: PUERTO, abrirNavegador: false, coingeckoClave: null },
-  sync: null as InstanceType<typeof Sincronizador> | null,
-  token: "revision",
-  hoy: () => HOY,
-  errorFatal: null,
-  usarCarpeta: () => {},
-  guardarAjustes: () => {},
-};
-estado.sync = new Sincronizador({ carpetaDatos: estado.ajustes.carpetaDatos, rutaTrabajo: path.join(carpeta, "trabajo.db"), equipoId: "aaaaaaaa", equipoNombre: "Revisión", alAbrir: prepararBase });
-const bd = estado.sync.bd;
-
-// ── Datos de ejemplo: lo justo para que cada pantalla tenga de todo, con textos largos y cortos ──
-const cat = (nombre: string) => bd.uno<{ id: number }>("SELECT id FROM categorias WHERE nombre = ?", nombre)!.id;
-const fijo = { fin: null, esencial: true, clase: "fijo" as const, nota: null, prestamo: null };
-guardarPerfil(bd, { estabilidad: "normal", riesgo: "moderado", tipoMarginal: 30, tipoRescate: 21, aportacionEmpresa: 0 });
-crearRecurrente(bd, { ...fijo, tipo: "ingreso", nombre: "Nómina", categoriaId: cat("Nómina"), frecuencia: "mensual", inicio: "2024-01-28", importe: 215000 });
-crearRecurrente(bd, { ...fijo, tipo: "gasto", nombre: "Alquiler", categoriaId: cat("Vivienda"), frecuencia: "mensual", inicio: "2024-01-01", importe: 75000 });
-crearRecurrente(bd, { ...fijo, tipo: "gasto", nombre: "Luz y gas", categoriaId: cat("Suministros"), frecuencia: "mensual", inicio: "2024-01-10", importe: 6500 });
-crearRecurrente(bd, { ...fijo, tipo: "gasto", nombre: "Comida", categoriaId: cat("Alimentación"), frecuencia: "mensual", inicio: "2024-01-01", importe: 32000, clase: "estimacion" });
-crearRecurrente(bd, { ...fijo, tipo: "gasto", nombre: "Seguro de hogar multirriesgo con cobertura ampliada", categoriaId: cat("Seguros"), frecuencia: "anual", inicio: "2027-02-01", importe: 41235 });
-crearRecurrente(bd, { ...fijo, tipo: "gasto", nombre: "Netflix", categoriaId: cat("Suscripciones"), frecuencia: "mensual", inicio: "2024-01-01", importe: 1399, esencial: false });
-crearRecurrente(bd, { ...fijo, tipo: "gasto", nombre: "Gimnasio", categoriaId: cat("Ocio"), frecuencia: "mensual", inicio: "2025-01-10", fin: "2026-09-10", importe: 3900, esencial: false });
-const coche = crearRecurrente(bd, {
-  ...fijo,
-  tipo: "gasto",
-  nombre: "Coche",
-  categoriaId: cat("Transporte"),
-  frecuencia: "mensual",
-  inicio: "2024-03-05",
-  importe: 0,
-  prestamo: { capital: 1_500_000, tin: 5.5, tae: null, plazoMeses: 60, comisionAmortizacion: 0.5, vinculado: true },
-});
-const cuenta = (nombre: string, tipo: string, entidad: string | null, saldo: number, tae: number | null = null) => {
-  const id = bd.ejecutar("INSERT INTO cuentas (nombre, tipo, entidad, tae) VALUES (?, ?, ?, ?)", nombre, tipo, entidad, tae).id;
-  guardarSaldo(bd, id, "2026-10-01", saldo);
-  return id;
-};
-const nomina = cuenta("Nómina", "corriente", "BBVA", 234000);
-const ahorro = cuenta("Ahorro", "remunerada", "Trade Republic", 620000, 2.25);
-const viaje = cuenta("Cuenta remunerada para el viaje y el fondo de emergencia", "remunerada", "Openbank", 300000, 3.25);
-cuenta("Plan de pensiones", "plan_pensiones", "Indexa Capital", 450000);
-const gastos: [string, number, string, number | null, string | null][] = [
-  ["2026-10-02", -5430, "COMPRA MERCADONA VALENCIA AV DEL PUERTO", nomina, "Alimentación"],
-  ["2026-10-05", -2800, "GLOVO", nomina, "Restaurantes"],
-  ["2026-10-09", -1500, "CINESA DIAGONAL", nomina, "Ocio"],
-  ["2026-10-12", -8999, "AMAZON MARKETPLACE EU SARL PAGO CON TARJETA 4589", ahorro, "Compras"],
-  ["2026-10-15", -4200, "REPSOL ESTACION DE SERVICIO", nomina, "Transporte"],
-  ["2026-10-18", -350, "BIZUM A JUAN", null, null],
-  ["2026-10-28", 215000, "NOMINA OCTUBRE EMPRESA SL", nomina, "Nómina"],
-  ["2026-09-03", -6120, "MERCADONA", nomina, "Alimentación"],
-  ["2026-09-14", -4500, "RESTAURANTE CASA PEPE", nomina, "Restaurantes"],
-  ["2026-09-20", -3000, "TICKETMASTER ENTRADAS CONCIERTO", viaje, "Ocio"],
-  ["2026-08-10", -5800, "LIDL", nomina, "Alimentación"],
-  ["2026-08-22", -12000, "RYANAIR", nomina, "Viajes"],
-];
-for (const [fecha, importe, concepto, cuentaId, categoria] of gastos) {
-  bd.ejecutar("INSERT INTO apuntes (fecha, importe, concepto, cuenta_id, categoria_id) VALUES (?, ?, ?, ?, ?)", fecha, importe, concepto, cuentaId, categoria ? cat(categoria) : null);
-}
-// Extractos importados de los dos bancos con cosas que se repiten, para «Encontrado en tus movimientos»
-const importado = (fecha: string, importe: number, concepto: string, cuentaId: number, categoria: string | null) =>
-  bd.ejecutar("INSERT INTO apuntes (fecha, importe, concepto, cuenta_id, categoria_id, origen) VALUES (?, ?, ?, ?, ?, 'csv')", fecha, importe, concepto, cuentaId, categoria ? cat(categoria) : null);
-for (const [i, mes] of ["2026-06", "2026-07", "2026-08", "2026-09", "2026-10"].entries()) {
-  importado(`${mes}-07`, -1099, "COMPRA TARJ 4589 SPOTIFY P3F2A1", nomina, "Suscripciones");
-  importado(`${mes}-01`, -30000, "TRANSFERENCIA A TRADE REPUBLIC", nomina, null);
-  importado(`${mes}-02`, 30000, "Ingreso", ahorro, null);
-  importado(`${mes}-14`, -(4200 + i * 300), "RECIBO IBERDROLA CLIENTES SAU FACTURA DEL PERIODO", nomina, "Suministros");
-  for (const dia of ["06", "13", "20", "27"]) importado(`${mes}-${dia}`, -(3500 + ((Number(dia) + i * 7) % 5) * 900), "COMPRA TARJ 4589 CONSUM COOP VALENCIA", nomina, "Alimentación");
-}
-const fondo = bd.ejecutar("INSERT INTO activos (nombre, isin, tipo, renta) VALUES ('Fondo indexado mundial', 'IE00B03HCZ61', 'fondo', 'variable')").id;
-bd.ejecutar("INSERT INTO movimientos_cartera (activo_id, fecha, tipo, cantidad, importe) VALUES (?, '2026-01-15', 'compra', 50, 150000)", fondo);
-bd.ejecutar("INSERT INTO precios (activo_id, fecha, precio, fuente) VALUES (?, '2026-10-29', 34.5, 'manual')", fondo);
-const btc = bd.ejecutar("INSERT INTO activos (nombre, tipo, especulativo) VALUES ('Bitcoin', 'cripto', 1)").id;
-bd.ejecutar("INSERT INTO movimientos_cartera (activo_id, fecha, tipo, cantidad, importe) VALUES (?, '2026-02-01', 'compra', 0.01, 80000)", btc);
-bd.ejecutar("INSERT INTO metas (nombre, objetivo, fecha, ahorrado, cuenta_id) VALUES ('Viaje a Japón', 400000, '2028-06-01', 0, ?)", viaje);
-bd.ejecutar("INSERT INTO metas (nombre, objetivo, fecha, ahorrado) VALUES ('Entrada del piso en Valencia (20 % más gastos de notaría)', 4500000, '2030-06-01', 120000)");
-bd.ejecutar("INSERT INTO aportaciones (nombre, cuenta_id, importe, dia, inicio) VALUES ('Traspaso a Trade Republic', ?, 30000, 1, '2026-06-01')", ahorro);
-bd.ejecutar("INSERT INTO limites_categoria (categoria_id, limite) VALUES (?, 30000), (?, 6000)", cat("Alimentación"), cat("Restaurantes"));
-
-const servidor = serve({ fetch: crearApp(estado).fetch, hostname: "127.0.0.1", port: PUERTO });
-const base = `http://127.0.0.1:${PUERTO}`;
+const { base, ids, cerrar } = await arrancarEjemplo(5190);
+const { coche, fondo, nomina } = ids;
 
 const PAGINAS = [
   "/",
@@ -113,7 +22,9 @@ const PAGINAS = [
   "/gastos",
   "/gastos/detectar",
   "/gastos/nuevo",
+  "/gastos/nuevo?tipo=ingreso",
   `/gastos/${coche}`,
+  `/gastos/${nomina}`,
   `/gastos/${coche}/cuadro`,
   "/ocio",
   "/movimientos",
@@ -123,6 +34,7 @@ const PAGINAS = [
   "/inversiones",
   `/activos/${fondo}`,
   "/metas",
+  "/calculadora",
   "/ajustes",
   "/ajustes/mercado",
   "/ajustes/parametros",
@@ -139,7 +51,7 @@ const TAMANOS = [
   { nombre: "grande", ancho: 2560, alto: 1440 },
 ];
 // Capturas de las pantallas principales (todas las páginas en todos los tamaños serían demasiadas)
-const CON_CAPTURA = new Set(["/", "/ocio", "/movimientos", "/cuentas", "/inversiones", "/gastos", "/gastos/detectar", "/ajustes"]);
+const CON_CAPTURA = new Set(["/", "/ocio", "/movimientos", "/cuentas", "/inversiones", "/gastos", "/gastos/detectar", "/calculadora", `/gastos/${nomina}`, "/ajustes"]);
 
 function revisar() {
   const problemas: string[] = [];
@@ -208,7 +120,5 @@ for (const tamano of TAMANOS) {
   await contexto.close();
 }
 await navegador.close();
-servidor.close();
-estado.sync.cerrar();
-rmSync(carpeta, { recursive: true, force: true });
+cerrar();
 console.log(`\n${total ? `${total} problemas` : "Sin problemas"} · capturas en ${capturas}`);
