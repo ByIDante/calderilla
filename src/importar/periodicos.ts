@@ -1,11 +1,11 @@
 import type { Centimos } from "../dominio/dinero.ts";
 import { diasDelMes, diasEntre, indiceMes, mesDe, mesDesdeIndice, sumarDias, type Fecha, type Mes } from "../dominio/fechas.ts";
-import type { Frecuencia } from "../dominio/recurrencia.ts";
+import { MESES_FRECUENCIA, VECES_AL_ANIO, type Frecuencia } from "../dominio/recurrencia.ts";
 
 /*
  * Lo que se repite en tus movimientos: cargos que llegan cada mes, cada 2, 3, 6 o 12 meses (alquiler,
- * Netflix, la luz, el seguro…), la nómina, lo que gastas de media en cada categoría y los traspasos entre tus
- * propias cuentas. Son funciones puras: reciben movimientos y devuelven lo encontrado, sin tocar la base.
+ * Netflix, la luz, el seguro…), la nómina (también la que se cobra cada semana, cada 2 semanas o dos veces al
+ * mes), lo que gastas de media en cada categoría y los traspasos entre tus propias cuentas. Son funciones puras: reciben movimientos y devuelven lo encontrado, sin tocar la base.
  */
 
 export interface ApunteDetectable {
@@ -90,7 +90,7 @@ export interface Periodico {
   clave: string;
   nombre: string;
   tipo: "gasto" | "ingreso";
-  /** Cada cuántos meses llega: 1, 2, 3, 6 o 12 */
+  /** Cada cuántos meses llega: 1, 2, 3, 6 o 12 (lo que llega varias veces al mes, en fracción, como `MESES_FRECUENCIA`) */
   meses: number;
   /** Cómo se guarda (la app no tiene «cada 2 meses»: eso va como mensual estimado a mitad de importe) */
   frecuencia: Frecuencia;
@@ -215,11 +215,54 @@ function clasificarImporte(cargos: readonly ApunteDetectable[], meses: number): 
   return { clase: "estimacion", importe: Math.round(recientes.reduce((s, i) => s + i, 0) / recientes.length), pasos: null };
 }
 
+/** ¿Encajan estos cargos cada `dias` días desde el primero? Un cargo por hueco, a ±tolerancia, cubriendo al menos el 75 %. */
+function encajaPorDias(cargos: readonly ApunteDetectable[], dias: number, tolerancia: number): Fecha | null {
+  const base = cargos[0]!.fecha;
+  const huecos = new Set<number>();
+  for (const cargo of cargos) {
+    const k = Math.round(diasEntre(base, cargo.fecha) / dias);
+    if (Math.abs(diasEntre(sumarDias(base, k * dias), cargo.fecha)) > tolerancia || huecos.has(k)) return null;
+    huecos.add(k);
+  }
+  return huecos.size / (Math.max(...huecos) + 1) >= 0.75 ? base : null;
+}
+
+/**
+ * ¿Dos veces al mes, en dos días fijos separados unos 15 días (el 1 y el 16, el 15 y el último)? Los días se
+ * sacan de los meses con dos cargos; cada cargo va con el día más cercano y cada serie tiene que encajar cada mes.
+ * Devuelve la fecha prevista del primer cobro del primer día (el segundo llega 15 días después).
+ */
+function encajaQuincenal(cargos: readonly ApunteDetectable[]): Fecha | null {
+  const porMes = new Map<number, ApunteDetectable[]>();
+  for (const cargo of cargos) porMes.set(indiceMes(cargo.fecha), [...(porMes.get(indiceMes(cargo.fecha)) ?? []), cargo]);
+  const pares = [...porMes.values()].filter((lista) => lista.length === 2);
+  if (pares.length < 2 || [...porMes.values()].some((lista) => lista.length > 2)) return null;
+  const primero = diaHabitual(pares.map((par) => par[0]!.fecha));
+  const segundo = diaHabitual(pares.map((par) => par[1]!.fecha));
+  if (segundo - primero < 12 || segundo - primero > 18) return null;
+  const cerca = (cargo: ApunteDetectable, dia: number) => Math.abs(Number(cargo.fecha.slice(8, 10)) - dia);
+  const serieA = cargos.filter((cargo) => cerca(cargo, primero) <= cerca(cargo, segundo));
+  const serieB = cargos.filter((cargo) => cerca(cargo, primero) > cerca(cargo, segundo));
+  if (serieA.length < 2 || serieB.length < 2 || !encaja(serieB, 1, 4, segundo)) return null;
+  return encaja(serieA, 1, 4, primero);
+}
+
+/** Lo que llega más de una vez al mes: al menos 4 cargos */
+const VARIAS_AL_MES: { frecuencia: Frecuencia; dias: number; tolerancia: number; encaja: (cargos: readonly ApunteDetectable[]) => Fecha | null }[] = [
+  { frecuencia: "semanal", dias: 7, tolerancia: 2, encaja: (cargos) => encajaPorDias(cargos, 7, 2) },
+  { frecuencia: "quincenal", dias: 16, tolerancia: 4, encaja: encajaQuincenal },
+  { frecuencia: "catorcenal", dias: 14, tolerancia: 3, encaja: (cargos) => encajaPorDias(cargos, 14, 3) },
+];
+
 /** Intenta reconocer un grupo de cargos (misma clave y signo) como algo periódico */
 function reconocer(clave: string, cargos: ApunteDetectable[], ultimoPorCuenta: ReadonlyMap<number | null, Fecha>): Periodico | null {
   cargos.sort((a, b) => a.fecha.localeCompare(b.fecha) || a.id - b.id);
-  const dia = diaHabitual(cargos.map((c) => c.fecha));
   const canal = claveConcepto(cargos.at(-1)!.concepto).canal;
+  if (cargos.length >= 4) {
+    const varias = reconocerVariasAlMes(clave, cargos, canal, ultimoPorCuenta);
+    if (varias !== undefined) return varias;
+  }
+  const dia = diaHabitual(cargos.map((c) => c.fecha));
   for (const periodo of PERIODOS) {
     const inicio = cargos.length >= periodo.minimo ? encaja(cargos, periodo.meses, periodo.tolerancia, dia) : null;
     const importe = inicio ? clasificarImporte(cargos, periodo.meses) : null;
@@ -256,6 +299,46 @@ function reconocer(clave: string, cargos: ApunteDetectable[], ultimoPorCuenta: R
     };
   }
   return null;
+}
+
+/** Cada semana, cada 2 semanas o dos veces al mes. undefined si no encaja en ninguno (se prueba por meses); null si encaja pero no vale. */
+function reconocerVariasAlMes(clave: string, cargos: ApunteDetectable[], canal: Canal, ultimoPorCuenta: ReadonlyMap<number | null, Fecha>): Periodico | null | undefined {
+  // Cada cobro tiene que ser parecido (±25 %): dos suscripciones distintas del mismo comercio no son una quincenal
+  const centro = mediana(cargos.map((c) => Math.abs(c.importe)));
+  if (!cargos.every((c) => Math.abs(Math.abs(c.importe) - centro) <= centro * 0.25)) return undefined;
+  for (const periodo of VARIAS_AL_MES) {
+    const inicio = periodo.encaja(cargos);
+    const meses = MESES_FRECUENCIA[periodo.frecuencia];
+    const importe = inicio ? clasificarImporte(cargos, meses) : null;
+    if (!inicio || !importe) continue;
+    // Como por meses: con tarjeta, solo si es siempre lo mismo (la compra semanal del súper no es un gasto fijo)
+    if (canal === "tarjeta" && importe.clase === "estimacion") return null;
+    const cuentaId = masFrecuente(cargos.map((c) => c.cuentaId));
+    const ultimo = cargos.at(-1)!.fecha;
+    if (diasEntre(ultimo, ultimoPorCuenta.get(cuentaId) ?? ultimo) > periodo.dias + periodo.tolerancia) return null;
+    return {
+      clave,
+      nombre: nombreDe(clave.split(":")[1] ?? clave),
+      tipo: cargos[0]!.importe < 0 ? "gasto" : "ingreso",
+      meses,
+      frecuencia: periodo.frecuencia,
+      clase: importe.clase,
+      importe: importe.importe,
+      mensual: Math.round((importe.importe * VECES_AL_ANIO[periodo.frecuencia]) / 12),
+      escalones: importe.pasos ?? [{ desde: inicio, importe: importe.importe }],
+      inicio,
+      tolerancia: periodo.tolerancia,
+      ultimo,
+      veces: cargos.length,
+      categoriaId: masFrecuente(cargos.map((c) => c.categoriaId)),
+      cuentaId,
+      canal,
+      ejemplo: cargos.at(-1)!.concepto,
+      apunteIds: cargos.map((c) => c.id),
+      unico: false,
+    };
+  }
+  return undefined;
 }
 
 /** Separa por importe: «APPLE» puede ser iCloud a 2,99 y Apple Music a 10,99, cada uno con su mes */

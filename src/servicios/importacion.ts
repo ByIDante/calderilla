@@ -1,6 +1,6 @@
 import type { BaseDatos } from "../datos/db.ts";
-import { diasEntre, sumarDias, type Fecha } from "../dominio/fechas.ts";
-import { estadoEn, importeEn, ocurrencias, type Frecuencia } from "../dominio/recurrencia.ts";
+import { diasEntre, mesDe, sumarDias, type Fecha } from "../dominio/fechas.ts";
+import { estadoEn, importeEn, ocurrencias, pagasEnMes, type Frecuencia } from "../dominio/recurrencia.ts";
 import { categoriaPorReglas, huellas, type Configuracion, type Movimiento, type Regla } from "../importar/extracto.ts";
 import { casaPatron } from "../importar/periodicos.ts";
 import { leerRecurrentes, type RecurrenteCompleto } from "./finanzas.ts";
@@ -18,8 +18,11 @@ export interface Propuesta extends Movimiento {
 /** Margen para reconocer un cargo fijo en el extracto: ±5 % del importe y ±5 días de la fecha. */
 const MARGEN_IMPORTE = 0.05;
 const MARGEN_DIAS = 5;
-/** Con el texto del banco (patrón) se reconoce aunque se adelante o retrase más, según cada cuánto llega */
-const MARGEN_DIAS_PATRON: Record<Frecuencia, number> = { mensual: 7, trimestral: 12, semestral: 15, anual: 20 };
+/**
+ * Con el texto del banco (patrón) se reconoce aunque se adelante o retrase más, según cada cuánto llega. Lo
+ * que llega varias veces al mes, como mucho la mitad del hueco entre cargos (también sin patrón).
+ */
+const MARGEN_DIAS_PATRON: Record<Frecuencia, number> = { semanal: 2, catorcenal: 4, quincenal: 4, mensual: 7, trimestral: 12, semestral: 15, anual: 20 };
 
 export function leerReglas(bd: BaseDatos): (Regla & { id: number; categoria: string })[] {
   return bd.todos<{ id: number; patron: string; categoria_id: number; categoria: string }>(
@@ -62,17 +65,23 @@ export function coincidencia(
     const conPatron = Boolean(r.patron && m.concepto !== undefined);
     if (conPatron && !casaPatron(r.patron!, m.concepto!)) continue;
     if (!conPatron && (r.clase === "estimacion" || (categoriaRegla !== null && r.categoriaId !== null && r.categoriaId !== categoriaRegla))) continue;
-    const dias = conPatron ? MARGEN_DIAS_PATRON[r.frecuencia] : MARGEN_DIAS;
+    const dias = conPatron ? MARGEN_DIAS_PATRON[r.frecuencia] : Math.min(MARGEN_DIAS, MARGEN_DIAS_PATRON[r.frecuencia]);
     if (estadoEn(r, sumarDias(m.fecha, dias)) === "proximo") continue;
     for (const fecha of ocurrencias(r, sumarDias(m.fecha, -dias), sumarDias(m.fecha, dias))) {
-      if ((usados.get(r.id) ?? []).some((otra) => Math.abs(diasEntre(otra, fecha)) <= dias)) continue;
-      const previsto = importeEn(r.versiones, fecha);
-      const proporcion = previsto > 0 ? importe / previsto : Infinity;
-      const vale = !conPatron ? Math.abs(previsto - importe) <= previsto * MARGEN_IMPORTE : r.clase === "estimacion" ? proporcion >= 0.5 && proporcion <= 4 : Math.abs(proporcion - 1) <= 0.25;
-      if (!vale) continue;
-      // Cuanto más cerca de lo previsto en importe y fecha, mejor; y por encima de todo, que salga su texto
-      const puntos = (conPatron ? 0 : 100) + Math.abs(proporcion - 1) * 10 + Math.abs(diasEntre(m.fecha, fecha)) / 10;
-      if (!mejor || puntos < mejor.puntos) mejor = { r, puntos };
+      // El día de una paga extra caben un movimiento más por paga (si llega aparte de la nómina)
+      const pagas = r.tipo === "ingreso" ? pagasEnMes(r, r.versiones, mesDe(fecha)).filter((paga) => paga.fecha === fecha) : [];
+      if ((usados.get(r.id) ?? []).filter((otra) => Math.abs(diasEntre(otra, fecha)) <= dias).length > pagas.length) continue;
+      const normal = importeEn(r.versiones, fecha);
+      // La paga extra puede llegar sola o sumada a la nómina de ese mes
+      const previstos = pagas.length ? [normal, ...pagas.map((paga) => paga.importe), normal + pagas.reduce((suma, paga) => suma + paga.importe, 0)] : [normal];
+      for (const previsto of previstos) {
+        const proporcion = previsto > 0 ? importe / previsto : Infinity;
+        const vale = !conPatron ? Math.abs(previsto - importe) <= previsto * MARGEN_IMPORTE : r.clase === "estimacion" ? proporcion >= 0.5 && proporcion <= 4 : Math.abs(proporcion - 1) <= 0.25;
+        if (!vale) continue;
+        // Cuanto más cerca de lo previsto en importe y fecha, mejor; y por encima de todo, que salga su texto
+        const puntos = (conPatron ? 0 : 100) + Math.abs(proporcion - 1) * 10 + Math.abs(diasEntre(m.fecha, fecha)) / 10;
+        if (!mejor || puntos < mejor.puntos) mejor = { r, puntos };
+      }
     }
   }
   if (mejor) usados.set(mejor.r.id, [...(usados.get(mejor.r.id) ?? []), m.fecha]);

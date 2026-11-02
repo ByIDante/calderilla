@@ -27,6 +27,13 @@ export class Formulario {
     return new Formulario(campos, listas);
   }
 
+  /** Los campos de la dirección (?a=1&b=2): para lo que solo calcula y no guarda nada */
+  static deConsulta(c: Context): Formulario {
+    const listas = c.req.queries();
+    const campos = Object.fromEntries(Object.entries(listas).map(([nombre, valores]) => [nombre, valores.at(-1) ?? ""]));
+    return new Formulario(campos, listas);
+  }
+
   /** Todos los valores de un campo que se repite */
   textos(nombre: string): string[] {
     return (this.#listas[nombre] ?? []).map((v) => v.trim()).filter(Boolean);

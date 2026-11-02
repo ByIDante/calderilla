@@ -1224,3 +1224,212 @@ button {
   white-space: nowrap;
   cursor: pointer;
 }
+
+/* Pagas extra: cada paga en su bloque, con los meses en una rejilla */
+.paga-extra {
+  display: grid;
+  gap: 10px;
+}
+.paga-extra + .campo-casilla,
+.paga-extra .paga-extra {
+  margin-top: 6px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--linea);
+}
+.paga-extra-titulo {
+  margin: 0;
+  font-weight: 650;
+}
+.rejilla-meses {
+  display: grid;
+  gap: 6px 12px;
+  grid-template-columns: repeat(auto-fill, minmax(118px, 1fr));
+}
+/* «Esto cuenta como X € al mes»: solo se ve cuando hay algo que explicar */
+.cuenta-al-mes {
+  margin: 0;
+  padding: 10px 14px;
+  border-radius: 8px;
+  background: var(--acento-suave);
+}
+.cuenta-al-mes:empty {
+  display: none;
+}
+.nota-cobros {
+  margin: 4px 0 8px;
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--info-suave);
+  font-size: 14px;
+}
+
+/* ── Calculadora ── */
+.banda-prueba {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  margin: 0 0 16px;
+  padding: 10px 14px;
+  border: 1px solid color-mix(in srgb, var(--info) 35%, var(--linea));
+  border-radius: var(--radio);
+  background: var(--info-suave);
+}
+.banda-prueba .aviso-icono {
+  background: var(--info);
+}
+.calculadora {
+  display: grid;
+  /* Sin esto, en una columna la rejilla toma el ancho de lo más ancho de los resultados y la página se sale */
+  grid-template-columns: minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+.calculadora-datos {
+  display: grid;
+  gap: 16px;
+}
+.calculadora-datos > .tarjeta {
+  margin-bottom: 0;
+}
+.calculadora-resultado > .tarjeta + .tarjeta {
+  margin-top: 16px;
+}
+.calculadora h3 {
+  margin-top: 16px;
+}
+.lineas-prueba {
+  display: grid;
+}
+.linea-prueba {
+  display: grid;
+  /* Columnas fijas: lo de debajo («+ 2 pagas extra = …») no debe mover el campo de cada fila */
+  grid-template-columns: minmax(0, 1fr) 9rem 5.5rem;
+  grid-template-areas:
+    "nombre importe quitar"
+    "nombre detalle detalle";
+  gap: 4px 14px;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--linea);
+}
+.linea-prueba:last-child {
+  border-bottom: 0;
+}
+.linea-nombre {
+  grid-area: nombre;
+  display: grid;
+  font-weight: 600;
+}
+.linea-nombre .pequeno {
+  font-weight: normal;
+}
+.linea-importe {
+  grid-area: importe;
+}
+.linea-quitar {
+  grid-area: quitar;
+  font-size: 13.5px;
+}
+.linea-detalle {
+  grid-area: detalle;
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 10px;
+  font-size: 12.5px;
+}
+.linea-al-mes {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--acento-fuerte);
+  font-variant-numeric: tabular-nums;
+}
+.nuevo-prueba + .nuevo-prueba {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px dashed var(--linea);
+}
+.nuevo-prueba .linea-al-mes:not(:empty) {
+  display: block;
+  margin-top: 6px;
+}
+.meta-prueba + .meta-prueba {
+  margin-top: 12px;
+}
+.meta-prueba .campo-casilla {
+  margin-top: 8px;
+}
+.cambio {
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+  color: var(--tinta-suave);
+}
+.cambio-bien {
+  color: var(--bien);
+}
+.cambio-mal {
+  color: var(--mal);
+}
+.tabla-comparada tr.cambiado td {
+  background: var(--acento-suave);
+}
+/* Las notas de las columnas de importes («60 € de cada 100 €…») sí parten la línea */
+.tabla-comparada td.numero .pequeno {
+  white-space: normal;
+  text-align: right;
+}
+.etapa-cambia {
+  padding: 8px 12px;
+  border-radius: 8px;
+  background: var(--acento-suave);
+}
+/* Resumen fijo abajo en pantallas de una columna, para ver el efecto mientras cambias los números */
+.calculadora-flotante {
+  display: none;
+}
+@media (min-width: 1180px) {
+  .calculadora {
+    grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr);
+  }
+  .calculadora-resultado {
+    position: sticky;
+    top: 16px;
+    max-height: calc(100vh - 32px);
+    overflow-y: auto;
+  }
+}
+@media (max-width: 1179px) {
+  .calculadora {
+    padding-bottom: 64px;
+  }
+  .calculadora-flotante {
+    position: fixed;
+    left: 12px;
+    right: 12px;
+    bottom: 12px;
+    z-index: 5;
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: space-around;
+    gap: 4px 16px;
+    min-height: 48px;
+    align-items: center;
+    padding: 8px 14px;
+    border: 1px solid color-mix(in srgb, var(--acento) 45%, var(--linea));
+    border-radius: var(--radio);
+    background: var(--superficie);
+    box-shadow: 0 4px 18px rgb(0 0 0 / 0.14);
+    color: var(--tinta);
+    text-decoration: none;
+  }
+}
+@media (max-width: 700px) {
+  .linea-prueba {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "nombre nombre"
+      "importe quitar"
+      "detalle detalle";
+  }
+}

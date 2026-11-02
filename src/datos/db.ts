@@ -95,12 +95,22 @@ export class BaseDatos {
         `Estos datos los guardó una versión más nueva de Calderilla (esquema ${actual}, esta versión entiende hasta el ${VERSION_ESQUEMA}). Actualiza el programa en este ordenador.`,
       );
     }
-    for (const migracion of migraciones()) {
-      if (migracion.version <= actual) continue;
-      this.transaccion(() => {
-        this.script(migracion.sql);
-        this.script(`PRAGMA user_version = ${migracion.version}`);
-      });
+    // Para rehacer una tabla (cambiar un CHECK) hay que borrarla: con las claves ajenas activas, el borrado se
+    // llevaría en cascada lo que cuelga de ella. Por eso se desactivan (solo se puede fuera de una transacción) y
+    // al final de cada migración se comprueba que no ha dejado referencias rotas nuevas.
+    this.script("PRAGMA foreign_keys = OFF");
+    try {
+      for (const migracion of migraciones()) {
+        if (migracion.version <= actual) continue;
+        this.transaccion(() => {
+          const antes = this.todos("PRAGMA foreign_key_check").length;
+          this.script(migracion.sql);
+          if (this.todos("PRAGMA foreign_key_check").length > antes) throw new Error(`La migración ${migracion.version} deja referencias rotas entre tablas.`);
+          this.script(`PRAGMA user_version = ${migracion.version}`);
+        });
+      }
+    } finally {
+      this.script("PRAGMA foreign_keys = ON");
     }
     this.crearDisparadores();
   }

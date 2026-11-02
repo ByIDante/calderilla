@@ -1,5 +1,6 @@
 import { html } from "hono/html";
 import { formatoFecha, nombreMesCorto } from "../../dominio/fechas.ts";
+import { ETIQUETA_FRECUENCIA } from "../../dominio/recurrencia.ts";
 import type { PropuestaAhorro, PropuestaCargo, PropuestaEstimacion, PropuestaPrecio, Propuestas } from "../../servicios/periodicos.ts";
 import { botonAccion, eur, eurR, vacio, type Html } from "./comun.ts";
 
@@ -28,7 +29,7 @@ function veces(c: PropuestaCargo): string {
 function importe(c: PropuestaCargo): Html {
   const p = c.periodico;
   const subida = p.clase === "fijo" && p.escalones.length > 1 ? html`<div class="apagado pequeno">antes ${eur(p.escalones.at(-2)!.importe)}</div>` : "";
-  const alMes = p.meses > 1 ? html`<div class="apagado pequeno">${eurR(p.mensual)} al mes</div>` : "";
+  const alMes = p.meses !== 1 ? html`<div class="apagado pequeno">${eurR(p.mensual)} al mes</div>` : "";
   return html`${p.clase === "estimacion" ? "unos " : ""}${eur(p.importe)}${subida}${alMes}`;
 }
 
@@ -67,7 +68,7 @@ function filaCargo(c: PropuestaCargo, cuentas: Propuestas["cuentas"]): Html {
               : ""}`}
       <div class="apagado pequeno">«${p.ejemplo}» · ${veces(c)}</div>
     </td>
-    <td>${p.unico ? "¿Cada año?" : CADA[p.meses]}${p.clase === "estimacion" ? html`<div class="apagado pequeno">varía</div>` : ""}</td>
+    <td>${p.unico ? "¿Cada año?" : (CADA[p.meses] ?? ETIQUETA_FRECUENCIA[p.frecuencia])}${p.clase === "estimacion" ? html`<div class="apagado pequeno">varía</div>` : ""}</td>
     <td class="numero">${importe(c)}</td>
     <td>${c.categoria ?? html`<span class="apagado">Sin categoría</span>`}</td>
     <td class="celda-boton">${ignorar(c.id)}</td>

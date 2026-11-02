@@ -84,6 +84,11 @@ export function sumarDias(fecha: Fecha, dias: number): Fecha {
 
 const MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio", "agosto", "septiembre", "octubre", "noviembre", "diciembre"];
 
+/** "junio" para el 6 */
+export function nombreDelMes(numero: number): string {
+  return MESES[numero - 1] ?? "";
+}
+
 /** "octubre de 2026" */
 export function nombreMes(mes: Mes): string {
   const [a, m] = partes(`${mes}-01`);

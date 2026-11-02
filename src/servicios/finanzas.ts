@@ -1,8 +1,22 @@
 import type { BaseDatos } from "../datos/db.ts";
 import type { Centimos } from "../dominio/dinero.ts";
-import { diasEntre, mesDe, sumarMeses, type Fecha, type Mes } from "../dominio/fechas.ts";
+import { diasEntre, mesDe, primerDia, sumarMeses, ultimoDia, type Fecha, type Mes } from "../dominio/fechas.ts";
 import { cuadroAmortizacion, cuotaMensual, cuotasRestantesPrestamo, finPrestamo, interesesTotales, pendienteEn, taeDe, type Amortizacion, type Prestamo } from "../dominio/prestamo.ts";
-import { estadoEn, importeEn, mensualEn, provisionAcumulada, type Frecuencia, type Recurrente, type VersionImporte } from "../dominio/recurrencia.ts";
+import {
+  cobrosEnMes,
+  devengoAcumulado,
+  estadoEn,
+  importeEn,
+  mensualEn,
+  ocurrencias,
+  pagasEnMes,
+  provisionAcumulada,
+  VECES_AL_ANIO,
+  type Frecuencia,
+  type PagaExtra,
+  type Recurrente,
+  type VersionImporte,
+} from "../dominio/recurrencia.ts";
 import type { Deuda } from "../reglas/deuda.ts";
 import type { PrestamoFin } from "../reglas/tipos.ts";
 
@@ -15,6 +29,7 @@ export interface RecurrenteCompleto extends Recurrente {
   patron: string | null;
   versiones: VersionImporte[];
   prestamo: (Prestamo & { id: number }) | null;
+  pagasExtra: PagaExtra[];
 }
 
 interface FilaRecurrente {
@@ -54,6 +69,11 @@ export function leerRecurrentes(bd: BaseDatos, id?: number): RecurrenteCompleto[
     versiones.set(v.recurrente_id, [...(versiones.get(v.recurrente_id) ?? []), { validoDesde: v.valido_desde, importe: v.importe }]);
   }
   const prestamos = new Map(bd.todos<FilaPrestamo>("SELECT * FROM prestamos").map((p) => [p.recurrente_id, p]));
+  const pagas = new Map<number, PagaExtra[]>();
+  for (const p of bd.todos<{ recurrente_id: number; nombre: string | null; meses: string; importe: number | null }>("SELECT recurrente_id, nombre, meses, importe FROM pagas_extra ORDER BY id")) {
+    const paga = { nombre: p.nombre, meses: p.meses.split(",").map(Number), importe: p.importe };
+    pagas.set(p.recurrente_id, [...(pagas.get(p.recurrente_id) ?? []), paga]);
+  }
   const amortizaciones = new Map<number, Amortizacion[]>();
   for (const a of bd.todos<{ prestamo_id: number; fecha: string; importe: number; modo: Amortizacion["modo"] }>("SELECT prestamo_id, fecha, importe, modo FROM amortizaciones ORDER BY fecha")) {
     amortizaciones.set(a.prestamo_id, [...(amortizaciones.get(a.prestamo_id) ?? []), { fecha: a.fecha, importe: a.importe, modo: a.modo }]);
@@ -74,6 +94,7 @@ export function leerRecurrentes(bd: BaseDatos, id?: number): RecurrenteCompleto[
       nota: fila.nota,
       patron: fila.patron,
       versiones: versiones.get(fila.id) ?? [],
+      pagasExtra: pagas.get(fila.id) ?? [],
       prestamo: prestamo
         ? {
             id: prestamo.id,
@@ -105,6 +126,8 @@ export interface DatosRecurrente {
   prestamo: Omit<Prestamo, "primeraCuota"> | null;
   /** Si no se indica, al guardar se conserva el que tenga */
   patron?: string | null;
+  /** Solo en ingresos. Si no se indica, al guardar se conservan las que tenga */
+  pagasExtra?: PagaExtra[];
 }
 
 /** Con préstamo, la fecha de fin y la cuota salen del préstamo (la cuota se puede corregir a mano). */
@@ -118,6 +141,15 @@ function normalizar(datos: DatosRecurrente, amortizaciones: readonly Amortizacio
     fin: finPrestamo(prestamo),
     importe: datos.importe || cuotaMensual(prestamo.capital, prestamo.tin, prestamo.plazoMeses),
   };
+}
+
+function guardarPagas(bd: BaseDatos, recurrenteId: number, datos: DatosRecurrente) {
+  if (datos.pagasExtra === undefined) return;
+  bd.ejecutar("DELETE FROM pagas_extra WHERE recurrente_id = ?", recurrenteId);
+  if (datos.tipo !== "ingreso") return;
+  for (const paga of datos.pagasExtra) {
+    bd.ejecutar("INSERT INTO pagas_extra (recurrente_id, nombre, meses, importe) VALUES (?, ?, ?, ?)", recurrenteId, paga.nombre, paga.meses.join(","), paga.importe);
+  }
 }
 
 function guardarPrestamo(bd: BaseDatos, recurrenteId: number, datos: DatosRecurrente) {
@@ -159,6 +191,7 @@ export function crearRecurrente(bd: BaseDatos, entrada: DatosRecurrente): number
     );
     bd.ejecutar("INSERT INTO recurrentes_importes (recurrente_id, valido_desde, importe) VALUES (?, ?, ?)", id, datos.inicio, datos.importe);
     guardarPrestamo(bd, id, datos);
+    guardarPagas(bd, id, datos);
     return id;
   });
 }
@@ -200,6 +233,8 @@ export function actualizarRecurrente(bd: BaseDatos, id: number, entrada: DatosRe
       }
     }
     guardarPrestamo(bd, id, datos);
+    // Un gasto no tiene pagas extra: si era un ingreso y pasa a gasto, se quitan
+    guardarPagas(bd, id, datos.tipo === "gasto" ? { ...datos, pagasExtra: [] } : datos);
   });
 }
 
@@ -268,6 +303,31 @@ export function presupuestoMes(recurrentes: readonly RecurrenteCompleto[], mes: 
 
 export function provisiones(recurrentes: readonly RecurrenteCompleto[], fecha: Fecha): Centimos {
   return recurrentes.reduce((suma, r) => suma + provisionAcumulada(r, r.versiones, fecha), 0);
+}
+
+/**
+ * Lo que cobras de verdad en un mes frente a lo que cuenta tu presupuesto (que reparte las pagas extra y los
+ * meses con un cobro de más), y por qué cambia: «Paga extra de Nómina», «3 cobros de Nómina».
+ */
+export function ingresosDelMes(recurrentes: readonly RecurrenteCompleto[], mes: Mes): { mes: Mes; real: Centimos; presupuesto: Centimos; notas: string[] } {
+  const ingresos = recurrentes.filter((r) => r.tipo === "ingreso");
+  const notas: string[] = [];
+  for (const r of ingresos) {
+    for (const paga of pagasEnMes(r, r.versiones, mes)) notas.push(paga.nombre ? `Paga extra «${paga.nombre}» de ${r.nombre}` : `Paga extra de ${r.nombre}`);
+    const veces = ocurrencias(r, primerDia(mes), ultimoDia(mes)).length;
+    if (veces > Math.max(1, Math.floor(VECES_AL_ANIO[r.frecuencia] / 12))) notas.push(`${veces} cobros de ${r.nombre}`);
+  }
+  return {
+    mes,
+    real: ingresos.reduce((suma, r) => suma + cobrosEnMes(r, r.versiones, mes), 0),
+    presupuesto: ingresos.reduce((suma, r) => suma + mensualEn(r, r.versiones, mes), 0),
+    notas,
+  };
+}
+
+/** Lo ganado y aún no cobrado de las pagas extra y los ingresos no mensuales (ver `devengoAcumulado`). */
+export function devengos(recurrentes: readonly RecurrenteCompleto[], fecha: Fecha): Centimos {
+  return recurrentes.reduce((suma, r) => suma + devengoAcumulado(r, r.versiones, fecha), 0);
 }
 
 export function deudas(recurrentes: readonly RecurrenteCompleto[], fecha: Fecha): Deuda[] {

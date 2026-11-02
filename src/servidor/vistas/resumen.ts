@@ -23,6 +23,8 @@ interface DatosResumen {
   ultimoCierre: { mes: string; plan: number; real: number | null } | null;
   /** Cosas que se repiten en tus movimientos y aún no están en el presupuesto */
   propuestas: number;
+  /** Si tienes pagas extra o cobros que no son uno al mes: lo que cobras de verdad este mes frente a lo que cuenta */
+  cobrosMes: { real: number; presupuesto: number; notas: string[] } | null;
 }
 
 /** A qué va el ahorro que pide cada etapa de la escalera */
@@ -35,13 +37,30 @@ const DESTINO_ETAPA: Record<Etapa, string> = {
   invertir: "invertir",
 };
 
+/** Este mes cobras más (paga extra, un cobro de más) o menos de lo que cuenta tu presupuesto: por qué no cambia tu ocio. */
+function notaCobros(cobros: DatosResumen["cobrosMes"]): Html | string {
+  const diferencia = cobros ? cobros.real - cobros.presupuesto : 0;
+  if (!cobros || Math.abs(diferencia) < 100) return "";
+  const porque = cobros.notas.length ? ` (${cobros.notas.map((nota) => nota.charAt(0).toLowerCase() + nota.slice(1)).join(", ")})` : "";
+  // El mes que cobras de más se explica bien a la vista; los demás meses, una línea discreta
+  return diferencia > 0
+    ? html`<p class="nota-cobros">
+        Este mes cobras <b>${eurR(diferencia)} más</b> de lo que cuenta tu presupuesto${porque}. No es ocio de más: ya contaba repartido en tu presupuesto de todos los
+        meses. <a href="/gastos#ingresos-mes-a-mes">Ver mes a mes</a>
+      </p>`
+    : html`<p class="apagado pequeno">
+        Este mes cobras ${eurR(-diferencia)} menos de lo que cuenta tu presupuesto: es normal, tus pagas extra (o los meses con un cobro de más) van repartidas en
+        todos los meses. <a href="/gastos#ingresos-mes-a-mes">Ver mes a mes</a>
+      </p>`;
+}
+
 /** Lo esencial del mes en una frase: cuánto toca ahorrar y cuánto hay para ocio, y de dónde sale. */
-function tarjetaMes(p: Presupuesto, etapa: Etapa, automatico: number, ultimoCierre: DatosResumen["ultimoCierre"]): Html {
+function tarjetaMes(p: Presupuesto, etapa: Etapa, automatico: number, ultimoCierre: DatosResumen["ultimoCierre"], cobros: DatosResumen["cobrosMes"]): Html {
   if (p.sobrante < 0) {
     return html`<section class="tarjeta tarjeta-mes">
       <h2>Tu mes en claro</h2>
       <p class="frase-mes">Este mes gastas <b class="negativo">${eurR(-p.sobrante)} más de lo que ingresas</b>: no queda nada para ahorrar ni para ocio.</p>
-      ${barraReparto(p)}
+      ${barraReparto(p)} ${notaCobros(cobros)}
       <p class="apagado">Empieza por <a href="/gastos">revisar tus gastos</a>, primero los no esenciales.</p>
     </section>`;
   }
@@ -65,7 +84,7 @@ function tarjetaMes(p: Presupuesto, etapa: Etapa, automatico: number, ultimoCier
         ? html`Este mes toca ahorrar <b>${eurR(p.objetivoAhorro)}</b> y tienes <b>${eurR(ocioDelMes)}</b> para ocio.`
         : html`Este mes no da para ahorrar: lo que te sobra, <b>${eurR(ocioDelMes)}</b>, es tu ocio.`}
     </p>
-    ${barraReparto(p)}
+    ${barraReparto(p)} ${notaCobros(cobros)}
     <div class="rejilla">
       <div>
         <h3>Ahorro: ${eurR(p.objetivoAhorro)}</h3>
@@ -80,7 +99,7 @@ function tarjetaMes(p: Presupuesto, etapa: Etapa, automatico: number, ultimoCier
       <div>
         <h3>${p.ocioQueda < 0 ? `Ocio: te has pasado ${eurR(-p.ocioQueda)}` : `Ocio: te quedan ${eurR(p.ocioQueda)}`}</h3>
         ${medidorOcio(p)}
-        <p class="apagado pequeno">${notasOcio.join(" ")} <a href="/ocio">Cómo se calcula</a></p>
+        <p class="apagado pequeno">${notasOcio.join(" ")} <a href="/ocio">Cómo se calcula</a> · <a href="/calculadora">Prueba con otros números</a></p>
       </div>
     </div>
   </section>`;
@@ -182,7 +201,7 @@ function avisoCierre(mes: string | null, ocultos: ReadonlySet<string>): Html | s
   return ocultos.has(clave) ? "" : aviso("info", texto, { ruta: `/cierre?mes=${mes}`, texto: "Cerrar el mes" }, { clave });
 }
 
-export function vistaResumen({ ctx, cierrePendiente, ocultos, presupuesto, proximos, cierres, porCategoria, gastoMeses, automatico, ultimoCierre, propuestas }: DatosResumen): Html {
+export function vistaResumen({ ctx, cierrePendiente, ocultos, presupuesto, proximos, cierres, porCategoria, gastoMeses, automatico, ultimoCierre, propuestas, cobrosMes }: DatosResumen): Html {
   const r = ctx.resultado;
   const p = r.presupuesto;
   const sinDatos = ctx.recurrentes.length === 0 && ctx.cuentas.length === 0;
@@ -203,7 +222,7 @@ export function vistaResumen({ ctx, cierrePendiente, ocultos, presupuesto, proxi
   return html`
     ${navegacionMes(mesDe(ctx.hoy), ctx.hoy)} ${avisoCierre(cierrePendiente, ocultos)} ${avisoPropuestas(propuestas, ocultos)} ${listaAvisos(r, ocultos)}
 
-    ${tarjetaMes(p, r.etapa, automatico, ultimoCierre)}
+    ${tarjetaMes(p, r.etapa, automatico, ultimoCierre, cobrosMes)}
 
     <div class="cifras">
       ${cifra("Ingresos al mes", eurR(p.ingresos))} ${cifra("Gastos esenciales", eurR(p.esenciales), "con préstamos y la parte mensual de los anuales")}

@@ -3,7 +3,7 @@ import type { Centimos } from "../dominio/dinero.ts";
 import { sumarMesesAMes, ultimoDia, type Mes } from "../dominio/fechas.ts";
 import { ocioSobrante } from "../reglas/ocio.ts";
 import { guardarSaldo } from "./cuentas.ts";
-import { provisiones } from "./finanzas.ts";
+import { devengos, provisiones } from "./finanzas.ts";
 import { contexto, ocioGastadoEn } from "./situacion.ts";
 
 export interface Cierre {
@@ -33,7 +33,9 @@ export function leerCierres(bd: BaseDatos, limite = 24): Cierre[] {
  * - con la inversión a precio de compra, para que las subidas y bajadas de la bolsa no cuenten como ahorro;
  * - restando las deudas, para que devolver un préstamo cuente como ahorro;
  * - sin lo apartado para gastos anuales, que el presupuesto ya reparte mes a mes (si no, el mes del seguro
- *   parecería que no ahorras y los demás que ahorras de más).
+ *   parecería que no ahorras y los demás que ahorras de más);
+ * - con lo ya ganado de las pagas extra, que el presupuesto también reparte (si no, con 14 pagas, los meses sin
+ *   extra parecería que ahorras menos de lo previsto y se bajaría el ocio sin motivo).
  */
 export function cerrarMes(bd: BaseDatos, mes: Mes, saldos: { cuentaId: number; saldo: Centimos }[]): Cierre {
   const fecha = ultimoDia(mes);
@@ -43,14 +45,19 @@ export function cerrarMes(bd: BaseDatos, mes: Mes, saldos: { cuentaId: number; s
     const p = ctx.resultado.presupuesto;
     const anterior = bd.uno<Cierre & { resumen: string | null }>("SELECT * FROM cierres_mes WHERE mes = ?", sumarMesesAMes(mes, -1));
     const gastado = ocioGastadoEn(bd, fecha);
-    const patrimonio = ctx.patrimonioACoste - ctx.situacion.provisiones;
-    // El cierre anterior se mide con los gastos fijos de ahora: si después añadiste un seguro anual, lo que
-    // ya tendrías que llevar apartado para él no debe parecer «este mes ahorraste menos»
-    const provisionesAntes = anterior ? (JSON.parse(anterior.resumen ?? "{}") as { provisiones?: number }).provisiones : undefined;
-    const patrimonioAnterior =
-      anterior && provisionesAntes !== undefined
-        ? anterior.patrimonio + provisionesAntes - provisiones(ctx.recurrentes, ultimoDia(sumarMesesAMes(mes, -1)))
-        : anterior?.patrimonio;
+    const devengado = devengos(ctx.recurrentes, fecha);
+    const patrimonio = ctx.patrimonioACoste - ctx.situacion.provisiones + devengado;
+    // El cierre anterior se mide con los ingresos y gastos fijos de ahora: si después añadiste un seguro anual o
+    // una paga extra, lo que ya llevarías apartado o ganado no debe parecer «este mes ahorraste menos (o más)».
+    // Los cierres de antes de las pagas extra no guardaban lo ganado: entonces era 0.
+    const finAnterior = ultimoDia(sumarMesesAMes(mes, -1));
+    const antes = anterior ? (JSON.parse(anterior.resumen ?? "{}") as { provisiones?: number; devengos?: number }) : {};
+    const patrimonioAnterior = anterior
+      ? anterior.patrimonio +
+        (antes.provisiones === undefined ? 0 : antes.provisiones - provisiones(ctx.recurrentes, finAnterior)) +
+        devengos(ctx.recurrentes, finAnterior) -
+        (antes.devengos ?? 0)
+      : undefined;
     const cierre: Cierre = {
       mes,
       cerrado: new Date().toISOString(),
@@ -84,7 +91,7 @@ export function cerrarMes(bd: BaseDatos, mes: Mes, saldos: { cuentaId: number; s
       cierre.ocio_gastado,
       cierre.ocio_sobrante,
       cierre.etapa,
-      JSON.stringify({ patrimonioMercado: ctx.patrimonio, provisiones: ctx.situacion.provisiones }),
+      JSON.stringify({ patrimonioMercado: ctx.patrimonio, provisiones: ctx.situacion.provisiones, devengos: devengado }),
     );
     return cierre;
   });

@@ -2,8 +2,9 @@ import { html } from "hono/html";
 import { importeEditable, numeroEditable } from "../../dominio/dinero.ts";
 import { formatoFecha, type Fecha } from "../../dominio/fechas.ts";
 import { cuadroAmortizacion, cuotaMensual, pendienteEn, taeDe } from "../../dominio/prestamo.ts";
-import { cuotasRestantes, estadoEn, importeEn, MESES_FRECUENCIA, NOMBRE_FRECUENCIA, proximaOcurrencia, type Frecuencia } from "../../dominio/recurrencia.ts";
+import { cuotasRestantes, estadoEn, ETIQUETA_FRECUENCIA, FRECUENCIAS, importeEn, NOMBRE_FRECUENCIA, proximaOcurrencia } from "../../dominio/recurrencia.ts";
 import type { RecurrenteCompleto } from "../../servicios/finanzas.ts";
+import { camposPagas, opcionDeMeses, tarjetaDesglose, tarjetaMesAMes, type MesCobros } from "./cobros.ts";
 import { botonAccion, campo, casilla, eur, pct, selector, vacio, type Html } from "./comun.ts";
 
 export interface Categoria {
@@ -31,7 +32,14 @@ function filas(lista: RecurrenteCompleto[], hoy: Fecha, mensual: Map<number, num
             .join(" · ")}
         </div>
       </td>
-      <td class="numero">${eur(importe)} <span class="apagado pequeno">${NOMBRE_FRECUENCIA[r.frecuencia]}</span></td>
+      <td class="numero">
+        ${eur(importe)} <span class="apagado pequeno">${NOMBRE_FRECUENCIA[r.frecuencia]}</span>
+        ${r.pagasExtra.length
+          ? html`<div class="apagado pequeno">
+              + ${r.pagasExtra.reduce((suma, paga) => suma + paga.meses.length, 0)} ${r.pagasExtra.length === 1 && r.pagasExtra[0]!.meses.length === 1 ? "paga extra" : "pagas extra"} al año
+            </div>`
+          : ""}
+      </td>
       <td class="numero">${estado === "finalizado" ? "—" : eur(mensual.get(r.id) ?? 0)}</td>
       <td>${etiquetaFin(r, hoy)}</td>
     </tr>`;
@@ -54,7 +62,7 @@ function tabla(titulo: string, lista: RecurrenteCompleto[], hoy: Fecha, mensual:
   </div>`;
 }
 
-export function vistaLista(recurrentes: RecurrenteCompleto[], hoy: Fecha, mensual: Map<number, number>, propuestas = 0): Html {
+export function vistaLista(recurrentes: RecurrenteCompleto[], hoy: Fecha, mensual: Map<number, number>, propuestas = 0, mesAMes: readonly MesCobros[] = []): Html {
   const vivos = recurrentes.filter((r) => estadoEn(r, hoy) !== "finalizado");
   const finalizados = recurrentes.filter((r) => estadoEn(r, hoy) === "finalizado");
   const ingresos = vivos.filter((r) => r.tipo === "ingreso");
@@ -80,7 +88,9 @@ export function vistaLista(recurrentes: RecurrenteCompleto[], hoy: Fecha, mensua
     <section class="tarjeta">
       <h2>Ingresos</h2>
       ${ingresos.length ? tabla("Ingresos", ingresos, hoy, mensual, suma(ingresos)) : vacio("Sin ingresos apuntados.", html`<a href="/gastos/nuevo?tipo=ingreso">Apuntar la nómina</a>`)}
+      ${mesAMes.length ? html`<p class="apagado pequeno">«Al mes» reparte las pagas extra entre los 12 meses. <a href="#ingresos-mes-a-mes">Ver mes a mes</a></p>` : ""}
     </section>
+    ${tarjetaMesAMes(mesAMes)}
     <section class="tarjeta">
       <h2>Gastos esenciales</h2>
       ${esenciales.length ? tabla("Gastos esenciales", esenciales, hoy, mensual, suma(esenciales)) : vacio("Sin gastos esenciales apuntados.")}
@@ -104,7 +114,19 @@ export function vistaLista(recurrentes: RecurrenteCompleto[], hoy: Fecha, mensua
 export type Valores = Record<string, string>;
 
 export function valoresDe(r: RecurrenteCompleto, hoy: Fecha): Valores {
+  const pagas: Valores = { pagas: r.pagasExtra.length ? "1" : "" };
+  r.pagasExtra.slice(0, 3).forEach((paga, i) => {
+    const n = i + 1;
+    Object.assign(pagas, {
+      [`paga_cuando_${n}`]: opcionDeMeses(paga.meses),
+      [`paga_meses_${n}`]: paga.meses.join(","),
+      [`paga_importe_${n}`]: importeEditable(paga.importe),
+      [`paga_nombre_${n}`]: paga.nombre ?? "",
+      ...(n > 1 ? { [`paga_otra_${n}`]: "1" } : {}),
+    });
+  });
   return {
+    ...pagas,
     tipo: r.tipo,
     nombre: r.nombre,
     categoria: r.categoriaId ? String(r.categoriaId) : "",
@@ -129,7 +151,7 @@ export function valoresDe(r: RecurrenteCompleto, hoy: Fecha): Valores {
   };
 }
 
-const FRECUENCIAS = (Object.keys(MESES_FRECUENCIA) as Frecuencia[]).map((f) => [f, NOMBRE_FRECUENCIA[f].replace(/^al /, "Una vez al ").replace(/^cada/, "Cada")] as const);
+const OPCIONES_FRECUENCIA = FRECUENCIAS.map((f) => [f, ETIQUETA_FRECUENCIA[f]] as const);
 
 export function vistaFormulario(opciones: { accion: string; valores: Valores; categorias: Categoria[]; editando: RecurrenteCompleto | null; hoy: Fecha }): Html {
   const v = opciones.valores;
@@ -165,9 +187,24 @@ export function vistaFormulario(opciones: { accion: string; valores: Valores; ca
           sufijo: "€",
           ayuda: v.prestamo === "1" ? "Cuota mensual. Si la dejas vacía, se calcula." : "Lo que pagas o cobras cada vez.",
         })}
-        <div data-ocultar-si="campo-prestamo">${selector("Cada cuánto", "frecuencia", FRECUENCIAS, v.frecuencia)}</div>
+        <div data-ocultar-si="campo-prestamo">
+          ${selector("Cada cuánto", "frecuencia", OPCIONES_FRECUENCIA, v.frecuencia)}
+          <p class="ayuda" data-mostrar-si="campo-frecuencia=quincenal">El segundo llega 15 días después del primero: el 1 y el 16, el 15 y el 30…</p>
+          <p class="ayuda" data-mostrar-si="campo-frecuencia=catorcenal">26 al año: dos meses al año llegan 3 en vez de 2.</p>
+          <p class="ayuda" data-mostrar-si="campo-frecuencia=semanal">52 al año: unos meses 4 y otros 5.</p>
+        </div>
         ${campo({ etiqueta: v.prestamo === "1" ? "Fecha de la primera cuota" : "Fecha del primer cargo o cobro", nombre: "inicio", valor: v.inicio, tipo: "date", requerido: true })}
       </div>
+      <div data-ocultar-si="campo-prestamo">${camposPagas(v)}</div>
+      <p
+        class="cuenta-al-mes"
+        id="cuenta-al-mes"
+        aria-live="polite"
+        hx-get="/gastos/al-mes"
+        hx-trigger="load, input delay:400ms from:closest form, change from:closest form"
+        hx-include="closest form"
+        hx-sync="this:replace"
+      ></p>
 
       <div class="fila-campos" data-ocultar-si="campo-prestamo">
         ${selector("¿Tiene fin?", "fin_modo", [["sin", "No, sigue hasta que lo quite"], ["fecha", "Sí, hasta una fecha"], ["cuotas", "Sí, un número de pagos"]], v.fin_modo)}
@@ -202,6 +239,7 @@ export function vistaFormulario(opciones: { accion: string; valores: Valores; ca
 function vistaGestion(r: RecurrenteCompleto, hoy: Fecha): Html {
   const prestamo = r.prestamo;
   return html`
+    ${tarjetaDesglose(r, hoy)}
     ${prestamo
       ? html`<section class="tarjeta">
           <h2>El préstamo hoy</h2>

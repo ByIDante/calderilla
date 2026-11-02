@@ -1,17 +1,48 @@
 import type { Context, Hono } from "hono";
 import { html } from "hono/html";
-import { esFecha, formatoFecha, mesDe, type Fecha } from "../../dominio/fechas.ts";
-import { finPorCuotas, mensualEn, type Frecuencia } from "../../dominio/recurrencia.ts";
+import { esFecha, formatoFecha, mesDe, sumarMesesAMes, type Fecha } from "../../dominio/fechas.ts";
+import { desgloseAnual, estadoEn, finPorCuotas, FRECUENCIAS, mensualEn, type PagaExtra } from "../../dominio/recurrencia.ts";
 import { claveConcepto } from "../../importar/periodicos.ts";
-import { actualizarRecurrente, amortizar, borrarRecurrente, crearRecurrente, leerRecurrentes, terminarRecurrente, type DatosRecurrente } from "../../servicios/finanzas.ts";
+import {
+  actualizarRecurrente,
+  amortizar,
+  borrarRecurrente,
+  crearRecurrente,
+  ingresosDelMes,
+  leerRecurrentes,
+  terminarRecurrente,
+  type DatosRecurrente,
+  type RecurrenteCompleto,
+} from "../../servicios/finanzas.ts";
 import { aceptarPropuestas, calcularPropuestas, ignorarPropuesta, marcarTraspasos, type Eleccion } from "../../servicios/periodicos.ts";
 import { bd, render, type Estado } from "../app.ts";
 import { Formulario, idDe, redirigir } from "../formulario.ts";
+import { frasePresupuesto, mesesDeOpcion, necesitaDesglose } from "../vistas/cobros.ts";
 import { aviso, eurR } from "../vistas/comun.ts";
 import { vistaDetectar } from "../vistas/detectar.ts";
 import { valoresDe, vistaCuadro, vistaFormulario, vistaLista, type Categoria, type Valores } from "../vistas/gastos.ts";
 
-const FRECUENCIAS: Frecuencia[] = ["mensual", "trimestral", "semestral", "anual"];
+/** Las pagas extra del formulario (hasta 3; la 2 y la 3 solo si marcaste «Añadir otra»), o qué falla. */
+export function leerPagas(f: Formulario): { pagas: PagaExtra[] } | { error: string } {
+  if (f.texto("tipo") !== "ingreso" || f.texto("pagas") !== "1") return { pagas: [] };
+  const pagas: PagaExtra[] = [];
+  for (const n of [1, 2, 3]) {
+    if (n > 1 && !f.casilla(`paga_otra_${n}`)) break;
+    const cuando = f.texto(`paga_cuando_${n}`);
+    const meses = cuando === "elegir" ? f.enteros(`paga_meses_${n}`).filter((m) => m >= 1 && m <= 12) : mesesDeOpcion(cuando || "jun-dic");
+    if (!meses?.length) return { error: `Elige en qué meses llega la paga extra ${n}.` };
+    const escrito = f.texto(`paga_importe_${n}`);
+    const importe = escrito ? f.importe(`paga_importe_${n}`) : null;
+    if (escrito && (importe === null || importe <= 0)) return { error: `El importe de la paga extra ${n} tiene que ser mayor que cero (o déjalo vacío para que sea como un cobro normal).` };
+    pagas.push({ nombre: f.opcional(`paga_nombre_${n}`), meses: [...new Set(meses)].sort((a, b) => a - b), importe });
+  }
+  return { pagas };
+}
+
+/** Los valores para volver a pintar el formulario tal como llegó (las casillas de meses se repiten) */
+function valoresEnviados(f: Formulario): Valores {
+  return { ...f.todos(), ...Object.fromEntries([1, 2, 3].map((n) => [`paga_meses_${n}`, f.textos(`paga_meses_${n}`).join(",")])) };
+}
 
 /** Convierte el formulario en datos válidos, o devuelve qué falla. */
 export function leerGasto(f: Formulario, categorias: Categoria[]): { datos: DatosRecurrente } | { error: string } {
@@ -24,6 +55,8 @@ export function leerGasto(f: Formulario, categorias: Categoria[]): { datos: Dato
   const categoriaId = f.entero("categoria");
 
   if (!nombre) return { error: "Falta el concepto." };
+  const pagas = leerPagas(f);
+  if ("error" in pagas) return pagas;
   if (!inicio) return { error: "Falta la fecha del primer cargo (o es incorrecta)." };
   if (categoriaId !== null && !categorias.some((c) => c.id === categoriaId)) return { error: "Esa categoría no existe." };
 
@@ -69,6 +102,7 @@ export function leerGasto(f: Formulario, categorias: Categoria[]): { datos: Dato
       patron: claveConcepto(f.texto("patron")).palabras.join(" ") || null,
       importe: importe ?? 0,
       prestamo,
+      pagasExtra: esPrestamo ? [] : pagas.pagas,
     },
   };
 }
@@ -88,7 +122,40 @@ export function rutasGastos(app: Hono, estado: Estado) {
     const recurrentes = leerRecurrentes(bd(estado));
     const mensual = new Map(recurrentes.map((r) => [r.id, mensualEn(r, r.versiones, mesDe(hoy))]));
     const propuestas = calcularPropuestas(bd(estado), hoy).total;
-    return render(c, estado, { titulo: "Ingresos y gastos", seccion: "gastos" }, vistaLista(recurrentes, hoy, mensual, propuestas));
+    // Mes a mes solo si algún ingreso no es un importe al mes sin más (pagas extra, cada 2 semanas…)
+    const conDesglose = recurrentes.some((r) => r.tipo === "ingreso" && estadoEn(r, hoy) !== "finalizado" && necesitaDesglose(r));
+    const mesAMes = conDesglose ? Array.from({ length: 12 }, (_, i) => ingresosDelMes(recurrentes, sumarMesesAMes(mesDe(hoy), i))) : [];
+    return render(c, estado, { titulo: "Ingresos y gastos", seccion: "gastos" }, vistaLista(recurrentes, hoy, mensual, propuestas, mesAMes));
+  });
+
+  // «Esto cuenta como X € al mes»: mientras rellenas el formulario, con la misma cuenta que el presupuesto
+  app.get("/gastos/al-mes", (c) => {
+    const f = Formulario.deConsulta(c);
+    const frecuencia = FRECUENCIAS.find((x) => x === f.texto("frecuencia")) ?? "mensual";
+    const importe = f.importe("importe");
+    const pagas = leerPagas(f);
+    if (f.casilla("prestamo") || !importe || importe <= 0 || "error" in pagas || (frecuencia === "mensual" && !pagas.pagas.length)) return c.html("");
+    const hoy = estado.hoy();
+    const inicio = f.fecha("inicio") ?? hoy;
+    const r: RecurrenteCompleto = {
+      id: 0,
+      tipo: f.texto("tipo") === "ingreso" ? "ingreso" : "gasto",
+      nombre: "",
+      frecuencia,
+      inicio,
+      fin: null,
+      esencial: false,
+      categoriaId: null,
+      categoria: null,
+      clase: "fijo",
+      nota: null,
+      patron: null,
+      versiones: [{ validoDesde: inicio, importe }],
+      prestamo: null,
+      pagasExtra: pagas.pagas,
+    };
+    const d = desgloseAnual(r, r.versiones, inicio);
+    return c.html(html`Esto cuenta como <b>${eurR(d.alMes)} al mes</b> en tu presupuesto: ${frasePresupuesto(d, r.tipo)}`);
   });
 
   // Lo que se repite en tus movimientos (va antes de /gastos/:id para que «detectar» no se tome por un id)
@@ -150,7 +217,7 @@ export function rutasGastos(app: Hono, estado: Estado) {
         c,
         estado,
         { titulo: "Nuevo", seccion: "gastos" },
-        html`${aviso("error", leido.error)}${vistaFormulario({ accion: "/gastos", valores: f.todos(), categorias: lista, editando: null, hoy: estado.hoy() })}`,
+        html`${aviso("error", leido.error)}${vistaFormulario({ accion: "/gastos", valores: valoresEnviados(f), categorias: lista, editando: null, hoy: estado.hoy() })}`,
       );
     }
     crearRecurrente(bd(estado), leido.datos);
@@ -177,7 +244,7 @@ export function rutasGastos(app: Hono, estado: Estado) {
         c,
         estado,
         { titulo: r.nombre, seccion: "gastos" },
-        html`${aviso("error", leido.error)}${vistaFormulario({ accion: `/gastos/${id}`, valores: f.todos(), categorias: lista, editando: r, hoy })}`,
+        html`${aviso("error", leido.error)}${vistaFormulario({ accion: `/gastos/${id}`, valores: valoresEnviados(f), categorias: lista, editando: r, hoy })}`,
       );
     }
     actualizarRecurrente(bd(estado), id, leido.datos, f.fecha("desde") ?? hoy);

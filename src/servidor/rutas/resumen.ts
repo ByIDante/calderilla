@@ -1,14 +1,15 @@
 import type { Context, Hono } from "hono";
 import { mesDe, nombreMes, nombreMesCorto, primerDia, sumarDias, sumarMesesAMes, ultimoDia } from "../../dominio/fechas.ts";
-import { importeEn, ocurrencias } from "../../dominio/recurrencia.ts";
+import { estadoEn, importeEn, MESES_FRECUENCIA, ocurrencias } from "../../dominio/recurrencia.ts";
 import { NOMBRE_ETAPA, type Etapa } from "../../reglas/tipos.ts";
 import { leerAportaciones, totalMensual } from "../../servicios/aportaciones.ts";
-import { leerRecurrentes, presupuestoMes } from "../../servicios/finanzas.ts";
+import { ingresosDelMes, leerRecurrentes, presupuestoMes } from "../../servicios/finanzas.ts";
 import { calcularPropuestas } from "../../servicios/periodicos.ts";
 import { avisosPresupuesto, gastoPorCategoriaMeses, presupuestoPorCategoria } from "../../servicios/presupuesto.ts";
 import { contexto, ocioGastadoEn } from "../../servicios/situacion.ts";
 import { bd, render, type Estado } from "../app.ts";
 import { Formulario, redirigir } from "../formulario.ts";
+import { necesitaDesglose } from "../vistas/cobros.ts";
 import { vistaMesPasado, vistaResumen } from "../vistas/resumen.ts";
 
 export function rutasResumen(app: Hono, estado: Estado) {
@@ -46,7 +47,8 @@ export function rutasResumen(app: Hono, estado: Estado) {
     const ocultos = new Set(base.todos<{ clave: string }>("SELECT clave FROM avisos_ocultos").map((f) => f.clave));
 
     const proximos = ctx.recurrentes
-      .filter((r) => r.frecuencia !== "mensual" && r.tipo === "gasto")
+      // Lo que llega de vez en cuando (cada 3, 6 o 12 meses), no lo semanal ni lo de cada mes
+      .filter((r) => MESES_FRECUENCIA[r.frecuencia] > 1 && r.tipo === "gasto")
       .flatMap((r) => ocurrencias(r, hoy, sumarDias(hoy, 90)).map((fecha) => ({ nombre: r.nombre, fecha, importe: importeEn(r.versiones, fecha) })))
       .sort((a, b) => a.fecha.localeCompare(b.fecha));
 
@@ -77,6 +79,7 @@ export function rutasResumen(app: Hono, estado: Estado) {
         gastoMeses: gastoPorCategoriaMeses(base, mes),
         automatico: totalMensual(leerAportaciones(base), mes),
         propuestas: calcularPropuestas(base, hoy).total,
+        cobrosMes: ctx.recurrentes.some((r) => r.tipo === "ingreso" && estadoEn(r, hoy) !== "finalizado" && necesitaDesglose(r)) ? ingresosDelMes(ctx.recurrentes, mes) : null,
         ultimoCierre: cierres.length ? { mes: cierres.at(-1)!.mes, plan: cierres.at(-1)!.ahorro_plan, real: cierres.at(-1)!.ahorro_real } : null,
       }),
     );
