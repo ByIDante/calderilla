@@ -84,7 +84,9 @@ export function redirigir(c: Context, ruta: string, mensaje?: { ok?: string; err
   if (mensaje?.ok) parametros.set("ok", mensaje.ok);
   if (mensaje?.error) parametros.set("error", mensaje.error);
   const consulta = parametros.toString();
-  return c.redirect(consulta ? `${ruta}${ruta.includes("?") ? "&" : "?"}${consulta}` : ruta, 303);
+  // El mensaje va en la dirección, antes del ancla (#devoluciones): si no, el navegador no lo envía
+  const [camino, ancla] = ruta.split("#") as [string, string | undefined];
+  return c.redirect(consulta ? `${camino}${camino.includes("?") ? "&" : "?"}${consulta}${ancla === undefined ? "" : `#${ancla}`}` : ruta, 303);
 }
 
 export function idDe(c: Context): number {
