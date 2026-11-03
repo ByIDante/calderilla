@@ -1229,6 +1229,11 @@ button {
   white-space: normal;
   align-items: flex-start;
 }
+/* La explicación de un cambio, debajo de su frase («Los meses anteriores conservan su importe») */
+.nota-cambio {
+  display: block;
+  margin-top: 2px;
+}
 
 /* Pagas extra: cada paga en su bloque, con los meses en una rejilla */
 .paga-extra {

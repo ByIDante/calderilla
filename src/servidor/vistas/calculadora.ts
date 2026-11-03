@@ -4,6 +4,7 @@ import { formatoFecha, nombreMes, nombreMesCorto } from "../../dominio/fechas.ts
 import { ETIQUETA_FRECUENCIA, FRECUENCIAS, NOMBRE_FRECUENCIA } from "../../dominio/recurrencia.ts";
 import { veredictoDeuda, type Veredicto } from "../../reglas/deuda.ts";
 import { NOMBRE_ESTABILIDAD, NOMBRE_ETAPA, type Etapa } from "../../reglas/tipos.ts";
+import type { CambioAplicable } from "../../servicios/aplicarPrueba.ts";
 import { cambios, mesesSinIngresos, proyectar, type Base, type Hito, type ParametroPrueba, type Prueba, type ResultadoAdelanto, type Simulacion } from "../../servicios/calculadora.ts";
 import type { RecurrenteCompleto } from "../../servicios/finanzas.ts";
 import { necesitaDesglose } from "./cobros.ts";
@@ -20,8 +21,8 @@ export interface DatosCalculadora {
   prueba: Prueba;
   real: Simulacion;
   simulada: Simulacion;
-  /** Lo que ya traspasas solo cada mes (sale en el cálculo del ocio) */
-  automatico: number;
+  /** Tus cambios tal como van en la dirección (para «Aplicar estos cambios de verdad») */
+  consulta: string;
 }
 
 type Valores = Record<string, string>;
@@ -475,6 +476,10 @@ export function resultadoCalculadora(d: DatosCalculadora, opciones: { conLineas:
         </div>
         <p class="apagado pequeno" style="margin-top:0">
           ${n ? `Con ${n} ${n === 1 ? "cambio" : "cambios"}. No se guarda nada.` : "Aún no has cambiado nada: son tus números de verdad, los mismos que ves en el resto de la app."}
+          ${n
+            ? // Una página normal: con htmx, el cambio pendiente del campo que pierde el foco se cruzaría con ella
+              html`<a href="/calculadora/aplicar?${d.consulta}" hx-boost="false">Aplicar estos cambios de verdad…</a>`
+            : ""}
         </p>
         <div class="cifras">
           ${cifraComparada("Para ocio este mes", pa.ocio + pa.ocioRemanente, pb.ocio + pb.ocioRemanente, "sube")}
@@ -510,4 +515,47 @@ export function resultadoCalculadora(d: DatosCalculadora, opciones: { conLineas:
       </a>
     </div>
     ${lineas}`;
+}
+
+/** «Aplicar estos cambios de verdad»: cada cambio con su casilla, y lo que no se aplica desde aquí con dónde se cambia */
+export function vistaAplicar(lista: readonly CambioAplicable[], consulta: string): Html {
+  const aplicables = lista.filter((x) => x.aplicable);
+  const otros = lista.filter((x) => !x.aplicable);
+  const volver = html`<a class="boton" href="/calculadora${consulta ? `?${consulta}` : ""}">Volver a la prueba</a>`;
+  return html`
+    <section class="tarjeta" id="aplicar">
+      <h2>Guardar tu prueba en tus datos</h2>
+      ${aplicables.length
+        ? html`<p class="apagado">Marca lo que quieras guardar. Cuenta desde hoy: los meses que ya pasaron no cambian.</p>
+            <form method="post" action="/calculadora/aplicar" class="formulario">
+              ${[...new URLSearchParams(consulta)].map(([nombre, valor]) => html`<input type="hidden" name="${nombre}" value="${valor}" />`)}
+              <ul class="lista-plana">
+                ${aplicables.map(
+                  (x) => html`<li>
+                    <label class="casilla-fila casilla-larga">
+                      <input type="checkbox" name="aplicar" value="${x.clave}" ${x.marcado ? html`checked` : ""} />
+                      <span>${x.texto}${x.nota ? html`<span class="apagado pequeno nota-cambio">${x.nota}</span>` : ""}</span>
+                    </label>
+                  </li>`,
+                )}
+              </ul>
+              <div class="botones"><button class="boton boton-principal" type="submit">Aplicar lo marcado</button> ${volver}</div>
+            </form>`
+        : html`<p>No hay nada en tu prueba que se pueda guardar desde aquí.</p>
+            <div class="botones">${volver}</div>`}
+    </section>
+    ${otros.length
+      ? html`<section class="tarjeta">
+          <h2>Esto no se guarda desde aquí</h2>
+          <ul class="lista-plana">
+            ${otros.map(
+              (x) => html`<li>
+                <span>${x.texto}${x.nota ? html`<span class="apagado pequeno nota-cambio">${x.nota}</span>` : ""}</span>
+                ${x.enlace ? html`<a href="${x.enlace.ruta}">${x.enlace.texto}</a>` : ""}
+              </li>`,
+            )}
+          </ul>
+        </section>`
+      : ""}
+  `;
 }

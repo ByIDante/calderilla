@@ -1,13 +1,12 @@
 import type { Context, Hono } from "hono";
 import { importeEditable, leerImporte, numeroEditable } from "../../dominio/dinero.ts";
-import { mesDe } from "../../dominio/fechas.ts";
 import { FRECUENCIAS } from "../../dominio/recurrencia.ts";
-import { leerAportaciones, totalMensual } from "../../servicios/aportaciones.ts";
+import { aplicarPrueba, cambiosAplicables } from "../../servicios/aplicarPrueba.ts";
 import { importeDelMes, PARAMETROS_PRUEBA, simular, sinCambios, type Base, type CambioMeta, type ParametroPrueba, type Prueba } from "../../servicios/calculadora.ts";
 import { construir } from "../../servicios/situacion.ts";
 import { bd, render, type Estado } from "../app.ts";
-import { Formulario } from "../formulario.ts";
-import { resultadoCalculadora, vistaCalculadora, type DatosCalculadora } from "../vistas/calculadora.ts";
+import { Formulario, redirigir } from "../formulario.ts";
+import { resultadoCalculadora, vistaAplicar, vistaCalculadora, type DatosCalculadora } from "../vistas/calculadora.ts";
 
 /** Hasta cuánto tiene sentido cada regla: los «de cada 100 €» no pasan de 100; los meses del fondo, de 5 años */
 const MAXIMO: Record<ParametroPrueba, number> = {
@@ -129,25 +128,25 @@ function valoresReales(base: Base): Record<string, string> {
   return valores;
 }
 
+/** Lo que has cambiado, como iría en la dirección: solo los campos que no coinciden con tus números de verdad */
+function consultaDe(valores: Record<string, string>, reales: Record<string, string>): string {
+  return new URLSearchParams(Object.entries(valores).filter(([nombre, valor]) => valor !== "" && valor !== reales[nombre])).toString();
+}
+
 export function rutasCalculadora(app: Hono, estado: Estado) {
-  // Solo lee: por eso todo va por GET (nada que guardar, y no se programa ninguna copia de los datos)
-  const calcular = (c: Context): { datos: DatosCalculadora; valores: Record<string, string> } => {
+  /** Tu prueba: lo escrito encima de tus números de verdad (un botón rápido lo cambia antes de leerlo) */
+  const probar = (campos: Record<string, string>) => {
     const base = construir(bd(estado), estado.hoy());
-    // Lo que llega encima de tus números de verdad; un botón rápido lo cambia antes de leerlo
-    const { rapido, ...escrito } = Formulario.deConsulta(c).todos();
-    const valores = { ...valoresReales(base), ...escrito };
+    const { rapido, ok: _ok, error: _error, ...escrito } = campos;
+    const reales = valoresReales(base);
+    const valores = { ...reales, ...escrito };
     if (rapido) aplicarRapido(valores, rapido, base);
-    const prueba = leerPrueba(new Formulario(valores), base);
-    return {
-      datos: {
-        base,
-        prueba,
-        real: simular(base, sinCambios()),
-        simulada: simular(base, prueba),
-        automatico: totalMensual(leerAportaciones(bd(estado)), mesDe(base.hoy)),
-      },
-      valores,
-    };
+    return { base, valores, consulta: consultaDe(valores, reales), prueba: leerPrueba(new Formulario(valores), base) };
+  };
+  // Probar solo lee: por eso va por GET (nada que guardar, y no se programa ninguna copia de los datos)
+  const calcular = (c: Context): { datos: DatosCalculadora; valores: Record<string, string> } => {
+    const { base, valores, consulta, prueba } = probar(Formulario.deConsulta(c).todos());
+    return { datos: { base, prueba, real: simular(base, sinCambios()), simulada: simular(base, prueba), consulta }, valores };
   };
 
   app.get("/calculadora", (c) => {
@@ -156,4 +155,19 @@ export function rutasCalculadora(app: Hono, estado: Estado) {
   });
 
   app.get("/calculadora/resultado", (c) => c.html(resultadoCalculadora(calcular(c).datos, { conLineas: true })));
+
+  // «Aplicar estos cambios de verdad»: primero se ven y se eligen; nada se guarda hasta confirmarlo
+  app.get("/calculadora/aplicar", (c) => {
+    const { base, consulta, prueba } = probar(Formulario.deConsulta(c).todos());
+    return render(c, estado, { titulo: "Aplicar los cambios", seccion: "calculadora" }, vistaAplicar(cambiosAplicables(bd(estado), base, prueba), consulta));
+  });
+
+  app.post("/calculadora/aplicar", async (c) => {
+    const f = await Formulario.de(c);
+    const { aplicar: _, ...campos } = f.todos();
+    const { base, consulta, prueba } = probar(campos);
+    const n = aplicarPrueba(bd(estado), base, prueba, new Set(f.textos("aplicar")), estado.hoy());
+    if (!n) return redirigir(c, `/calculadora/aplicar?${consulta}`, { error: "No has marcado ningún cambio." });
+    return redirigir(c, "/", { ok: `Hecho: ${n === 1 ? "1 cambio aplicado" : `${n} cambios aplicados`} a tus datos. Desde hoy cuentan en todas las pantallas.` });
+  });
 }
