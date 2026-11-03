@@ -215,6 +215,7 @@ export function rutasGastos(app: Hono, estado: Estado) {
       r.ahorros && `${r.ahorros} como ahorro automático`,
       r.precios && `${r.precios} ${r.precios === 1 ? "precio actualizado" : "precios actualizados"}`,
       r.pagas && `${r.pagas === 1 ? "pagas extra apuntadas en 1 ingreso" : `pagas extra apuntadas en ${r.pagas} ingresos`}`,
+      r.traspasos && `${r.traspasos} ${r.traspasos === 1 ? "traspaso a una cuenta tuya" : "traspasos a cuentas tuyas"}`,
       r.estimaciones && `${r.estimaciones} ${r.estimaciones === 1 ? "estimación" : "estimaciones"} de gasto variable`,
     ].filter(Boolean);
     return redirigir(c, "/gastos/detectar", {

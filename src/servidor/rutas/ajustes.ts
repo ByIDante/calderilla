@@ -11,6 +11,7 @@ import { NOMBRE_ESTABILIDAD, NOMBRE_RIESGO } from "../../reglas/tipos.ts";
 import { ESTABILIDADES, guardarParametros, guardarPerfil, leerMercado, leerParametros, leerPerfil, RIESGOS, type PerfilCompleto } from "../../servicios/configuracion.ts";
 import { fechaDeMarca } from "../../datos/sync.ts";
 import { importarJson } from "../../servicios/importarJson.ts";
+import { titularSugerido } from "../../servicios/titular.ts";
 import { bd, render, type Estado } from "../app.ts";
 import { Formulario, redirigir } from "../formulario.ts";
 import { aviso, botonAccion, campo, eur, pct, selector, vacio, type Html } from "../vistas/comun.ts";
@@ -22,7 +23,7 @@ const SITUACIONES: [PerfilCompleto["situacionLaboral"], string][] = [
   ["otra", "Otra"],
 ];
 
-function formularioPerfil(perfil: PerfilCompleto): Html {
+function formularioPerfil(perfil: PerfilCompleto, titularSugerido: string | null): Html {
   return html`<form method="post" action="/ajustes/perfil" class="formulario">
     <div class="fila-campos">
       ${selector("Situación laboral", "situacionLaboral", SITUACIONES, perfil.situacionLaboral)}
@@ -47,6 +48,15 @@ function formularioPerfil(perfil: PerfilCompleto): Html {
       ${campo({ etiqueta: "Lo que aporta tu empresa a tu plan al año", nombre: "aportacionEmpresa", valor: importeEditable(perfil.aportacionEmpresa), sufijo: "€" })}
       ${campo({ etiqueta: "Comunidad autónoma", nombre: "comunidad", valor: perfil.comunidad, ayuda: "Solo como recordatorio: los tramos del IRPF cambian según la comunidad." })}
     </div>
+    ${campo({
+      etiqueta: "Tu nombre y apellidos, como salen en el banco",
+      nombre: "titular",
+      valor: perfil.titular,
+      marcador: titularSugerido ?? "Nombre Apellido Apellido",
+      ayuda: titularSugerido && !perfil.titular
+        ? `Si lo dejas vacío se usa «${titularSugerido}», el de tus cuentas. Sirve para reconocer lo que pasas a cuentas tuyas que no importas (Trade Republic, por ejemplo).`
+        : "Sirve para reconocer lo que pasas a cuentas tuyas que no importas (Trade Republic, por ejemplo): no es un gasto, es tu dinero.",
+    })}
     <div class="botones">
       <button class="boton boton-principal" type="submit">Guardar perfil</button>
       <a class="boton" href="/ajustes/cuestionario">Calcular mi perfil con 5 preguntas</a>
@@ -123,7 +133,7 @@ export function rutasAjustes(app: Hono, estado: Estado) {
       html`
         <section class="tarjeta">
           <h2>Tu perfil</h2>
-          ${formularioPerfil(leerPerfil(base))}
+          ${formularioPerfil(leerPerfil(base), titularSugerido(base))}
         </section>
         <div class="rejilla">
           <section class="tarjeta">
@@ -204,6 +214,7 @@ export function rutasAjustes(app: Hono, estado: Estado) {
       tipoRescate: f.numero("tipoRescate"),
       aportacionEmpresa: f.importe("aportacionEmpresa") ?? 0,
       comunidad: f.texto("comunidad"),
+      titular: f.texto("titular"),
     });
     return redirigir(c, "/ajustes", { ok: "Perfil guardado." });
   });

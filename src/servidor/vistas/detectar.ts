@@ -1,7 +1,7 @@
 import { html } from "hono/html";
 import { formatoFecha, nombreMesCorto } from "../../dominio/fechas.ts";
 import { ETIQUETA_FRECUENCIA } from "../../dominio/recurrencia.ts";
-import type { PropuestaAhorro, PropuestaCargo, PropuestaEstimacion, PropuestaPaga, PropuestaPrecio, Propuestas } from "../../servicios/periodicos.ts";
+import type { PropuestaAhorro, PropuestaCargo, PropuestaEstimacion, PropuestaPaga, PropuestaPrecio, PropuestaTraspaso, Propuestas } from "../../servicios/periodicos.ts";
 import { nombreMeses } from "./cobros.ts";
 import { botonAccion, eur, eurR, vacio, type Html } from "./comun.ts";
 
@@ -18,8 +18,36 @@ function marcar(id: string, texto: string): Html {
   return html`<label class="elegir"><input type="checkbox" name="ids" value="${id}" form="${FORMULARIO}" aria-label="Añadir ${texto}" /></label>`;
 }
 
-function ignorar(id: string): Html {
-  return botonAccion("/gastos/detectar/ignorar", "Ignorar", { pequeno: true, mantenerPosicion: true, campos: { id } });
+function ignorar(id: string, texto = "Ignorar"): Html {
+  return botonAccion("/gastos/detectar/ignorar", texto, { pequeno: true, mantenerPosicion: true, campos: { id } });
+}
+
+/** Lo que te pasas a ti mismo: con tu nombre, a una cuenta tuya que no importas */
+function tablaTraspasos(lista: readonly PropuestaTraspaso[], titular: string | null): Html | string {
+  if (!lista.length) return "";
+  return html`<section class="tarjeta">
+    <h2>Lo que te pasas a cuentas tuyas</h2>
+    <p class="apagado">
+      Llevan tu nombre${titular ? html` («${titular}»)` : ""}: parecen traspasos a una cuenta tuya que no importas (Trade Republic, por ejemplo). Si lo son, no
+      cuentan como gasto ni como ingreso: es tu dinero cambiando de sitio.
+    </p>
+    <div class="tabla-contenedor">
+      <table class="tabla-acciones tabla-apilable">
+        <thead><tr><th class="m-elegir" aria-label="Marcar"></th><th>Fecha</th><th>Concepto</th><th class="numero">Importe</th><th></th></tr></thead>
+        <tbody>
+          ${lista.map(
+            (t) => html`<tr>
+              <td class="m-elegir">${marcar(t.id, `el traspaso del ${formatoFecha(t.apunte.fecha)}`)}</td>
+              <td>${formatoFecha(t.apunte.fecha)}</td>
+              <td>${t.apunte.concepto}</td>
+              <td class="numero ${t.apunte.importe > 0 ? "positivo" : ""}">${eur(t.apunte.importe)}</td>
+              <td class="celda-boton">${ignorar(t.id, "No es un traspaso")}</td>
+            </tr>`,
+          )}
+        </tbody>
+      </table>
+    </div>
+  </section>`;
 }
 
 function veces(c: PropuestaCargo): string {
@@ -261,7 +289,7 @@ export function vistaDetectar(p: Propuestas): Html {
       p.cuentas,
     )}
     ${tablaCargos("Ingresos que se repiten", "Tu nómina y otros ingresos que llegan cada cierto tiempo.", p.ingresos, p.cuentas)}
-    ${tablaPagas(p.pagas)} ${tablaAhorros(p.ahorros)} ${tablaPrecios(p.precios)}
+    ${tablaTraspasos(p.traspasos, p.titular)} ${tablaPagas(p.pagas)} ${tablaAhorros(p.ahorros)} ${tablaPrecios(p.precios)}
     ${tablaCargos(
       "Cargos sueltos que pueden ser anuales",
       "Solo los he visto una vez, pero parecen un seguro o un impuesto. Si es anual, añádelo: se reparte entre los meses para que no te pille por sorpresa.",

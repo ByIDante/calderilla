@@ -16,6 +16,7 @@ import {
 } from "../importar/periodicos.ts";
 import { leerAportaciones } from "./aportaciones.ts";
 import { actualizarRecurrente, crearRecurrente, guardarPagasExtra, leerRecurrentes, type RecurrenteCompleto } from "./finanzas.ts";
+import { esDelTitular, titular } from "./titular.ts";
 
 /*
  * «Encontrado en tus movimientos»: convierte lo que se repite en tus movimientos importados en propuestas
@@ -86,6 +87,13 @@ export interface PropuestaPrecio {
   desde: Fecha;
 }
 
+/** Un movimiento con tu nombre: dinero que te pasas a una cuenta tuya que no importas */
+export interface PropuestaTraspaso {
+  id: string;
+  ignorar: string;
+  apunte: { id: number; fecha: Fecha; importe: Centimos; concepto: string };
+}
+
 /** Pagas extra de un ingreso que ya tienes: meses en que cobraste más con el mismo concepto */
 export interface PropuestaPaga {
   id: string;
@@ -120,6 +128,9 @@ export interface Propuestas {
   ahorros: PropuestaAhorro[];
   precios: PropuestaPrecio[];
   pagas: PropuestaPaga[];
+  traspasos: PropuestaTraspaso[];
+  /** Tu nombre, con el que se reconocen los traspasos a tus cuentas */
+  titular: string | null;
   estimaciones: PropuestaEstimacion[];
   /** Lo que gastas al mes sin categoría: no entra en las estimaciones */
   sinCategoria: Centimos;
@@ -210,6 +221,7 @@ interface Contexto {
   cuentas: { id: number; nombre: string }[];
   ignorados: Set<string>;
   ultimoPorCuenta: Map<number | null, Fecha>;
+  titular: string | null;
 }
 
 function leerContexto(bd: BaseDatos, hoy: Fecha): Contexto {
@@ -225,11 +237,26 @@ function leerContexto(bd: BaseDatos, hoy: Fecha): Contexto {
     cuentas: bd.todos<{ id: number; nombre: string }>("SELECT id, nombre FROM cuentas WHERE archivada = 0 ORDER BY nombre"),
     ignorados: new Set(bd.todos<{ clave: string }>("SELECT clave FROM periodicos_ignorados").map((f) => f.clave)),
     ultimoPorCuenta,
+    titular: titular(bd),
   };
 }
 
-/** Libres: sin gasto fijo, que no son traspaso, que no desvinculaste a mano y que no son la devolución de un gasto */
-const libresDe = (ctx: Contexto) => ctx.apuntes.filter((a) => a.recurrente_id === null && a.traspaso !== 1 && !a.vinculo_manual && a.devuelve_a === null);
+/** Con tu nombre y sin decidir: puede ser un traspaso a una cuenta tuya que no importas */
+const conTuNombre = (ctx: Contexto, a: FilaApunte) => a.traspaso === null && esDelTitular(a.concepto, ctx.titular);
+
+/**
+ * Libres: sin gasto fijo, que no son traspaso, que no desvinculaste a mano y que no son la devolución de un
+ * gasto. Los que llevan tu nombre se preguntan antes como traspaso: si dices que no lo son, vuelven a contar.
+ */
+const libresDe = (ctx: Contexto) =>
+  ctx.apuntes.filter((a) => a.recurrente_id === null && a.traspaso !== 1 && !a.vinculo_manual && a.devuelve_a === null && !conTuNombre(ctx, a));
+
+/** Movimientos con tu nombre aún sin decidir: ¿son traspasos a una cuenta tuya? */
+function proponerTraspasos(ctx: Contexto): PropuestaTraspaso[] {
+  return ctx.apuntes
+    .filter((a) => a.recurrente_id === null && !a.vinculo_manual && conTuNombre(ctx, a))
+    .map((a) => ({ id: `t${a.id}`, ignorar: `t${a.id}`, apunte: { id: a.id, fecha: a.fecha, importe: a.importe, concepto: a.concepto } }));
+}
 
 /**
  * Gastos e ingresos que se repiten: crear uno nuevo o unirlos al que ya tienes. Devuelve también todos los
@@ -376,6 +403,7 @@ export function calcularPropuestas(bd: BaseDatos, hoy: Fecha): Propuestas {
   const ahorros = proponerAhorros(ctx, leerAportaciones(bd).filter((a) => !a.fin || a.fin >= hoy));
   const precios = proponerPrecios(ctx);
   const pagas = proponerPagas(ctx);
+  const traspasos = proponerTraspasos(ctx);
 
   // Gasto variable de cada mes, sin lo que ya es periódico (aunque aún no lo hayas aceptado)
   const importados = ctx.apuntes.filter((a) => a.origen !== "manual");
@@ -396,10 +424,12 @@ export function calcularPropuestas(bd: BaseDatos, hoy: Fecha): Propuestas {
     ahorros,
     precios,
     pagas,
+    traspasos,
+    titular: ctx.titular,
     estimaciones,
     sinCategoria: calculadas.find((e) => e.categoriaId === null)?.mensual ?? 0,
     cuentas: ctx.cuentas,
-    total: cargos.length + ahorros.length + precios.length + pagas.length + estimaciones.length,
+    total: cargos.length + ahorros.length + precios.length + pagas.length + traspasos.length + estimaciones.length,
   };
 }
 
@@ -423,6 +453,7 @@ export interface Aceptado {
   ahorros: number;
   precios: number;
   pagas: number;
+  traspasos: number;
   estimaciones: number;
   errores: string[];
 }
@@ -533,7 +564,7 @@ export function aceptarPropuestas(bd: BaseDatos, hoy: Fecha, elecciones: readonl
   const propuestas = calcularPropuestas(bd, hoy);
   const elegida = new Map(elecciones.map((e) => [e.id, e]));
   const cuentas = new Map(propuestas.cuentas.map((c) => [c.id, c.nombre]));
-  const resultado: Aceptado = { creados: 0, vinculados: 0, ahorros: 0, precios: 0, pagas: 0, estimaciones: 0, errores: [] };
+  const resultado: Aceptado = { creados: 0, vinculados: 0, ahorros: 0, precios: 0, pagas: 0, traspasos: 0, estimaciones: 0, errores: [] };
   bd.transaccion(() => {
     for (const c of [...propuestas.ingresos, ...propuestas.gastos, ...propuestas.anuales]) {
       const e = elegida.get(c.id);
@@ -552,6 +583,10 @@ export function aceptarPropuestas(bd: BaseDatos, hoy: Fecha, elecciones: readonl
       );
       resultado.precios++;
     }
+    for (const t of propuestas.traspasos.filter((x) => elegida.has(x.id))) {
+      bd.ejecutar("UPDATE apuntes SET traspaso = 1, traspaso_par = NULL WHERE id = ?", t.apunte.id);
+      resultado.traspasos++;
+    }
     for (const p of propuestas.pagas.filter((x) => elegida.has(x.id))) {
       const [r] = leerRecurrentes(bd, p.recurrente.id);
       if (!r) continue;
@@ -567,9 +602,14 @@ export function aceptarPropuestas(bd: BaseDatos, hoy: Fecha, elecciones: readonl
   return resultado;
 }
 
-/** «No, gracias»: esa propuesta no vuelve a salir. */
+/** «No, gracias»: esa propuesta no vuelve a salir. Un movimiento con tu nombre que no es un traspaso queda marcado así. */
 export function ignorarPropuesta(bd: BaseDatos, hoy: Fecha, id: string): boolean {
   const p = calcularPropuestas(bd, hoy);
+  const traspaso = p.traspasos.find((x) => x.id === id);
+  if (traspaso) {
+    bd.ejecutar("UPDATE apuntes SET traspaso = 0 WHERE id = ?", traspaso.apunte.id);
+    return true;
+  }
   const encontrada = [...p.gastos, ...p.ingresos, ...p.anuales, ...p.ahorros, ...p.precios, ...p.pagas, ...p.estimaciones].find((x) => x.id === id);
   if (!encontrada) return false;
   bd.ejecutar("INSERT OR REPLACE INTO periodicos_ignorados (clave, ignorado) VALUES (?, ?)", encontrada.ignorar, hoy);

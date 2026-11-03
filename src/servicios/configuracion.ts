@@ -5,6 +5,8 @@ import type { Estabilidad, Perfil, PerfilRiesgo, ProductoMercado } from "../regl
 export interface PerfilCompleto extends Perfil {
   situacionLaboral: "asalariado" | "autonomo" | "funcionario" | "otra";
   comunidad: string;
+  /** Tu nombre como sale en el banco: para reconocer los traspasos a cuentas tuyas que no importas. */
+  titular: string;
 }
 
 const PERFIL_POR_DEFECTO: PerfilCompleto = {
@@ -15,6 +17,7 @@ const PERFIL_POR_DEFECTO: PerfilCompleto = {
   aportacionEmpresa: 0,
   situacionLaboral: "asalariado",
   comunidad: "",
+  titular: "",
 };
 
 export function leerPerfil(bd: BaseDatos): PerfilCompleto {
