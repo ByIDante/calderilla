@@ -13,17 +13,23 @@ export interface Categoria {
   tipo: "esencial" | "ocio" | "otro" | "ingreso";
 }
 
-function etiquetaFin(r: RecurrenteCompleto, hoy: Fecha): string {
+/** Lo que queda de la cuota final de un préstamo (aún sin pagar) */
+const finalPendiente = (r: RecurrenteCompleto, hoy: Fecha) => (r.prestamo ? cuotaFinalPendiente(r.prestamo, hoy) : null);
+
+function etiquetaFin(r: RecurrenteCompleto, hoy: Fecha): Html | string {
   if (!r.fin) return "Sin fin";
   const quedan = cuotasRestantes(r, hoy);
-  return `${formatoFecha(r.fin)}${quedan ? ` · quedan ${quedan}` : ""}`;
+  const final = finalPendiente(r, hoy);
+  return html`${formatoFecha(r.fin)}${quedan ? ` · quedan ${quedan}` : ""}
+    ${final ? html`<div class="apagado pequeno">y la cuota final de ${eur(final.importe)} el ${formatoFecha(final.fecha)}</div>` : ""}`;
 }
 
 function filas(lista: RecurrenteCompleto[], hoy: Fecha, mensual: Map<number, number>): Html {
   return html`${lista.map((r) => {
     const estado = estadoEn(r, hoy);
     const importe = importeEn(r.versiones, hoy);
-    return html`<tr class="${estado === "finalizado" ? "finalizado" : ""}">
+    // Con las cuotas pagadas pero la cuota final aún pendiente, sigue en su lista (sin nada al mes)
+    return html`<tr class="${estado === "finalizado" && !finalPendiente(r, hoy) ? "finalizado" : ""}">
       <td>
         <a href="/gastos/${r.id}">${r.nombre}</a>
         <div class="apagado pequeno">
@@ -63,8 +69,9 @@ function tabla(titulo: string, lista: RecurrenteCompleto[], hoy: Fecha, mensual:
 }
 
 export function vistaLista(recurrentes: RecurrenteCompleto[], hoy: Fecha, mensual: Map<number, number>, propuestas = 0, mesAMes: readonly MesCobros[] = []): Html {
-  const vivos = recurrentes.filter((r) => estadoEn(r, hoy) !== "finalizado");
-  const finalizados = recurrentes.filter((r) => estadoEn(r, hoy) === "finalizado");
+  const vivo = (r: RecurrenteCompleto) => estadoEn(r, hoy) !== "finalizado" || finalPendiente(r, hoy) !== null;
+  const vivos = recurrentes.filter(vivo);
+  const finalizados = recurrentes.filter((r) => !vivo(r));
   const ingresos = vivos.filter((r) => r.tipo === "ingreso");
   const esenciales = vivos.filter((r) => r.tipo === "gasto" && r.esencial);
   const otros = vivos.filter((r) => r.tipo === "gasto" && !r.esencial);
