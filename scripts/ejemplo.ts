@@ -131,6 +131,13 @@ export async function arrancarEjemplo(puerto: number) {
   importado("2026-07-19", -2599, "COMPRA TARJ 4589 FNAC SAN AGUSTIN", cuentaNomina, "Compras");
   importado("2026-09-02", -4999, "COMPRA TARJ 4589 FNAC SAN AGUSTIN", cuentaNomina, "Compras");
   importado("2026-10-22", -1999, "COMPRA TARJ 4589 FNAC SAN AGUSTIN", cuentaNomina, null);
+  // Un año antes, lo justo para comparar octubre con el del año pasado en «Tu año en cifras»
+  importado("2025-10-05", -8500, "CARREFOUR VALENCIA", cuentaNomina, "Alimentación");
+  importado("2025-10-12", -1800, "CINE LYS", cuentaNomina, "Ocio");
+  importado("2025-10-20", -4500, "RESTAURANTE EL CABANYAL", cuentaNomina, "Restaurantes");
+  importado("2025-10-28", 190000, "FINIQUITO TALLERES ROIG SL", cuentaNomina, "Nómina");
+  // Una compra grande en junio sube la media de «Compras», y en octubre vas bastante por encima de ella
+  importado("2026-06-11", -6000, "DECATHLON VALENCIA", cuentaNomina, "Compras");
   // Un trabajo de fin de semana que paga cada 2 semanas: lo encuentra «Buscar en mis movimientos»
   for (let fecha = "2026-06-05"; fecha <= "2026-10-28"; fecha = sumarDias(fecha, 14)) importado(fecha, 18000, "TRANSFERENCIA RECIBIDA EVENTOS LEVANTE SL", cuentaNomina, null);
   const fondo = bd.ejecutar("INSERT INTO activos (nombre, isin, tipo, renta) VALUES ('Fondo indexado mundial', 'IE00B03HCZ61', 'fondo', 'variable')").id;

@@ -22,6 +22,8 @@ const apunte = (concepto: string) => bd.uno<{ id: number }>("SELECT id FROM apun
 const PAGINAS = [
   "/",
   "/?mes=2026-09",
+  "/anio",
+  "/anio?anio=2025",
   "/gastos",
   "/gastos/detectar",
   "/gastos/nuevo",
@@ -33,6 +35,7 @@ const PAGINAS = [
   `/gastos/${moto}/cuadro`,
   `/gastos/${traducciones}`,
   "/ocio",
+  "/ocio?mes=2026-09",
   "/movimientos",
   "/movimientos/1",
   `/movimientos/${apunte("RESTAURANTE LA PEPICA")}`,
@@ -66,7 +69,7 @@ const PASADAS = [
   ...TAMANOS.filter((tamano) => ["movil", "portatil"].includes(tamano.nombre)).map((tamano) => ({ ...tamano, oscuro: true })),
 ];
 // Capturas de las pantallas principales (todas las páginas en todos los tamaños serían demasiadas)
-const CON_CAPTURA = new Set(["/", "/ocio", "/movimientos", "/cuentas", "/inversiones", "/gastos", "/gastos/detectar", "/calculadora", `/gastos/${nomina}`, "/ajustes"]);
+const CON_CAPTURA = new Set(["/", "/anio", "/ocio", "/movimientos", "/cuentas", "/inversiones", "/gastos", "/gastos/detectar", "/calculadora", `/gastos/${nomina}`, "/ajustes"]);
 
 function revisar() {
   const problemas: string[] = [];

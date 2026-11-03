@@ -285,6 +285,7 @@ for (const tamano of [
       [`/gastos/${ids.moto}`, "moto"],
       [`/gastos/${ids.traducciones}`, "traducciones"],
       ["/ajustes?bruto=30000#irpf", "irpf"],
+      ["/anio", "anio"],
       [`/calculadora/aplicar?importe_${ids.netflix}=17%2C99&quitar_${ids.clases}=1&liquidez=0`, "aplicar"],
     ] as const) {
       await pagina.goto(`${base}${ruta}`, { waitUntil: "networkidle" });
@@ -306,10 +307,14 @@ for (const tamano of [
   await pagina.goto(`${base}/`, { waitUntil: "networkidle" });
   const resumen = (await pagina.textContent("main")) ?? "";
   comprobar(/toca la cuota final de «Moto»: 3\.000\s€/.test(resumen), "el Resumen avisa de la cuota final de la moto");
+  comprobar(/En Compras llevas 90\s€ este mes: un 165 % más de lo que sueles gastar en todo un mes \(34\s€\)/.test(resumen), "y de que en Compras vas muy por encima de lo que sueles");
   comprobar(/«Traducciones» varía: .*lo prudente es 250\s€/.test(resumen), "y de que «Traducciones» varía (lo prudente, 250 €)");
 
   await pagina.goto(`${base}/gastos/${ids.moto}`, { waitUntil: "networkidle" });
   comprobar(/Cuota final \(la pagas, la refinancias o devuelves el vehículo\)\s*3\.000,00\s€ el 20\/12\/2026/.test((await pagina.textContent("main")) ?? ""), "la ficha de la moto enseña la cuota final y su fecha");
+  await pagina.goto(`${base}/gastos`, { waitUntil: "networkidle" });
+  comprobar(/y la cuota final de 3\.000,00\s€ el 20\/12\/2026/.test((await pagina.locator("tr", { has: pagina.locator("a:text-is('Moto')") }).textContent()) ?? ""), "y la lista, junto a su última cuota");
+  await pagina.goto(`${base}/gastos/${ids.moto}`, { waitUntil: "networkidle" });
   await pagina.goto(`${base}/gastos/${ids.moto}/cuadro`, { waitUntil: "networkidle" });
   comprobar(/Final\s*20\/12\/2026\s*3\.000,00/.test((await pagina.locator("tr", { has: pagina.locator("td:text-is('Final')") }).textContent()) ?? ""), "y su cuadro de amortización la marca como «Final»");
 
@@ -344,6 +349,8 @@ for (const tamano of [
   comprobar(/devolución de «RESTAURANTE LA PEPICA» \(no cuenta como ingreso\)/.test((await pagina.locator("tr", { hasText: "Marta;Ruiz" }).first().textContent()) ?? ""), "y cada Bizum dice que es su devolución");
   const quedaJuntos = await queda();
   comprobar(quedaJuntos - quedaAntes === 105, `y para ocio te quedan 105 € más (${quedaAntes} → ${quedaJuntos} €)`);
+  const enOcio = (await pagina.locator("tr", { has: pagina.locator("td:text-is('RESTAURANTE LA PEPICA')") }).textContent()) ?? "";
+  comprobar(/35,00\s€\s*pagaste 140,00\s€, te devolvieron 105,00\s€/.test(enOcio), "en la lista de Ocio, la cena enseña lo que cuenta: 35 €");
 
   await pagina.goto(`${base}/movimientos/${id("Bizum recibido · Nuria;Gil")}`, { waitUntil: "networkidle" });
   comprobar(/Es la devolución de RESTAURANTE LA PEPICA/.test((await pagina.textContent("#devoluciones")) ?? ""), "la ficha del Bizum dice de qué gasto es");
@@ -355,13 +362,30 @@ for (const tamano of [
 
   await pagina.goto(`${base}/movimientos`, { waitUntil: "networkidle" });
   const propuestas = pagina.locator("#categorias-propuestas");
-  comprobar(/Fnac[\s\S]*Compras/i.test((await propuestas.textContent()) ?? ""), "propone «Compras» para la compra de Fnac sin categoría");
+  const textoPropuestas = (await propuestas.textContent()) ?? "";
+  comprobar(/Fnac · 1 sin categoría[\s\S]*Compras[\s\S]*Si contiene «fnac» \(en pagos\)/.test(textoPropuestas), "propone «Compras» para la compra de Fnac sin categoría, con su regla para pagos");
+  const medias = (await pagina.locator("#presupuesto").textContent()) ?? "";
+  comprobar(/Frente a lo que sueles gastar[\s\S]*Compras\s*89,99\s€\s*34,00\s€\s*\+165 %/.test(medias), "el presupuesto compara cada categoría con lo que sueles gastar");
   await propuestas.screenshot({ path: path.join(capturas, "12-categorias.png") });
   await propuestas.locator("button:has-text('Poner las categorías marcadas')").click();
   await pagina.waitForURL(/ok=/);
   const fnac = id("COMPRA TARJ 4589 FNAC SAN AGUSTIN");
   comprobar(bd.uno<{ nombre: string }>("SELECT c.nombre FROM apuntes a JOIN categorias c ON c.id = a.categoria_id WHERE a.id = ?", fnac)?.nombre === "Compras", "al aceptarlo, la compra queda en «Compras»");
-  comprobar(bd.uno("SELECT 1 FROM reglas_categoria WHERE patron LIKE 'fnac%'") !== undefined, "con una regla para las siguientes");
+  comprobar(bd.uno<{ signo: string }>("SELECT signo FROM reglas_categoria WHERE patron = 'fnac'")?.signo === "gasto", "con una regla para las siguientes (solo pagos)");
+
+  // Tu año en cifras: 2026 frente al octubre de 2025 que hay en los datos
+  await pagina.goto(`${base}/`, { waitUntil: "networkidle" });
+  await pagina.click("a:has-text('Tu 2026 en cifras')");
+  await pagina.waitForURL(/\/anio\?anio=2026/);
+  const anio = (await pagina.textContent("main")) ?? "";
+  comprobar(/Entró[\s\S]*en octubre de 2025: 1\.900\s€/.test(anio) && /En qué se fue/.test(anio) && /Frente a 2025/.test(anio), "«Tu 2026 en cifras» compara con los mismos meses de 2025");
+  // Se llega con htmx (hx-boost): el gráfico se pinta un momento después
+  const pintado = await pagina.waitForSelector("#grafico-anio[data-pintado]", { timeout: 5000 }).then(() => true, () => false);
+  comprobar(pintado, "con su gráfico mes a mes");
+  await pagina.screenshot({ path: path.join(capturas, "15-anio.png"), fullPage: true });
+  await pagina.click("a:has-text('← 2025')");
+  await pagina.waitForURL(/anio=2025/);
+  comprobar(/Antes de octubre de 2025 no hay movimientos/.test((await pagina.textContent("main")) ?? ""), "y 2025 empieza en el primer mes con movimientos");
 
   await pagina.goto(`${base}/ajustes?bruto=30000#irpf`, { waitUntil: "networkidle" });
   const irpf = pagina.locator("#irpf");
