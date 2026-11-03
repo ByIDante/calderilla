@@ -1,5 +1,5 @@
 import { html } from "hono/html";
-import type { LineaPresupuesto } from "../../servicios/presupuesto.ts";
+import { disparada, type LineaPresupuesto } from "../../servicios/presupuesto.ts";
 import { barra, campo, eur, eurR, type Html } from "./comun.ts";
 
 /** Barras de lo gastado frente al límite de cada categoría que tiene límite. */
@@ -17,6 +17,31 @@ export function barrasPresupuesto(lineas: readonly LineaPresupuesto[]): Html {
   )}`;
 }
 
+/** Cada categoría este mes frente a lo que sueles gastar en ella */
+function tablaMedias(lineas: readonly LineaPresupuesto[]): Html | string {
+  const filas = lineas.filter((l) => l.media !== null && (l.gastado > 0 || l.media > 0)).sort((a, b) => b.gastado - a.gastado || b.media! - a.media!);
+  if (!filas.length) return "";
+  const frente = (l: LineaPresupuesto) => {
+    if (!l.media) return html`<span class="apagado">nuevo</span>`;
+    const pct = Math.round((l.gastado / l.media) * 100);
+    return pct > 100 ? html`<span class="${disparada(l) ? "negativo" : ""}">+${pct - 100} %</span>` : html`<span class="apagado">${pct} % de tu media</span>`;
+  };
+  return html`<h3>Frente a lo que sueles gastar</h3>
+    <p class="apagado pequeno">Tu media es lo que gastaste al mes en cada categoría en los ${filas[0]!.mesesMedia} meses anteriores.</p>
+    <div class="tabla-contenedor">
+      <table class="tabla-apilable">
+        <thead><tr><th>Categoría</th><th class="numero">Este mes</th><th class="numero">Tu media</th><th class="numero">Frente a tu media</th></tr></thead>
+        <tbody>
+          ${filas.map(
+            (l) => html`<tr>
+              <td>${l.nombre}</td><td class="numero">${eur(l.gastado)}</td><td class="numero">${eur(l.media!)}</td><td class="numero">${frente(l)}</td>
+            </tr>`,
+          )}
+        </tbody>
+      </table>
+    </div>`;
+}
+
 export function tarjetaPresupuesto(lineas: readonly LineaPresupuesto[], volver: string): Html {
   const conLimite = lineas.filter((l) => l.limite);
   const sinLimite = lineas.filter((l) => !l.limite && l.gastado > 0);
@@ -31,9 +56,11 @@ export function tarjetaPresupuesto(lineas: readonly LineaPresupuesto[], volver: 
       gastos fijos no, porque ya están en el presupuesto general.
     </p>
     ${conLimite.length ? barrasPresupuesto(lineas) : html`<p>Aún no has puesto ningún límite.</p>`}
-    ${sinLimite.length
-      ? html`<p class="apagado pequeno">Sin límite: ${sinLimite.map((l) => `${l.nombre} ${eurR(l.gastado)}`).join(" · ")}</p>`
-      : ""}
+    ${lineas.some((l) => l.media !== null)
+      ? tablaMedias(lineas)
+      : sinLimite.length
+        ? html`<p class="apagado pequeno">Sin límite: ${sinLimite.map((l) => `${l.nombre} ${eurR(l.gastado)}`).join(" · ")}</p>`
+        : ""}
     <details ${conLimite.length ? "" : html`open`}>
       <summary class="boton">Poner o cambiar límites</summary>
       <form method="post" action="/presupuesto" class="formulario" style="margin-top:12px">

@@ -22,6 +22,44 @@ export interface LineaPresupuesto {
   sugerido: number | null;
   /** A este ritmo, lo que gastarás en todo el mes (solo el mes en curso). */
   proyeccion: number | null;
+  /** Lo que sueles gastar al mes en esta categoría (null si aún no hay meses suficientes) */
+  media: number | null;
+  /** De cuántos meses sale la media */
+  mesesMedia: number;
+}
+
+/** Cuántos meses mira la media, y cuántos hacen falta como mínimo */
+const MESES_MEDIA = 6;
+const MINIMO_MEDIA = 2;
+
+/**
+ * Lo que gastaste al mes en cada categoría en los meses completos anteriores a `mes` (como mucho 6) que tienen
+ * movimientos: al menos 3 gastos (si no, es que ese mes no lo importaste). El primer mes con movimientos solo
+ * cuenta si empiezan en su primera semana: si no, estaría a medias y bajaría la media.
+ */
+function mediasPorCategoria(bd: BaseDatos, mes: Mes): { medias: Map<number, number>; meses: number } {
+  const primero = bd.uno<{ fecha: string | null }>("SELECT min(fecha) AS fecha FROM apuntes")?.fecha ?? null;
+  if (!primero) return { medias: new Map(), meses: 0 };
+  const desde = Number(primero.slice(8, 10)) <= 7 ? mesDe(primero) : sumarMesesAMes(mesDe(primero), 1);
+  const candidatos = Array.from({ length: MESES_MEDIA }, (_, i) => sumarMesesAMes(mes, i - MESES_MEDIA)).filter((m) => m >= desde);
+  if (!candidatos.length) return { medias: new Map(), meses: 0 };
+  const gastos = new Map(
+    bd
+      .todos<{ mes: string; n: number }>(
+        "SELECT substr(fecha, 1, 7) AS mes, count(*) AS n FROM apuntes WHERE importe < 0 AND coalesce(traspaso, 0) = 0 AND fecha BETWEEN ? AND ? GROUP BY mes",
+        primerDia(candidatos[0]!),
+        ultimoDia(candidatos.at(-1)!),
+      )
+      .map((f) => [f.mes, f.n]),
+  );
+  const meses = candidatos.filter((m) => (gastos.get(m) ?? 0) >= 3);
+  if (meses.length < MINIMO_MEDIA) return { medias: new Map(), meses: 0 };
+  const filas = bd.todos<{ categoria_id: number; total: number }>(
+    `SELECT a.categoria_id, -sum(${NETO}) AS total FROM apuntes a WHERE a.importe < 0 AND a.recurrente_id IS NULL AND coalesce(a.traspaso, 0) = 0
+     AND a.categoria_id IS NOT NULL AND substr(a.fecha, 1, 7) IN (${meses.map(() => "?").join(", ")}) GROUP BY a.categoria_id`,
+    ...meses,
+  );
+  return { medias: new Map(filas.map((f) => [f.categoria_id, Math.round(f.total / meses.length)])), meses: meses.length };
 }
 
 export function presupuestoPorCategoria(bd: BaseDatos, mes: Mes, hoy: Fecha): LineaPresupuesto[] {
@@ -43,6 +81,7 @@ export function presupuestoPorCategoria(bd: BaseDatos, mes: Mes, hoy: Fecha): Li
   for (const r of leerRecurrentes(bd).filter((x) => x.tipo === "gasto" && x.clase === "estimacion" && x.categoriaId && !x.patron)) {
     estimados.set(r.categoriaId!, (estimados.get(r.categoriaId!) ?? 0) + mensualEn(r, r.versiones, mes));
   }
+  const { medias, meses } = mediasPorCategoria(bd, mes);
   const enCurso = mes === mesDe(hoy);
   const [anio, numero] = mes.split("-").map(Number) as [number, number];
   const dia = Number(hoy.slice(8, 10));
@@ -56,15 +95,34 @@ export function presupuestoPorCategoria(bd: BaseDatos, mes: Mes, hoy: Fecha): Li
       gastado,
       sugerido: estimados.get(c.id) || null,
       proyeccion: enCurso && dia >= 5 ? Math.round((gastado / dia) * diasDelMes(anio, numero)) : null,
+      media: meses ? (medias.get(c.id) ?? 0) : null,
+      mesesMedia: meses,
     };
   });
 }
 
-/** Avisos cuando te pasas de un límite o vas camino de pasarte. */
+/** ¿Este mes ya llevas bastante más de lo que sueles? (la mitad más que tu media y al menos 30 € más) */
+export function disparada(l: LineaPresupuesto): boolean {
+  return l.media !== null && l.media >= 2000 && l.gastado > l.media * 1.5 && l.gastado - l.media >= 3000;
+}
+
+/**
+ * Avisos cuando te pasas de un límite o vas camino de pasarte y, en lo que no tiene límite, cuando ya llevas
+ * bastante más de lo que sueles gastar en todo un mes.
+ */
 export function avisosPresupuesto(lineas: readonly LineaPresupuesto[]): Aviso[] {
   const avisos: Aviso[] = [];
   for (const l of lineas) {
-    if (!l.limite) continue;
+    if (!l.limite) {
+      if (disparada(l)) {
+        avisos.push({
+          nivel: "info",
+          texto: `En ${l.nombre} llevas ${eur(l.gastado)} este mes: un ${Math.round((l.gastado / l.media! - 1) * 100)} % más de lo que sueles gastar en todo un mes (${eur(l.media!)}).`,
+          enlace: { ruta: "/movimientos#presupuesto", texto: "Ver por categorías" },
+        });
+      }
+      continue;
+    }
     if (l.gastado > l.limite) {
       avisos.push({ nivel: "atencion", texto: `Te has pasado del presupuesto de ${l.nombre}: llevas ${eur(l.gastado)} de ${eur(l.limite)} este mes.` });
     } else if (l.proyeccion !== null && l.proyeccion > l.limite * 1.1 && l.gastado > l.limite * 0.5) {
