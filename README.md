@@ -11,7 +11,8 @@ Web local para llevar el control de tu economía: ingresos, gastos fijos y a pla
 - **Revisa tus datos.** Avisa de lo que suele ser un error al apuntar (un gasto apuntado dos veces, un gasto que empieza más tarde que sus cargos), te dice cuánto contar de un ingreso que varía y junta lo que te devuelven tus amigos con el gasto que pagaste tú.
 - **Escalera de inversión.** Según tus gastos y lo que te sobra, te dice en qué etapa estás y qué hacer. Cuando cumples los requisitos, pasas a la siguiente etapa o se desbloquean más opciones.
 - **Cartera.** Fondos, ETF, acciones, cripto y divisas, con su valor y lo que ganas o pierdes. Los precios se actualizan solos con fuentes gratuitas, y también puedes ponerlos a mano.
-- **Tus movimientos.** Importa el extracto del banco (CSV o Excel) o conecta el banco para que traiga saldos y movimientos solo.
+- **Tus movimientos.** Importa el extracto del banco (CSV o Excel) o conecta el banco para que traiga saldos y movimientos solo. Puedes buscar en un mes o en todos (todos los Bizums a una persona, por ejemplo) y ver cuánto suman.
+- **Tus suscripciones.** Todas en un sitio, con lo que cuestan al mes y al año, cuándo se cobra cada una y cuáles han subido.
 
 Funciona en tu ordenador, sin cuentas ni suscripciones. **No usa IA ni necesita una cuenta de Claude:** las recomendaciones son reglas fijas. Las diseñaron en octubre de 2026 varios agentes especializados (un gestor de inversiones, un investigador de integraciones y un «abogado del diablo» que atacó el diseño).
 
@@ -176,6 +177,14 @@ Sirve para comprobar los números y para preguntarte «¿y si…?». Parte de tu
 4. La mitad de lo que no gastes pasa al mes siguiente.
 5. Cuando terminas un préstamo, su cuota va entera a ahorro durante 3 meses antes de repartirse.
 
+## Tus suscripciones
+
+En **Ingresos y gastos → Tus suscripciones**:
+
+- **Cuáles son:** la app reconoce las de servicios conocidos (Netflix, Spotify, HBO Max, YouTube Premium…) por su nombre o por el texto con el que salen en el banco, y las de la categoría «Suscripciones». Puedes añadir otras («¿Alguna de estas también?» propone tus gastos fijos pequeños que no son esenciales) o quitar las que no lo sean; lo que dices tú manda.
+- **Qué ves:** lo que pagas al mes (con las anuales repartidas) y al año, cuándo es el próximo cobro de cada una y si ha subido de precio en el último año, con lo que te cuesta de más al año.
+- **Darla de baja:** entra en ella y pon la fecha del último cargo. Su historial se conserva.
+
 ## Tu año en cifras
 
 Desde el Resumen («Tu 2026 en cifras»). Sale de tus movimientos, así que cuenta lo que pasó de verdad, no lo previsto:
@@ -223,6 +232,8 @@ Todo esto es gratis y funciona solo con conexión a internet, sin cuentas de pag
   - **Ingresos que varían:** al reconocer un ingreso que cambia cada mes, cuenta lo de un mes flojo (el segundo más bajo de los últimos 6), no la media.
   - **Pagas extra:** si la nómina de un mes llega doble, o con otro movimiento aparte, se propone con sus pagas extra. Si solo se ve la de verano porque lo importado no llega a diciembre, también se propone la de diciembre. Si la nómina ya la tienes apuntada, se proponen las pagas que le faltan.
   - Hacen falta al menos 3 cargos para reconocer algo mensual; un seguro o un impuesto que solo aparece una vez se pregunta como posible anual. Lo que ignores no vuelve a salir.
+- **Buscar en Movimientos:** «Buscar en el concepto» mira el mes que ves; marca «En todos los meses» para buscar en todos. Arriba de la lista dice cuántos encuentra y cuánto salen y entran en total (sin traspasos y, de un gasto compartido, solo lo tuyo).
+- **En el móvil**, cada movimiento ocupa dos líneas (concepto e importe; debajo, la fecha y la categoría) y lo secundario (el presupuesto, los gastos por categoría y el formulario para apuntar) empieza plegado. Para borrar un movimiento, entra en él.
 - **En Movimientos**, también propuesto y sin hacer nada hasta que lo confirmes:
   - **Categoría por parecido:** si ya categorizaste movimientos con el mismo texto (los Bizums a una persona, una tienda), propone la misma para los que no la tienen y, si quieres, crea la regla para los siguientes. La regla vale solo para pagos o solo para cobros, como el grupo, y se llama como la persona («Jordi Puig») o la tienda («Fnac», no «Fnac San Agustín»).
   - **Lo que sueles gastar:** en el presupuesto por categorías, cada una este mes frente a tu media de los meses anteriores (hasta 6 meses completos que hayas importado). Si en una categoría sin límite ya llevas bastante más de lo que sueles gastar en todo un mes (la mitad más y al menos 30 €), el Resumen te avisa.
@@ -266,6 +277,7 @@ npm run paquete-windows                  # crea dist/Calderilla-Windows.zip (con
   - una cena con tres Bizums que se juntan y luego se separan, mirando cuánto te queda para ocio y lo que cuenta en la lista de Ocio;
   - la categoría por parecido (con su nombre y su regla para pagos), lo que sueles gastar en cada categoría y el IRPF;
   - «Tu año en cifras», frente al año anterior;
+  - la búsqueda en todos los meses, tus suscripciones (y añadir una) y la lista de movimientos en el móvil;
 - en la Calculadora, que lo que apartas de más con el ahorro automático sale del ocio, y aplica un cambio de verdad.
 
 Si algo no cuadra, termina con error.
