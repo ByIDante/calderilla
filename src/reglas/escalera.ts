@@ -481,6 +481,16 @@ function avisosPrestamos(c: Calculo): Aviso[] {
       texto: `En ${nombreMes(mesDe(prestamo.fin))} terminas «${prestamo.nombre}»: +${eur(prestamo.cuota)} al mes libres. La regla sugiere llevarlos enteros a ahorro los ${p.cuotaLiberadaMeses} primeros meses.`,
     });
   }
+  // La cuota final de una financiación (coche, moto): avisar con tiempo para decidir qué hacer
+  for (const deuda of s.deudas) {
+    if (!deuda.cuotaFinal) continue;
+    const dias = diasEntre(s.hoy, deuda.cuotaFinal.fecha);
+    if (dias < 0 || dias > p.avisoPrestamoMeses * 30.5) continue;
+    avisos.push({
+      nivel: "atencion",
+      texto: `En ${nombreMes(mesDe(deuda.cuotaFinal.fecha))} toca la cuota final de «${deuda.nombre}»: ${eur(deuda.cuotaFinal.importe)}. Decide antes si la pagas, la refinancias o devuelves el vehículo.`,
+    });
+  }
   for (const prestamo of s.prestamosTerminados) {
     const hasta = sumarMeses(prestamo.fin, p.cuotaLiberadaMeses);
     if (hasta < s.hoy) continue;

@@ -1,7 +1,18 @@
 import type { BaseDatos } from "../datos/db.ts";
 import type { Centimos } from "../dominio/dinero.ts";
 import { diasEntre, mesDe, primerDia, sumarMeses, ultimoDia, type Fecha, type Mes } from "../dominio/fechas.ts";
-import { cuadroAmortizacion, cuotaMensual, cuotasRestantesPrestamo, finPrestamo, interesesTotales, pendienteEn, taeDe, type Amortizacion, type Prestamo } from "../dominio/prestamo.ts";
+import {
+  cuadroAmortizacion,
+  cuotaFinalPendiente,
+  cuotaMensual,
+  cuotasRestantesPrestamo,
+  finCuotas,
+  interesesTotales,
+  pendienteEn,
+  taeDe,
+  type Amortizacion,
+  type Prestamo,
+} from "../dominio/prestamo.ts";
 import {
   cobrosEnMes,
   devengoAcumulado,
@@ -57,6 +68,7 @@ interface FilaPrestamo {
   primera_cuota: string;
   comision_amortizacion: number;
   vinculado: number;
+  cuota_final: number;
 }
 
 export function leerRecurrentes(bd: BaseDatos, id?: number): RecurrenteCompleto[] {
@@ -105,6 +117,7 @@ export function leerRecurrentes(bd: BaseDatos, id?: number): RecurrenteCompleto[
             primeraCuota: prestamo.primera_cuota,
             comisionAmortizacion: prestamo.comision_amortizacion,
             vinculado: prestamo.vinculado === 1,
+            cuotaFinal: prestamo.cuota_final,
             amortizaciones: amortizaciones.get(prestamo.id) ?? [],
           }
         : null,
@@ -130,7 +143,10 @@ export interface DatosRecurrente {
   pagasExtra?: PagaExtra[];
 }
 
-/** Con préstamo, la fecha de fin y la cuota salen del préstamo (la cuota se puede corregir a mano). */
+/**
+ * Con préstamo, la fecha de fin y la cuota salen del préstamo (la cuota se puede corregir a mano). El gasto de
+ * cada mes acaba con la última cuota normal: la cuota final se paga aparte (y cuenta como deuda hasta entonces).
+ */
 function normalizar(datos: DatosRecurrente, amortizaciones: readonly Amortizacion[] = []): DatosRecurrente {
   if (!datos.prestamo) return datos;
   const prestamo = { ...datos.prestamo, primeraCuota: datos.inicio, amortizaciones };
@@ -138,8 +154,8 @@ function normalizar(datos: DatosRecurrente, amortizaciones: readonly Amortizacio
     ...datos,
     tipo: "gasto",
     frecuencia: "mensual",
-    fin: finPrestamo(prestamo),
-    importe: datos.importe || cuotaMensual(prestamo.capital, prestamo.tin, prestamo.plazoMeses),
+    fin: finCuotas(prestamo),
+    importe: datos.importe || cuotaMensual(prestamo.capital, prestamo.tin, prestamo.plazoMeses, prestamo.cuotaFinal ?? 0),
   };
 }
 
@@ -163,9 +179,9 @@ function guardarPrestamo(bd: BaseDatos, recurrenteId: number, datos: DatosRecurr
   }
   const p = datos.prestamo;
   bd.ejecutar(
-    `INSERT INTO prestamos (recurrente_id, capital, tin, tae, plazo_meses, primera_cuota, comision_amortizacion, vinculado) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `INSERT INTO prestamos (recurrente_id, capital, tin, tae, plazo_meses, primera_cuota, comision_amortizacion, vinculado, cuota_final) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
      ON CONFLICT (recurrente_id) DO UPDATE SET capital = excluded.capital, tin = excluded.tin, tae = excluded.tae, plazo_meses = excluded.plazo_meses,
-       primera_cuota = excluded.primera_cuota, comision_amortizacion = excluded.comision_amortizacion, vinculado = excluded.vinculado`,
+       primera_cuota = excluded.primera_cuota, comision_amortizacion = excluded.comision_amortizacion, vinculado = excluded.vinculado, cuota_final = excluded.cuota_final`,
     recurrenteId,
     p.capital,
     p.tin,
@@ -174,6 +190,7 @@ function guardarPrestamo(bd: BaseDatos, recurrenteId: number, datos: DatosRecurr
     datos.inicio,
     p.comisionAmortizacion,
     p.vinculado ? 1 : 0,
+    p.cuotaFinal ?? 0,
   );
 }
 
@@ -252,7 +269,7 @@ export function conAmortizacion(r: RecurrenteCompleto, a: Amortizacion): Recurre
   const siguiente = cuadroAmortizacion(prestamo).find((fila) => fila.fecha > a.fecha && fila.cuota > 0);
   const versiones =
     a.modo === "cuota" && siguiente ? [...r.versiones.filter((v) => v.validoDesde !== siguiente.fecha), { validoDesde: siguiente.fecha, importe: siguiente.cuota }] : r.versiones;
-  return { ...r, prestamo, fin: finPrestamo(prestamo), versiones };
+  return { ...r, prestamo, fin: finCuotas(prestamo), versiones };
 }
 
 /**
@@ -346,10 +363,12 @@ export function devengos(recurrentes: readonly RecurrenteCompleto[], fecha: Fech
 
 export function deudas(recurrentes: readonly RecurrenteCompleto[], fecha: Fecha): Deuda[] {
   return recurrentes
-    .filter((r) => r.prestamo && estadoEn(r, fecha) !== "finalizado")
+    // Tras la última cuota normal, la cuota final sigue siendo deuda hasta que se paga
+    .filter((r) => r.prestamo && (estadoEn(r, fecha) !== "finalizado" || cuotaFinalPendiente(r.prestamo, fecha)))
     .map((r) => {
       const prestamo = r.prestamo!;
       return {
+        cuotaFinal: cuotaFinalPendiente(prestamo, fecha),
         nombre: r.nombre,
         pendiente: pendienteEn(prestamo, fecha),
         tae: taeDe(prestamo),

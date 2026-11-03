@@ -4,7 +4,7 @@ import { mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
-import { BaseDatos } from "../src/datos/db.ts";
+import { BaseDatos, VERSION_ESQUEMA } from "../src/datos/db.ts";
 import { sumarDias } from "../src/dominio/fechas.ts";
 import {
   cobrosEnMes,
@@ -267,7 +267,7 @@ describe("migración a la versión 6", () => {
     bd.ejecutar("INSERT INTO apuntes (fecha, importe, concepto, recurrente_id) VALUES ('2026-10-05', -28652, 'FINANCIERA COCHE', 7)");
 
     bd.migrar();
-    assert.equal(bd.version(), 6);
+    assert.equal(bd.version(), VERSION_ESQUEMA, "y de paso, las que vengan después");
     assert.deepEqual({ ...bd.uno<{ nombre: string; patron: string }>("SELECT nombre, patron FROM recurrentes WHERE id = 7") }, { nombre: "Coche", patron: "financiera" });
     assert.equal(bd.uno<{ n: number }>("SELECT count(*) AS n FROM recurrentes_importes WHERE recurrente_id = 7")?.n, 1);
     assert.equal(bd.uno<{ n: number }>("SELECT count(*) AS n FROM prestamos WHERE recurrente_id = 7")?.n, 1);

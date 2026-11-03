@@ -1,7 +1,7 @@
 import { html } from "hono/html";
 import { importeEditable, numeroEditable } from "../../dominio/dinero.ts";
 import { formatoFecha, type Fecha } from "../../dominio/fechas.ts";
-import { cuadroAmortizacion, cuotaMensual, pendienteEn, taeDe } from "../../dominio/prestamo.ts";
+import { cuadroAmortizacion, cuotaFinalPendiente, cuotaMensual, pendienteEn, taeDe } from "../../dominio/prestamo.ts";
 import { cuotasRestantes, estadoEn, ETIQUETA_FRECUENCIA, FRECUENCIAS, importeEn, NOMBRE_FRECUENCIA, proximaOcurrencia } from "../../dominio/recurrencia.ts";
 import type { RecurrenteCompleto } from "../../servicios/finanzas.ts";
 import { camposPagas, opcionDeMeses, tarjetaDesglose, tarjetaMesAMes, type MesCobros } from "./cobros.ts";
@@ -147,6 +147,8 @@ export function valoresDe(r: RecurrenteCompleto, hoy: Fecha): Valores {
     plazo: r.prestamo ? String(r.prestamo.plazoMeses) : "",
     comision: numeroEditable(r.prestamo?.comisionAmortizacion),
     vinculado: r.prestamo?.vinculado ? "1" : "",
+    cuota_final: importeEditable(r.prestamo?.cuotaFinal || null),
+    meta_cuota_final: "1",
     desde: hoy,
   };
 }
@@ -177,6 +179,18 @@ export function vistaFormulario(opciones: { accion: string; valores: Valores; ca
           ${campo({ etiqueta: "Comisión por amortizar", nombre: "comision", valor: v.comision, sufijo: "%", ayuda: "Lo que cobran por adelantar pagos (en préstamos al consumo, máx. 1 %)." })}
         </div>
         ${casilla("El precio dependía de mantener esta financiación", "vinculado", v.vinculado === "1", "Típico al comprar un coche: si amortizas antes, podrías perder el descuento.")}
+        <div class="fila-campos">
+          ${campo({
+            etiqueta: "Cuota final (opcional)",
+            nombre: "cuota_final",
+            valor: v.cuota_final,
+            sufijo: "€",
+            ayuda: "En financiaciones con valor futuro garantizado (coches, motos): el pago grande del final, el mes siguiente a la última cuota. El plazo son solo las cuotas normales.",
+          })}
+        </div>
+        <div data-mostrar-si="campo-cuota_final">
+          ${casilla("Ir apartando para pagarla (crea una meta)", "meta_cuota_final", v.meta_cuota_final !== "", "Si al final devuelves o cambias el vehículo, no hace falta.")}
+        </div>
       </fieldset>
 
       <div class="fila-campos">
@@ -244,11 +258,15 @@ function vistaGestion(r: RecurrenteCompleto, hoy: Fecha): Html {
       ? html`<section class="tarjeta">
           <h2>El préstamo hoy</h2>
           <ul class="lista-plana">
-            <li><span>Cuota calculada</span><span class="numero">${eur(cuotaMensual(prestamo.capital, prestamo.tin, prestamo.plazoMeses))}</span></li>
+            <li><span>Cuota calculada</span><span class="numero">${eur(cuotaMensual(prestamo.capital, prestamo.tin, prestamo.plazoMeses, prestamo.cuotaFinal ?? 0))}</span></li>
             <li><span>TAE ${prestamo.tae === null ? "aproximada" : ""}</span><span class="numero">${pct(taeDe(prestamo))}</span></li>
             <li><span>Pendiente de devolver</span><span class="numero">${eur(pendienteEn(prestamo, hoy))}</span></li>
             <li><span>Intereses que quedan por pagar</span><span class="numero">${eur(cuadroAmortizacion(prestamo).filter((f) => f.fecha > hoy).reduce((s, f) => s + f.intereses, 0))}</span></li>
             <li><span>Última cuota</span><span>${formatoFecha(r.fin)}</span></li>
+            ${(() => {
+              const final = cuotaFinalPendiente(prestamo, hoy);
+              return final ? html`<li><span>Cuota final (la pagas, la refinancias o devuelves el vehículo)</span><span class="numero">${eur(final.importe)} el ${formatoFecha(final.fecha)}</span></li>` : "";
+            })()}
           </ul>
           <p><a href="/gastos/${r.id}/cuadro">Ver el cuadro de amortización</a></p>
         </section>
@@ -303,7 +321,7 @@ export function vistaCuadro(r: RecurrenteCompleto, hoy: Fecha): Html {
         <tbody>
           ${cuadro.map(
             (f) => html`<tr class="${f.fecha <= hoy ? "finalizado" : ""}">
-              <td>${f.numero}</td><td>${formatoFecha(f.fecha)}</td><td class="numero">${f.anticipado ? eur(f.anticipado) : ""}</td><td class="numero">${eur(f.cuota)}</td><td class="numero">${eur(f.intereses)}</td>
+              <td>${f.final ? "Final" : f.numero}</td><td>${formatoFecha(f.fecha)}</td><td class="numero">${f.anticipado ? eur(f.anticipado) : ""}</td><td class="numero">${eur(f.cuota)}</td><td class="numero">${eur(f.intereses)}</td>
               <td class="numero">${eur(f.amortizacion)}</td><td class="numero">${eur(f.pendiente)}</td>
             </tr>`,
           )}

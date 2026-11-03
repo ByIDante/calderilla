@@ -11,6 +11,8 @@ export interface Deuda {
   /** Comisión por amortizar antes de tiempo, en %. */
   comision: number;
   vinculado: boolean;
+  /** La cuota final que queda (valor futuro garantizado), si la tiene. */
+  cuotaFinal?: { importe: Centimos; fecha: string } | null;
 }
 
 export interface Rentabilidades {

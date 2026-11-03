@@ -1,6 +1,8 @@
 import type { Context, Hono } from "hono";
 import { html } from "hono/html";
+import type { BaseDatos } from "../../datos/db.ts";
 import { esFecha, formatoFecha, mesDe, sumarMesesAMes, type Fecha } from "../../dominio/fechas.ts";
+import { finPrestamo } from "../../dominio/prestamo.ts";
 import { desgloseAnual, estadoEn, finPorCuotas, FRECUENCIAS, mensualEn, type PagaExtra } from "../../dominio/recurrencia.ts";
 import { claveConcepto } from "../../importar/periodicos.ts";
 import {
@@ -39,6 +41,28 @@ export function leerPagas(f: Formulario): { pagas: PagaExtra[] } | { error: stri
   return { pagas };
 }
 
+/**
+ * Con cuota final y la casilla marcada, una meta para ir apartándola: la crea o, si ya está, la pone al día
+ * (importe y fecha del pago final). Si se desmarca no se borra: lo ahorrado para ella es tuyo.
+ */
+function metaCuotaFinal(base: BaseDatos, datos: DatosRecurrente, apartar: boolean) {
+  const final = datos.prestamo?.cuotaFinal ?? 0;
+  if (!apartar || !final) return;
+  const fecha = finPrestamo({ ...datos.prestamo!, primeraCuota: datos.inicio });
+  const nombre = `Cuota final de «${datos.nombre}»`;
+  // La que ya tengas para esa cuota (aunque la llamaras de otra forma): el mismo importe hacia la misma fecha
+  const existente = base.uno<{ id: number }>(
+    `SELECT id FROM metas WHERE cumplida = 0 AND (nombre = ? OR (abs(objetivo - ?) <= 100 AND abs(julianday(fecha) - julianday(?)) <= 45))
+     ORDER BY nombre = ? DESC LIMIT 1`,
+    nombre,
+    final,
+    fecha,
+    nombre,
+  );
+  if (existente) base.ejecutar("UPDATE metas SET objetivo = ?, fecha = ? WHERE id = ?", final, fecha, existente.id);
+  else base.ejecutar("INSERT INTO metas (nombre, objetivo, fecha, ahorrado) VALUES (?, ?, ?, 0)", nombre, final, fecha);
+}
+
 /** Los valores para volver a pintar el formulario tal como llegó (las casillas de meses se repiten) */
 function valoresEnviados(f: Formulario): Valores {
   return { ...f.todos(), ...Object.fromEntries([1, 2, 3].map((n) => [`paga_meses_${n}`, f.textos(`paga_meses_${n}`).join(",")])) };
@@ -70,7 +94,9 @@ export function leerGasto(f: Formulario, categorias: Categoria[]): { datos: Dato
     if (!plazo || plazo < 1 || plazo > 600) return { error: "Indica el plazo en meses." };
     const tae = f.numero("tae");
     if (tae !== null && (tae < 0 || tae > 100)) return { error: "La TAE debe estar entre 0 y 100 %." };
-    prestamo = { capital, tin, tae: f.numero("tae"), plazoMeses: plazo, comisionAmortizacion: f.numero("comision") ?? 0, vinculado: f.casilla("vinculado") };
+    const cuotaFinal = f.importe("cuota_final") ?? 0;
+    if (cuotaFinal < 0 || cuotaFinal >= capital) return { error: "La cuota final tiene que ser menor que lo prestado (o déjala vacía si no tiene)." };
+    prestamo = { capital, tin, tae: f.numero("tae"), plazoMeses: plazo, comisionAmortizacion: f.numero("comision") ?? 0, vinculado: f.casilla("vinculado"), cuotaFinal };
   } else if (importe === null || importe <= 0) {
     return { error: "Indica el importe (mayor que cero)." };
   }
@@ -223,6 +249,7 @@ export function rutasGastos(app: Hono, estado: Estado) {
       );
     }
     crearRecurrente(bd(estado), leido.datos);
+    metaCuotaFinal(bd(estado), leido.datos, f.casilla("meta_cuota_final"));
     return redirigir(c, "/gastos", { ok: `Guardado «${leido.datos.nombre}».` });
   });
 
@@ -250,6 +277,7 @@ export function rutasGastos(app: Hono, estado: Estado) {
       );
     }
     actualizarRecurrente(bd(estado), id, leido.datos, f.fecha("desde") ?? hoy);
+    metaCuotaFinal(bd(estado), leido.datos, f.casilla("meta_cuota_final"));
     return redirigir(c, "/gastos", { ok: `Guardado «${leido.datos.nombre}».` });
   });
 
