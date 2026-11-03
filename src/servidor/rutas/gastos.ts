@@ -18,12 +18,14 @@ import {
 } from "../../servicios/finanzas.ts";
 import { aceptarPropuestas, calcularPropuestas, ignorarPropuesta, marcarTraspasos, type Eleccion } from "../../servicios/periodicos.ts";
 import { ingresoPrudente, revisarDatos } from "../../servicios/revision.ts";
+import { leerSuscripciones, marcarSuscripcion } from "../../servicios/suscripciones.ts";
 import { bd, render, type Estado } from "../app.ts";
 import { Formulario, idDe, redirigir } from "../formulario.ts";
 import { frasePresupuesto, mesesDeOpcion, necesitaDesglose } from "../vistas/cobros.ts";
 import { aviso, claveAviso, eurR } from "../vistas/comun.ts";
 import { vistaDetectar } from "../vistas/detectar.ts";
 import { valoresDe, vistaCuadro, vistaFormulario, vistaLista, type Categoria, type Valores } from "../vistas/gastos.ts";
+import { vistaSuscripciones } from "../vistas/suscripciones.ts";
 
 /** Las pagas extra del formulario (hasta 3; la 2 y la 3 solo si marcaste «Añadir otra»), o qué falla. */
 export function leerPagas(f: Formulario): { pagas: PagaExtra[] } | { error: string } {
@@ -235,6 +237,17 @@ export function rutasGastos(app: Hono, estado: Estado) {
     const f = await Formulario.de(c);
     const hecho = ignorarPropuesta(bd(estado), estado.hoy(), f.texto("id"));
     return redirigir(c, "/gastos/detectar", hecho ? { ok: "Ignorado: no volverá a salir." } : { error: "Eso ya no está en la lista." });
+  });
+
+  // Antes de /gastos/:id, que si no se la quedaría
+  app.get("/gastos/suscripciones", (c) =>
+    render(c, estado, { titulo: "Tus suscripciones", seccion: "gastos" }, vistaSuscripciones(leerSuscripciones(bd(estado), estado.hoy()))),
+  );
+
+  app.post("/gastos/:id/suscripcion", async (c) => {
+    const es = (await Formulario.de(c)).texto("es") === "1";
+    if (!marcarSuscripcion(bd(estado), idDe(c), es)) return redirigir(c, "/gastos/suscripciones", { error: "Ese gasto no existe." });
+    return redirigir(c, "/gastos/suscripciones", { ok: es ? "Añadida a tus suscripciones." : "Quitada de tus suscripciones (el gasto sigue igual)." });
   });
 
   app.get("/gastos/nuevo", (c) => {

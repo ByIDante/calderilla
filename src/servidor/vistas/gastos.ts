@@ -83,6 +83,7 @@ export function vistaLista(recurrentes: RecurrenteCompleto[], hoy: Fecha, mensua
       <a class="boton" href="/gastos/nuevo?tipo=ingreso">Añadir ingreso</a>
       <a class="boton" href="/gastos/nuevo?prestamo=1">Añadir préstamo</a>
       <a class="boton" href="/gastos/detectar">Buscar en mis movimientos${propuestas ? html` <span class="numero-pestana">${propuestas}</span>` : ""}</a>
+      <a class="boton" href="/gastos/suscripciones">Tus suscripciones</a>
     </div>
     <p class="apagado">
       Los gastos que no son mensuales (seguros, IBI, ITV…) se reparten entre los meses anteriores a cada cargo: así el «al mes» refleja lo que deberías ir apartando.
