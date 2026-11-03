@@ -84,6 +84,9 @@ function leerMovimiento(f: Formulario, categorias: Categoria[]): { error: string
   return { fecha, importe: f.texto("tipo") === "ingreso" ? importe : -importe, concepto, categoriaId, cuentaId: f.entero("cuenta") };
 }
 
+/** En «todos los meses» se enseñan como mucho estos (los más recientes) */
+const MAXIMO_TODOS = 300;
+
 export function rutasMovimientos(app: Hono, estado: Estado) {
   const categorias = () => bd(estado).todos<Categoria>("SELECT id, nombre, tipo FROM categorias WHERE archivada = 0 ORDER BY tipo = 'ingreso', nombre");
 
@@ -98,20 +101,24 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
     const banco = c.req.query("banco") ?? "";
     const filtroCuenta = c.req.query("cuenta") ?? "";
     const tipo = c.req.query("tipo") === "gastos" ? "gastos" : c.req.query("tipo") === "ingresos" ? "ingresos" : "";
-    const condiciones = ["a.fecha BETWEEN ? AND ?"];
-    const parametros: (string | number)[] = [primerDia(mes), ultimoDia(mes)];
-    if (banco === "sin") condiciones.push("(a.cuenta_id IS NULL OR coalesce(cu.entidad, '') = '')");
+    // «En todos los meses»: la lista (y su búsqueda) no se limita al mes; las cifras de arriba, sí
+    const todo = c.req.query("todo") === "1";
+    const condicionesBanco: string[] = [];
+    const parametrosBanco: (string | number)[] = [];
+    if (banco === "sin") condicionesBanco.push("(a.cuenta_id IS NULL OR coalesce(cu.entidad, '') = '')");
     else if (banco) {
-      condiciones.push("cu.entidad = ?");
-      parametros.push(banco);
+      condicionesBanco.push("cu.entidad = ?");
+      parametrosBanco.push(banco);
     }
     if (/^\d+$/.test(filtroCuenta)) {
-      condiciones.push("a.cuenta_id = ?");
-      parametros.push(Number(filtroCuenta));
+      condicionesBanco.push("a.cuenta_id = ?");
+      parametrosBanco.push(Number(filtroCuenta));
     }
     // Las cifras de arriba (entradas, salidas, sin categoría) solo dependen del mes y del banco
-    const condicionesCifras = [...condiciones];
-    const parametrosCifras = [...parametros];
+    const condicionesCifras = ["a.fecha BETWEEN ? AND ?", ...condicionesBanco];
+    const parametrosCifras = [primerDia(mes), ultimoDia(mes), ...parametrosBanco];
+    const condiciones = todo ? ["1 = 1", ...condicionesBanco] : [...condicionesCifras];
+    const parametros = todo ? [...parametrosBanco] : [...parametrosCifras];
     if (tipo === "gastos") condiciones.push("a.importe < 0");
     if (tipo === "ingresos") condiciones.push("a.importe > 0");
     if (filtroCategoria === "sin") condiciones.push("a.categoria_id IS NULL");
@@ -130,9 +137,22 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
               (SELECT sum(d.importe) FROM apuntes d WHERE d.devuelve_a = a.id) AS devuelto
        FROM apuntes a LEFT JOIN categorias c ON c.id = a.categoria_id LEFT JOIN cuentas cu ON cu.id = a.cuenta_id LEFT JOIN recurrentes r ON r.id = a.recurrente_id
        LEFT JOIN apuntes g ON g.id = a.devuelve_a
-       WHERE ${condiciones.join(" AND ")} ORDER BY a.fecha DESC, a.id DESC`,
+       WHERE ${condiciones.join(" AND ")} ORDER BY a.fecha DESC, a.id DESC LIMIT ?`,
       ...parametros,
+      todo ? MAXIMO_TODOS + 1 : -1,
     );
+    // En todos los meses se enseñan los más recientes; el total es de todos los que encuentra
+    const recortados = movimientos.length > MAXIMO_TODOS;
+    if (recortados) movimientos.length = MAXIMO_TODOS;
+    const encontrados =
+      todo || buscar
+        ? base.uno<{ n: number; entradas: number | null; salidas: number | null }>(
+            `SELECT count(*) AS n, sum(CASE WHEN a.importe > 0 AND a.devuelve_a IS NULL AND coalesce(a.traspaso, 0) = 0 THEN a.importe END) AS entradas,
+                    -sum(CASE WHEN a.importe < 0 AND coalesce(a.traspaso, 0) = 0 THEN ${NETO} END) AS salidas
+             FROM apuntes a LEFT JOIN cuentas cu ON cu.id = a.cuenta_id WHERE ${condiciones.join(" AND ")}`,
+            ...parametros,
+          )
+        : undefined;
     const lista = categorias();
     const cifras = base.uno<{ ingresos: number | null; gastos: number | null; sin: number }>(
       // Los traspasos entre tus cuentas no son ni entradas ni salidas de verdad; lo que te devuelven de un gasto
@@ -149,7 +169,7 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
       porCategoria.set(m.categoria ?? "Sin categoría", (porCategoria.get(m.categoria ?? "Sin categoría") ?? 0) - Math.min(0, m.importe + (m.devuelto ?? 0)));
     }
     const sinCategoria = cifras?.sin ?? 0;
-    const filtros = { ...(tipo ? { tipo } : {}), ...(banco ? { banco } : {}), ...(/^\d+$/.test(filtroCuenta) ? { cuenta: filtroCuenta } : {}), ...(filtroCategoria ? { categoria: filtroCategoria } : {}), ...(buscar ? { buscar } : {}) };
+    const filtros = { ...(tipo ? { tipo } : {}), ...(banco ? { banco } : {}), ...(/^\d+$/.test(filtroCuenta) ? { cuenta: filtroCuenta } : {}), ...(filtroCategoria ? { categoria: filtroCategoria } : {}), ...(buscar ? { buscar } : {}), ...(todo ? { todo: "1" } : {}) };
     const enlace = (cambios: Record<string, string>) => {
       const p = new URLSearchParams({ mes, ...filtros, ...cambios });
       for (const [k, v] of [...p]) if (!v) p.delete(k);
@@ -176,7 +196,7 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
     return render(
       c,
       estado,
-      { titulo: `Movimientos de ${nombreMes(mes)}`, seccion: "movimientos" },
+      { titulo: todo ? "Movimientos de todos los meses" : `Movimientos de ${nombreMes(mes)}`, seccion: "movimientos" },
       html`
         <div class="botones bloque">
           <a class="boton" href="${enlace({ mes: sumarMesesAMes(mes, -1) })}">← ${nombreMes(sumarMesesAMes(mes, -1))}</a>
@@ -233,8 +253,17 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
             ${/^\d+$/.test(filtroCuenta) ? html`<input type="hidden" name="cuenta" value="${filtroCuenta}" />` : ""}
             ${selector("Categoría", "categoria", [["", "Todas"], ["sin", "Sin categoría"], ...lista.map((x) => [String(x.id), x.nombre] as const)], filtroCategoria)}
             ${campo({ etiqueta: "Buscar en el concepto", nombre: "buscar", valor: buscar, marcador: "mercadona, bizum…" })}
+            ${casilla("En todos los meses", "todo", todo)}
             <div class="campo"><label>&nbsp;</label><button class="boton" type="submit">Filtrar</button></div>
           </form>
+          ${encontrados
+            ? html`<p class="resumen-busqueda">
+                ${buscar ? html`«${buscar}»` : "Lo filtrado"} ${todo ? "en todos los meses" : `en ${nombreMes(mes)}`}: <b>${encontrados.n} ${encontrados.n === 1 ? "movimiento" : "movimientos"}</b>
+                ${encontrados.salidas ? html` · salen <b>${eur(encontrados.salidas)}</b>` : ""} ${encontrados.entradas ? html` · entran <b class="positivo">${eur(encontrados.entradas)}</b>` : ""}
+                ${todo ? html` · <a href="${enlace({ todo: "" })}">Solo ${nombreMes(mes)}</a>` : buscar ? html` · <a href="${enlace({ todo: "1" })}">Buscar en todos los meses</a>` : ""}
+                ${recortados ? html`<span class="apagado pequeno nota-cambio">Se ven los ${MAXIMO_TODOS} más recientes; el total es de todos.</span>` : ""}
+              </p>`
+            : ""}
           ${movimientos.length
             ? html`<form id="cambio-masivo" method="post" action="/movimientos/categoria" class="barra-masiva" data-mantener-posicion data-seleccion-masiva>
                   <input type="hidden" name="volver" value="${aqui}" />
