@@ -217,6 +217,11 @@ function clasificarImporte(cargos: readonly ApunteDetectable[], meses: number): 
   const centro = mediana(importes);
   if (!importes.every((i) => Math.abs(i - centro) <= centro * 0.6)) return null;
   const recientes = importes.slice(-Math.max(1, Math.round(12 / meses)));
+  // Un ingreso que varía se cuenta prudente: lo de un mes flojo de los últimos 6 (el segundo más bajo)
+  if (cargos[0]!.importe > 0) {
+    const ultimos = importes.slice(-6).sort((a, b) => a - b);
+    return { clase: "estimacion", importe: ultimos[ultimos.length >= 5 ? 1 : 0]!, pasos: null };
+  }
   return { clase: "estimacion", importe: Math.round(recientes.reduce((s, i) => s + i, 0) / recientes.length), pasos: null };
 }
 

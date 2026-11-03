@@ -71,5 +71,5 @@ export function listaAvisos(r: Resultado, ocultos: ReadonlySet<string>): Html {
   return html`${r.avisos
     .map((a) => ({ ...a, clave: claveAviso(a.texto) }))
     .filter((a) => !ocultos.has(a.clave))
-    .map((a) => aviso(a.nivel, a.texto, undefined, { clave: a.clave }))}`;
+    .map((a) => aviso(a.nivel, a.texto, a.enlace, { clave: a.clave }))}`;
 }

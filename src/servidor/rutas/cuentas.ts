@@ -7,6 +7,8 @@ import { activaEn, historial, leerAportaciones, registrarMes, totalMensual, type
 import { leerActivos } from "../../servicios/cartera.ts";
 import { cerrarMes, leerCierres } from "../../servicios/cierres.ts";
 import { guardarSaldo, leerCuentas, NOMBRE_TIPO_CUENTA, type Cuenta, type TipoCuenta } from "../../servicios/cuentas.ts";
+import { leerRecurrentes } from "../../servicios/finanzas.ts";
+import { cobrosAlCerrar } from "../../servicios/revision.ts";
 import { contexto } from "../../servicios/situacion.ts";
 import { bd, render, type Estado } from "../app.ts";
 import { Formulario, idDe, redirigir } from "../formulario.ts";
@@ -347,6 +349,16 @@ export function rutasCuentas(app: Hono, estado: Estado) {
             Las inversiones cuentan a precio de compra, así que las subidas o bajadas de la bolsa no cuentan como ahorro.
           </p>
           ${yaCerrado ? html`<p><b>Este mes ya está cerrado.</b> Si lo vuelves a cerrar, se recalcula con los saldos que pongas.</p>` : ""}
+          ${(() => {
+            // Un cobro el último día cambia mucho el saldo: hay que poner el de después de cobrarlo
+            const cobros = cobrosAlCerrar(bd(estado), leerRecurrentes(bd(estado)), ultimoDia(mes));
+            return cobros.length
+              ? html`<p class="nota-cobros">
+                  ${cobros.map((x) => html`El ${formatoFecha(x.fecha)} cobras «${x.nombre}» (${eur(x.importe)}). `)}Pon el saldo de <b>después</b> de cobrar${cobros.length > 1 ? "los" : "lo"}:
+                  si no, parecerá que ese mes ahorraste de menos y el siguiente de más.
+                </p>`
+              : "";
+          })()}
           ${cuentas.length
             ? html`<form method="post" action="/cierre" class="formulario">
                 <input type="hidden" name="mes" value="${mes}" />

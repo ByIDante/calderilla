@@ -7,6 +7,7 @@ import { NETO } from "../../servicios/compartidos.ts";
 import { ingresosDelMes, leerRecurrentes, presupuestoMes } from "../../servicios/finanzas.ts";
 import { calcularPropuestas } from "../../servicios/periodicos.ts";
 import { avisosPresupuesto, gastoPorCategoriaMeses, presupuestoPorCategoria } from "../../servicios/presupuesto.ts";
+import { revisarDatos } from "../../servicios/revision.ts";
 import { contexto, ocioGastadoEn } from "../../servicios/situacion.ts";
 import { bd, render, type Estado } from "../app.ts";
 import { Formulario, redirigir } from "../formulario.ts";
@@ -15,14 +16,17 @@ import { vistaMesPasado, vistaResumen } from "../vistas/resumen.ts";
 
 export function rutasResumen(app: Hono, estado: Estado) {
   app.post("/avisos/ocultar", async (c) => {
-    const clave = (await Formulario.de(c)).texto("clave");
+    const f = await Formulario.de(c);
+    const clave = f.texto("clave");
+    // Se vuelve a la página del aviso (solo rutas de la propia app)
+    const volver = /^\/[a-z]/.test(f.texto("volver")) ? f.texto("volver") : "/";
     if (/^[0-9a-f]{16}$/.test(clave)) {
       const base = bd(estado);
       base.ejecutar("INSERT OR REPLACE INTO avisos_ocultos (clave, ocultado) VALUES (?, ?)", clave, estado.hoy());
       // Los cerrados hace más de medio año ya no hace falta recordarlos
       base.ejecutar("DELETE FROM avisos_ocultos WHERE ocultado < ?", sumarDias(estado.hoy(), -180));
     }
-    return redirigir(c, "/");
+    return redirigir(c, volver);
   });
 
   app.get("/", (c) => {
@@ -44,7 +48,7 @@ export function rutasResumen(app: Hono, estado: Estado) {
     const empezado = primerSaldo !== null && mesAnterior >= mesDe(primerSaldo);
     const cierrePendiente = empezado && !base.uno("SELECT 1 FROM cierres_mes WHERE mes = ?", mesAnterior) ? mesAnterior : null;
     const presupuesto = presupuestoPorCategoria(base, mes, hoy);
-    ctx.resultado.avisos.push(...avisosPresupuesto(presupuesto));
+    ctx.resultado.avisos.push(...avisosPresupuesto(presupuesto), ...revisarDatos(base, ctx.recurrentes, hoy));
     const ocultos = new Set(base.todos<{ clave: string }>("SELECT clave FROM avisos_ocultos").map((f) => f.clave));
 
     const proximos = ctx.recurrentes

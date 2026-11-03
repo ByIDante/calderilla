@@ -49,12 +49,13 @@ export function claveAviso(texto: string): string {
  * Un aviso con su ✕. `cerrar: "local"` solo lo esconde hasta recargar (mensajes tras guardar, errores);
  * con `{ clave }` se recuerda cerrado en los datos y no vuelve a salir en ningún ordenador.
  */
-export function aviso(nivel: Banda["nivel"], contenido: string | Html, enlace?: Banda["enlace"], cerrar: "local" | { clave: string } = "local"): Html {
+export function aviso(nivel: Banda["nivel"], contenido: string | Html, enlace?: Banda["enlace"], cerrar: "local" | { clave: string; volver?: string } = "local"): Html {
   const boton =
     cerrar === "local"
       ? html`<button type="button" class="aviso-cerrar" data-cerrar-aviso aria-label="Cerrar aviso">✕</button>`
       : html`<form method="post" action="/avisos/ocultar" class="aviso-cerrar-formulario">
           <input type="hidden" name="clave" value="${cerrar.clave}" />
+          ${cerrar.volver ? html`<input type="hidden" name="volver" value="${cerrar.volver}" />` : ""}
           <button type="submit" class="aviso-cerrar" aria-label="Cerrar aviso" title="No volver a mostrar">✕</button>
         </form>`;
   return html`<div class="aviso aviso-${nivel}" role="${nivel === "error" ? "alert" : "status"}">

@@ -1,6 +1,6 @@
 import { html } from "hono/html";
 import { importeEditable, numeroEditable } from "../../dominio/dinero.ts";
-import { formatoFecha, type Fecha } from "../../dominio/fechas.ts";
+import { formatoFecha, nombreMes, type Fecha } from "../../dominio/fechas.ts";
 import { cuadroAmortizacion, cuotaFinalPendiente, cuotaMensual, pendienteEn, taeDe } from "../../dominio/prestamo.ts";
 import { cuotasRestantes, estadoEn, ETIQUETA_FRECUENCIA, FRECUENCIAS, importeEn, NOMBRE_FRECUENCIA, proximaOcurrencia } from "../../dominio/recurrencia.ts";
 import type { RecurrenteCompleto } from "../../servicios/finanzas.ts";
@@ -155,7 +155,15 @@ export function valoresDe(r: RecurrenteCompleto, hoy: Fecha): Valores {
 
 const OPCIONES_FRECUENCIA = FRECUENCIAS.map((f) => [f, ETIQUETA_FRECUENCIA[f]] as const);
 
-export function vistaFormulario(opciones: { accion: string; valores: Valores; categorias: Categoria[]; editando: RecurrenteCompleto | null; hoy: Fecha }): Html {
+export function vistaFormulario(opciones: {
+  accion: string;
+  valores: Valores;
+  categorias: Categoria[];
+  editando: RecurrenteCompleto | null;
+  hoy: Fecha;
+  /** En un ingreso que varía: lo prudente según sus cobros de los últimos meses */
+  prudente?: { importe: number; meses: { mes: string; total: number }[] } | null;
+}): Html {
   const v = opciones.valores;
   const r = opciones.editando;
   const opcionesCategoria = [["", "Sin categoría"] as const, ...opciones.categorias.map((c) => [String(c.id), c.nombre] as const)];
@@ -226,9 +234,20 @@ export function vistaFormulario(opciones: { accion: string; valores: Valores; ca
         <div data-mostrar-si="campo-fin_modo=cuotas">${campo({ etiqueta: "Número de pagos", nombre: "cuotas", valor: v.cuotas, sufijo: "", ayuda: "Contando el primero." })}</div>
       </div>
 
-      <div class="fila-campos" data-mostrar-si="campo-tipo=gasto">
-        ${casilla("Es esencial", "esencial", v.esencial === "1", "Vivienda, comida, suministros, transporte, seguros, préstamos… Cuenta para el fondo de emergencia.")}
-        ${selector("¿El importe varía?", "clase", [["fijo", "No, es fijo"], ["estimacion", "Sí, es una estimación (comida, gasolina…)"]], v.clase)}
+      <div class="fila-campos" data-ocultar-si="campo-prestamo">
+        <div data-mostrar-si="campo-tipo=gasto">
+          ${casilla("Es esencial", "esencial", v.esencial === "1", "Vivienda, comida, suministros, transporte, seguros, préstamos… Cuenta para el fondo de emergencia.")}
+        </div>
+        ${selector(
+          "¿El importe varía?",
+          "clase",
+          [
+            ["fijo", "No, es fijo"],
+            ["estimacion", "Sí, varía (comida, gasolina… o un sueldo por horas, comisiones, autónomo)"],
+          ],
+          v.clase,
+          "En un ingreso que varía, pon lo de un mes flojo: en su ficha verás cuánto es con tus movimientos.",
+        )}
       </div>
 
       ${r ? campo({ etiqueta: "Si cambia el importe, aplicarlo desde", nombre: "desde", valor: v.desde, tipo: "date", ayuda: "Los meses anteriores conservan el importe que tenían." }) : ""}
@@ -246,14 +265,42 @@ export function vistaFormulario(opciones: { accion: string; valores: Valores; ca
         <a class="boton" href="/gastos">Cancelar</a>
       </div>
     </form>
-    ${r ? vistaGestion(r, opciones.hoy) : ""}
+    ${r ? vistaGestion(r, opciones.hoy, opciones.prudente ?? null) : ""}
   `;
 }
 
-function vistaGestion(r: RecurrenteCompleto, hoy: Fecha): Html {
+/** Un ingreso que varía: sus últimos meses y lo prudente (el segundo mes más flojo), con un botón para usarlo */
+function tarjetaPrudente(r: RecurrenteCompleto, hoy: Fecha, prudente: { importe: number; meses: { mes: string; total: number }[] } | null): Html | string {
+  if (r.tipo !== "ingreso" || r.clase !== "estimacion") return "";
+  if (!prudente) {
+    return html`<section class="tarjeta">
+      <h2>Lo prudente</h2>
+      <p class="apagado">Cuando tenga al menos 3 meses de cobros unidos a este ingreso (importando el extracto o del banco), te diré cuánto es un mes flojo.</p>
+    </section>`;
+  }
+  const apuntado = importeEn(r.versiones, hoy);
+  return html`<section class="tarjeta">
+    <h2>Lo prudente: ${eur(prudente.importe)}</h2>
+    <p class="apagado">
+      Lo que cobraste en un mes flojo de los últimos (${prudente.meses.length >= 5 ? "el segundo más bajo" : "el más bajo"}): si cobras más, te sobra; rara vez te
+      faltará.
+    </p>
+    <ul class="lista-plana bloque">
+      ${prudente.meses.map((m) => html`<li><span>${nombreMes(m.mes)}</span><span class="numero">${eur(m.total)}</span></li>`)}
+    </ul>
+    ${prudente.importe !== apuntado
+      ? html`<form method="post" action="/gastos/${r.id}/prudente" class="botones">
+          <button class="boton boton-principal" type="submit">Usar ${eur(prudente.importe)} desde este mes</button>
+          <span class="apagado pequeno">Ahora tienes ${eur(apuntado)}. Los meses anteriores no cambian.</span>
+        </form>`
+      : html`<p class="apagado pequeno">Ya es lo que tienes apuntado.</p>`}
+  </section>`;
+}
+
+function vistaGestion(r: RecurrenteCompleto, hoy: Fecha, prudente: { importe: number; meses: { mes: string; total: number }[] } | null): Html {
   const prestamo = r.prestamo;
   return html`
-    ${tarjetaDesglose(r, hoy)}
+    ${tarjetaPrudente(r, hoy, prudente)} ${tarjetaDesglose(r, hoy)}
     ${prestamo
       ? html`<section class="tarjeta">
           <h2>El préstamo hoy</h2>

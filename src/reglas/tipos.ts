@@ -134,6 +134,8 @@ export interface Desbloqueo extends Explicado {
 export interface Aviso {
   nivel: "logro" | "info" | "atencion";
   texto: string;
+  /** Dónde arreglarlo */
+  enlace?: { ruta: string; texto: string };
 }
 
 export interface Presupuesto {

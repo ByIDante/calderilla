@@ -17,10 +17,11 @@ import {
   type RecurrenteCompleto,
 } from "../../servicios/finanzas.ts";
 import { aceptarPropuestas, calcularPropuestas, ignorarPropuesta, marcarTraspasos, type Eleccion } from "../../servicios/periodicos.ts";
+import { ingresoPrudente, revisarDatos } from "../../servicios/revision.ts";
 import { bd, render, type Estado } from "../app.ts";
 import { Formulario, idDe, redirigir } from "../formulario.ts";
 import { frasePresupuesto, mesesDeOpcion, necesitaDesglose } from "../vistas/cobros.ts";
-import { aviso, eurR } from "../vistas/comun.ts";
+import { aviso, claveAviso, eurR } from "../vistas/comun.ts";
 import { vistaDetectar } from "../vistas/detectar.ts";
 import { valoresDe, vistaCuadro, vistaFormulario, vistaLista, type Categoria, type Valores } from "../vistas/gastos.ts";
 
@@ -151,7 +152,13 @@ export function rutasGastos(app: Hono, estado: Estado) {
     // Mes a mes solo si algún ingreso no es un importe al mes sin más (pagas extra, cada 2 semanas…)
     const conDesglose = recurrentes.some((r) => r.tipo === "ingreso" && estadoEn(r, hoy) !== "finalizado" && necesitaDesglose(r));
     const mesAMes = conDesglose ? Array.from({ length: 12 }, (_, i) => ingresosDelMes(recurrentes, sumarMesesAMes(mesDe(hoy), i))) : [];
-    return render(c, estado, { titulo: "Ingresos y gastos", seccion: "gastos" }, vistaLista(recurrentes, hoy, mensual, propuestas, mesAMes));
+    // Lo que parece un error al apuntar (duplicados, fechas de inicio): los mismos avisos que en el Resumen
+    const ocultos = new Set(bd(estado).todos<{ clave: string }>("SELECT clave FROM avisos_ocultos").map((f) => f.clave));
+    const avisos = revisarDatos(bd(estado), recurrentes, hoy)
+      .map((a) => ({ ...a, clave: claveAviso(a.texto) }))
+      .filter((a) => !ocultos.has(a.clave))
+      .map((a) => aviso(a.nivel, a.texto, a.enlace, { clave: a.clave, volver: "/gastos" }));
+    return render(c, estado, { titulo: "Ingresos y gastos", seccion: "gastos" }, html`${avisos}${vistaLista(recurrentes, hoy, mensual, propuestas, mesAMes)}`);
   });
 
   // «Esto cuenta como X € al mes»: mientras rellenas el formulario, con la misma cuenta que el presupuesto
@@ -258,7 +265,13 @@ export function rutasGastos(app: Hono, estado: Estado) {
     const hoy = estado.hoy();
     const [r] = leerRecurrentes(bd(estado), idDe(c));
     if (!r) return c.notFound();
-    return render(c, estado, { titulo: r.nombre, seccion: "gastos" }, vistaFormulario({ accion: `/gastos/${r.id}`, valores: valoresDe(r, hoy), categorias: categorias(estado), editando: r, hoy }));
+    const prudente = r.tipo === "ingreso" && r.clase === "estimacion" ? ingresoPrudente(bd(estado), r, hoy) : null;
+    return render(
+      c,
+      estado,
+      { titulo: r.nombre, seccion: "gastos" },
+      vistaFormulario({ accion: `/gastos/${r.id}`, valores: valoresDe(r, hoy), categorias: categorias(estado), editando: r, hoy, prudente }),
+    );
   });
 
   app.post("/gastos/:id", async (c) => {
@@ -280,6 +293,16 @@ export function rutasGastos(app: Hono, estado: Estado) {
     actualizarRecurrente(bd(estado), id, leido.datos, f.fecha("desde") ?? hoy);
     metaCuotaFinal(bd(estado), leido.datos, f.casilla("meta_cuota_final"));
     return redirigir(c, "/gastos", { ok: `Guardado «${leido.datos.nombre}».` });
+  });
+
+  // Un ingreso que varía: usar lo prudente desde el mes actual (los anteriores conservan su importe)
+  app.post("/gastos/:id/prudente", (c) => {
+    const hoy = estado.hoy();
+    const [r] = leerRecurrentes(bd(estado), idDe(c));
+    const prudente = r ? ingresoPrudente(bd(estado), r, hoy) : null;
+    if (!r || !prudente) return redirigir(c, "/gastos", { error: "Aún no hay meses suficientes para calcularlo." });
+    actualizarRecurrente(bd(estado), r.id, { ...r, importe: prudente.importe, prestamo: null }, `${mesDe(hoy)}-01`);
+    return redirigir(c, `/gastos/${r.id}`, { ok: `«${r.nombre}» cuenta ahora ${eurR(prudente.importe)}, lo de un mes flojo.` });
   });
 
   app.post("/gastos/:id/terminar", async (c) => {
