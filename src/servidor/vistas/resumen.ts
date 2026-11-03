@@ -118,6 +118,7 @@ function navegacionMes(mes: string, hoy: string): Html {
   return html`<div class="botones bloque">
     <a class="boton boton-pequeno" href="/?mes=${anterior}">← ${nombreMes(anterior)}</a>
     ${mes < actual ? html`<a class="boton boton-pequeno" href="${siguiente === actual ? "/" : `/?mes=${siguiente}`}">${nombreMes(siguiente)} →</a>` : ""}
+    <a class="boton boton-pequeno" href="/anio?anio=${mes.slice(0, 4)}">Tu ${mes.slice(0, 4)} en cifras</a>
   </div>`;
 }
 

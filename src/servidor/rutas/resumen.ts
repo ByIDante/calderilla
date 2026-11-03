@@ -2,6 +2,7 @@ import type { Context, Hono } from "hono";
 import { mesDe, nombreMes, nombreMesCorto, primerDia, sumarDias, sumarMesesAMes, ultimoDia } from "../../dominio/fechas.ts";
 import { estadoEn, importeEn, MESES_FRECUENCIA, ocurrencias } from "../../dominio/recurrencia.ts";
 import { NOMBRE_ETAPA, type Etapa } from "../../reglas/tipos.ts";
+import { resumenAnual } from "../../servicios/anual.ts";
 import { leerAportaciones, totalMensual } from "../../servicios/aportaciones.ts";
 import { NETO } from "../../servicios/compartidos.ts";
 import { ingresosDelMes, leerRecurrentes, presupuestoMes } from "../../servicios/finanzas.ts";
@@ -11,6 +12,7 @@ import { revisarDatos } from "../../servicios/revision.ts";
 import { contexto, ocioGastadoEn } from "../../servicios/situacion.ts";
 import { bd, render, type Estado } from "../app.ts";
 import { Formulario, redirigir } from "../formulario.ts";
+import { vistaAnio } from "../vistas/anio.ts";
 import { necesitaDesglose } from "../vistas/cobros.ts";
 import { vistaMesPasado, vistaResumen } from "../vistas/resumen.ts";
 
@@ -27,6 +29,15 @@ export function rutasResumen(app: Hono, estado: Estado) {
       base.ejecutar("DELETE FROM avisos_ocultos WHERE ocultado < ?", sumarDias(estado.hoy(), -180));
     }
     return redirigir(c, volver);
+  });
+
+  // Tu año en cifras (el año en curso hasta hoy, o uno anterior)
+  app.get("/anio", (c) => {
+    const hoy = estado.hoy();
+    const actual = Number(hoy.slice(0, 4));
+    const pedido = Number(c.req.query("anio"));
+    const anio = Number.isInteger(pedido) && pedido >= 2000 && pedido <= actual ? pedido : actual;
+    return render(c, estado, { titulo: `Tu ${anio} en cifras`, seccion: "resumen" }, vistaAnio(resumenAnual(bd(estado), anio, hoy), actual));
   });
 
   app.get("/", (c) => {
