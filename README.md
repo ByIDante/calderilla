@@ -5,6 +5,7 @@ Web local para llevar el control de tu economía: ingresos, gastos fijos y a pla
 - **Gastos fijos y a plazos.** El coche a 250 €/mes durante 5 años se apunta una vez y, cuando acaba, pasa solo a «Finalizados». Los gastos anuales (seguros, IBI, ITV…) se reparten mes a mes. Si cambia un importe, los meses anteriores conservan el que tenían.
 - **Cobros cada 15 días y pagas extra.** Una vez al mes, cada semana, cada 2 semanas o dos veces al mes, y con pagas extra en los meses que elijas (junio y diciembre, cada 2 meses…). Todo se reparte para que el presupuesto sea igual cada mes, y la app te enseña mes a mes lo que cobras de verdad.
 - **Resumen del mes.** Muestra lo que entra, lo que sale y lo que sobra, con gráficos y una tabla de cierres.
+- **Tu año en cifras.** Lo que entró y salió de verdad cada mes, en qué se fue y cómo va frente al año anterior.
 - **Ocio.** Calcula cuánto te queda este mes para ocio y explica de dónde sale la cifra.
 - **Calculadora.** Cambia cualquier número (tu sueldo, un gasto, lo que tienes ahorrado, una meta…) y mira cómo quedarían el ocio, el ahorro y tu etapa. Es solo para probar: no se guarda nada, salvo que elijas aplicar los cambios.
 - **Revisa tus datos.** Avisa de lo que suele ser un error al apuntar (un gasto apuntado dos veces, un gasto que empieza más tarde que sus cargos), te dice cuánto contar de un ingreso que varía y junta lo que te devuelven tus amigos con el gasto que pagaste tú.
@@ -175,6 +176,18 @@ Sirve para comprobar los números y para preguntarte «¿y si…?». Parte de tu
 4. La mitad de lo que no gastes pasa al mes siguiente.
 5. Cuando terminas un préstamo, su cuota va entera a ahorro durante 3 meses antes de repartirse.
 
+## Tu año en cifras
+
+Desde el Resumen («Tu 2026 en cifras»). Sale de tus movimientos, así que cuenta lo que pasó de verdad, no lo previsto:
+
+- **Lo que entró, lo que salió y lo que te quedó** (y qué parte de lo que entró), y lo gastado en ocio.
+- **Mes a mes**, en un gráfico y en una tabla. Los meses de antes del primero con movimientos no salen.
+- **En qué se fue:** cada categoría en el año, qué parte de lo que salió es y cuánto al mes.
+- **Frente al año anterior:** solo en los meses que tienen movimientos los dos años, para comparar lo mismo con lo mismo.
+- **Tu patrimonio** del primer al último cierre del año.
+
+Como en el resto de la app, los traspasos entre tus cuentas no cuentan, lo que te devuelven de un gasto no es un ingreso y de un gasto compartido cuenta solo lo tuyo. Si una cuenta no la importas, falta lo suyo.
+
 ## Revisar tus datos
 
 Calderilla solo avisa: tú decides. Los avisos salen en el Resumen y en Ingresos y gastos, con un enlace a lo que hay que mirar.
@@ -198,7 +211,7 @@ Todo esto es gratis y funciona solo con conexión a internet, sin cuentas de pag
 - **Importar un extracto** (Ocio → Importar, o Ajustes). Sirve para cualquier banco:
   - Sube el CSV o Excel. La primera vez se adivinan las columnas y las puedes corregir; el formato se recuerda.
   - Los cargos de tus gastos fijos se reconocen y no se cuentan dos veces: por el texto con el que aparecen en el banco (aunque cambie el importe) o, si no se sabe, por importe (±5 %) y fecha (±5 días).
-  - El resto se categoriza con reglas del tipo «si el concepto contiene *mercadona* → Alimentación», que puedes ampliar.
+  - El resto se categoriza con reglas del tipo «si el concepto contiene *mercadona* → Alimentación», que puedes ampliar. Una regla puede valer solo para pagos o solo para cobros: lo que pagas a un amigo y lo que te devuelve pueden ir a categorías distintas.
   - Si subes el mismo extracto dos veces, no se duplica nada.
   - Lo que pasas de una cuenta tuya a otra (de BBVA a Trade Republic, por ejemplo) se reconoce como **traspaso** cuando están importadas las dos: no cuenta ni como gasto ni como ingreso. En cada movimiento se puede marcar o desmarcar a mano.
 - **Encontrado en tus movimientos** (Ingresos y gastos → Buscar en mis movimientos). No hace falta apuntar a mano lo que ya está en tus extractos. Calderilla busca lo que se repite y te lo propone; **nada se crea sin que lo confirmes**:
@@ -211,7 +224,8 @@ Todo esto es gratis y funciona solo con conexión a internet, sin cuentas de pag
   - **Pagas extra:** si la nómina de un mes llega doble, o con otro movimiento aparte, se propone con sus pagas extra. Si solo se ve la de verano porque lo importado no llega a diciembre, también se propone la de diciembre. Si la nómina ya la tienes apuntada, se proponen las pagas que le faltan.
   - Hacen falta al menos 3 cargos para reconocer algo mensual; un seguro o un impuesto que solo aparece una vez se pregunta como posible anual. Lo que ignores no vuelve a salir.
 - **En Movimientos**, también propuesto y sin hacer nada hasta que lo confirmes:
-  - **Categoría por parecido:** si ya categorizaste movimientos con el mismo texto (los Bizums a una persona, una tienda), propone la misma para los que no la tienen y, si quieres, crea la regla para los siguientes.
+  - **Categoría por parecido:** si ya categorizaste movimientos con el mismo texto (los Bizums a una persona, una tienda), propone la misma para los que no la tienen y, si quieres, crea la regla para los siguientes. La regla vale solo para pagos o solo para cobros, como el grupo, y se llama como la persona («Jordi Puig») o la tienda («Fnac», no «Fnac San Agustín»).
+  - **Lo que sueles gastar:** en el presupuesto por categorías, cada una este mes frente a tu media de los meses anteriores (hasta 6 meses completos que hayas importado). Si en una categoría sin límite ya llevas bastante más de lo que sueles gastar en todo un mes (la mitad más y al menos 30 €), el Resumen te avisa.
   - **Gastos compartidos:** pagas la cena de todos y te devuelven su parte por Bizum. Se proponen las devoluciones de la misma persona en los 30 días siguientes, o varios Bizums justo después de un gasto grande. Al juntarlos, el gasto cuenta solo lo tuyo (en el ocio, el presupuesto y los gráficos) y las devoluciones dejan de ser ingresos. En la ficha de cada movimiento puedes añadir otra devolución o **separar** una: nada se borra, y lo que decides a mano no se vuelve a proponer.
 - **Conectar el banco** (Ajustes → Bancos). Se hace con [Enable Banking](https://enablebanking.com):
   - **Qué necesitas:** una cuenta gratuita y una aplicación registrada en su web, que te da un ID y un archivo de clave `.pem`. Después autorizas cada banco desde su propia app o web.
@@ -221,7 +235,7 @@ Todo esto es gratis y funciona solo con conexión a internet, sin cuentas de pag
   - **Bancos:** en octubre de 2026 su lista de España incluía CaixaBank, BBVA, Santander y Sabadell. ING, Openbank, Revolut y Trade Republic no estaban: para esos, importa el extracto.
   - **Dos ordenadores:** algunos bancos solo permiten una sesión por persona, así que vincular el mismo banco en los dos ordenadores puede desconectar uno.
 - **Préstamos.** Si amortizas antes de tiempo, apúntalo en el préstamo y elige si reduces la cuota o el plazo. La app recalcula el cuadro, la fecha de fin y los intereses que te ahorras.
-  - **Cuota final** (financiaciones de coche o moto con valor futuro garantizado): el pago grande del final, el mes siguiente a la última cuota. Cada mes cuenta solo la cuota; la cuota final sigue siendo deuda hasta pagarla, la app avisa unos meses antes para que decidas si la pagas, la refinancias o devuelves el vehículo, y puede crear una meta para ir apartándola.
+  - **Cuota final** (financiaciones de coche o moto con valor futuro garantizado): el pago grande del final, el mes siguiente a la última cuota. Cada mes cuenta solo la cuota; la cuota final sigue siendo deuda hasta pagarla (en la lista sale junto a la última cuota), la app avisa unos meses antes para que decidas si la pagas, la refinancias o devuelves el vehículo, y puede crear una meta para ir apartándola.
 - **Perfil de riesgo.** En Ajustes → Perfil hay un cuestionario de 5 preguntas. Tu perfil es el menor entre el riesgo que aguantas y el que te puedes permitir.
 
 ## Desarrollo
@@ -246,11 +260,12 @@ npm run paquete-windows                  # crea dist/Calderilla-Windows.zip (con
   - mira la proyección a 2 años;
 - comprueba que después el Resumen y Ocio siguen igual y que no se ha guardado nada;
 - revisa los datos:
-  - la cuota final de la moto en el Resumen, en su ficha y en su cuadro;
+  - la cuota final de la moto en el Resumen, en su ficha, en su cuadro y en la lista;
   - lo prudente de un ingreso que varía;
   - un envío con tu nombre que se acepta como traspaso;
-  - una cena con tres Bizums que se juntan y luego se separan, mirando cuánto te queda para ocio;
-  - la categoría por parecido y el IRPF;
+  - una cena con tres Bizums que se juntan y luego se separan, mirando cuánto te queda para ocio y lo que cuenta en la lista de Ocio;
+  - la categoría por parecido (con su nombre y su regla para pagos), lo que sueles gastar en cada categoría y el IRPF;
+  - «Tu año en cifras», frente al año anterior;
 - en la Calculadora, que lo que apartas de más con el ahorro automático sale del ocio, y aplica un cambio de verdad.
 
 Si algo no cuadra, termina con error.
