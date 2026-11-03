@@ -87,7 +87,7 @@ export function rutasImportar(app: Hono, estado: Estado) {
             <p class="apagado pequeno">Si el concepto contiene el texto, el movimiento va a esa categoría.</p>
             <ul class="lista-plana">
               ${reglas.map(
-                (r) => html`<li><span>«${r.patron}» → ${r.categoria}</span>${botonAccion(`/importar/reglas/${r.id}/borrar`, "Quitar", { estilo: "enlace" })}</li>`,
+                (r) => html`<li><span>«${r.patron}»${r.signo === "gasto" ? " (pagos)" : r.signo === "ingreso" ? " (cobros)" : ""} → ${r.categoria}</span>${botonAccion(`/importar/reglas/${r.id}/borrar`, "Quitar", { estilo: "enlace" })}</li>`,
               )}
             </ul>
             <form method="post" action="/importar/reglas" class="formulario" style="margin-top:10px">
@@ -134,7 +134,7 @@ export function rutasImportar(app: Hono, estado: Estado) {
     const patron = f.texto("patron").toLowerCase();
     const categoria = f.entero("categoria");
     if (!patron || !categoria) return redirigir(c, "/importar", { error: "Indica el texto y la categoría." });
-    bd(estado).ejecutar("INSERT INTO reglas_categoria (patron, categoria_id) VALUES (?, ?) ON CONFLICT (patron) DO UPDATE SET categoria_id = excluded.categoria_id", patron, categoria);
+    bd(estado).ejecutar("INSERT INTO reglas_categoria (patron, categoria_id) VALUES (?, ?) ON CONFLICT (patron, signo) DO UPDATE SET categoria_id = excluded.categoria_id", patron, categoria);
     return redirigir(c, "/importar", { ok: `Regla «${patron}» guardada.` });
   });
 

@@ -196,7 +196,7 @@ describe("categorías por parecido", () => {
     assert.ok(p, "una propuesta");
     assert.deepEqual(p.apunteIds, [sin]);
     assert.equal(p.categoriaId, ocio);
-    assert.equal(p.nombre, "Jordi puig");
+    assert.equal(p.nombre, "Jordi Puig");
     assert.ok(p.regla && "bizum enviado · jordi;puig serra".includes(p.regla), p.regla ?? "sin regla");
     assert.equal(aplicarCategorias(bd, HOY, [{ clave: p.clave, categoriaId: ocio, regla: true }]), 1);
     assert.equal(bd.uno<{ categoria_id: number }>("SELECT categoria_id FROM apuntes WHERE id = ?", sin)!.categoria_id, ocio);

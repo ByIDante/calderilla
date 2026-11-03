@@ -412,7 +412,7 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
     const volver = volverA(f.texto("volver"));
     if (!patron || !categoria) return redirigir(c, volver, { error: "Indica el texto y la categoría." });
     const base = bd(estado);
-    base.ejecutar("INSERT INTO reglas_categoria (patron, categoria_id) VALUES (?, ?) ON CONFLICT (patron) DO UPDATE SET categoria_id = excluded.categoria_id", patron, categoria);
+    base.ejecutar("INSERT INTO reglas_categoria (patron, categoria_id) VALUES (?, ?) ON CONFLICT (patron, signo) DO UPDATE SET categoria_id = excluded.categoria_id", patron, categoria);
     let aplicados = 0;
     if (f.casilla("aplicar")) {
       // Los cargos de gastos fijos conservan su categoría

@@ -14,8 +14,9 @@ type Categorias = readonly { id: number; nombre: string; tipo: string }[];
 /** «Te propongo categoría»: cada grupo con su categoría (que puedes cambiar) y si crear la regla */
 export function tarjetaCategoriasPropuestas(propuestas: readonly PropuestaCategoria[], categorias: Categorias, volver: string): Html | string {
   if (!propuestas.length) return "";
+  const n = propuestas.reduce((s, p) => s + p.apunteIds.length, 0);
   return html`<section class="tarjeta" id="categorias-propuestas">
-    <h2>Te propongo categoría para ${propuestas.reduce((n, p) => n + p.apunteIds.length, 0)} movimientos</h2>
+    <h2>Te propongo categoría para ${n} ${n === 1 ? "movimiento" : "movimientos"}</h2>
     <p class="apagado">Ya pusiste categoría a otros con el mismo texto. Marca los que quieras y, si se repiten, crea la regla para que los siguientes se categoricen solos.</p>
     <form method="post" action="/movimientos/proponer-categorias" class="formulario">
       <input type="hidden" name="volver" value="${volver}" />
@@ -38,7 +39,7 @@ export function tarjetaCategoriasPropuestas(propuestas: readonly PropuestaCatego
                 </td>
                 <td>
                   ${p.regla
-                    ? html`<label class="casilla-fila casilla-larga"><input type="checkbox" name="regla_${i}" value="1" checked /> Si contiene «${p.regla}»</label>`
+                    ? html`<label class="casilla-fila casilla-larga"><input type="checkbox" name="regla_${i}" value="1" checked /> Si contiene «${p.regla}»${p.signo === "gasto" ? " (en pagos)" : " (en cobros)"}</label>`
                     : html`<span class="apagado pequeno">Sin texto común</span>`}
                 </td>
               </tr>`,

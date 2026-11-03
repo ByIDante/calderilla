@@ -25,9 +25,9 @@ const MARGEN_DIAS = 5;
 const MARGEN_DIAS_PATRON: Record<Frecuencia, number> = { semanal: 2, catorcenal: 4, quincenal: 4, mensual: 7, trimestral: 12, semestral: 15, anual: 20 };
 
 export function leerReglas(bd: BaseDatos): (Regla & { id: number; categoria: string })[] {
-  return bd.todos<{ id: number; patron: string; categoria_id: number; categoria: string }>(
-    "SELECT r.id, r.patron, r.categoria_id, c.nombre AS categoria FROM reglas_categoria r JOIN categorias c ON c.id = r.categoria_id ORDER BY r.patron",
-  ).map((r) => ({ id: r.id, patron: r.patron, categoriaId: r.categoria_id, categoria: r.categoria }));
+  return bd.todos<{ id: number; patron: string; categoria_id: number; categoria: string; signo: Regla["signo"] }>(
+    "SELECT r.id, r.patron, r.categoria_id, c.nombre AS categoria, r.signo FROM reglas_categoria r JOIN categorias c ON c.id = r.categoria_id ORDER BY r.patron, r.signo",
+  ).map((r) => ({ id: r.id, patron: r.patron, categoriaId: r.categoria_id, categoria: r.categoria, signo: r.signo }));
 }
 
 /** Cargos de gastos fijos que ya tienen un movimiento: recurrente → fechas de los movimientos emparejados. */
@@ -96,7 +96,7 @@ export function proponer(bd: BaseDatos, movimientos: readonly Movimiento[], cuen
   const usados = emparejadosEnBd(bd);
   return movimientos.map((m, i) => {
     const duplicado = existentes.has(lista[i]!);
-    const porRegla = categoriaPorReglas(m.concepto, reglas);
+    const porRegla = categoriaPorReglas(m.concepto, reglas, m.importe);
     // Un movimiento ya importado no gasta un cargo previsto: ya lo tiene asignado
     const recurrente = duplicado ? null : coincidencia(m, recurrentes, usados, porRegla);
     return {
@@ -164,7 +164,7 @@ export function importarDelBanco(bd: BaseDatos, movimientos: readonly { idExtern
     let nuevos = 0;
     for (const m of movimientos) {
       if (yaTraidos.has(`eb:${cuentaId}:${m.idExterno}`)) continue;
-      const porRegla = categoriaPorReglas(m.concepto, reglas);
+      const porRegla = categoriaPorReglas(m.concepto, reglas, m.importe);
       const recurrente = coincidencia(m, recurrentes, usados, porRegla);
       const { cambios } = bd.ejecutar(
         "INSERT OR IGNORE INTO apuntes (fecha, importe, concepto, categoria_id, cuenta_id, recurrente_id, origen, id_externo, hash_dedupe) VALUES (?, ?, ?, ?, ?, ?, 'banco', ?, ?)",

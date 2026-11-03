@@ -191,10 +191,22 @@ export function huellas(movimientos: readonly Movimiento[], cuentaId: number | n
 export interface Regla {
   patron: string;
   categoriaId: number;
+  /** Si solo vale para pagos o solo para cobros (sin indicar, para todos) */
+  signo?: "todos" | "gasto" | "ingreso";
 }
 
-/** La regla más concreta gana: «uber eats» antes que «uber ». */
-export function categoriaPorReglas(concepto: string, reglas: readonly Regla[]): number | null {
+/**
+ * La regla más concreta gana: «uber eats» antes que «uber », y la de pagos (o cobros) antes que la de todos. Con
+ * el importe, las reglas de solo pagos o solo cobros valen solo para los suyos.
+ */
+export function categoriaPorReglas(concepto: string, reglas: readonly Regla[], importe?: number): number | null {
   const texto = quitarAcentos(concepto);
-  return [...reglas].sort((a, b) => b.patron.length - a.patron.length).find((regla) => texto.includes(quitarAcentos(regla.patron)))?.categoriaId ?? null;
+  const vale = (r: Regla) => !r.signo || r.signo === "todos" || (importe !== undefined && (r.signo === "gasto" ? importe < 0 : importe > 0));
+  const concreta = (r: Regla) => (!r.signo || r.signo === "todos" ? 0 : 1);
+  return (
+    [...reglas]
+      .filter(vale)
+      .sort((a, b) => b.patron.length - a.patron.length || concreta(b) - concreta(a))
+      .find((regla) => texto.includes(quitarAcentos(regla.patron)))?.categoriaId ?? null
+  );
 }
