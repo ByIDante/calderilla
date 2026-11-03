@@ -3,6 +3,7 @@ import { eurosRedondos as eur } from "../dominio/dinero.ts";
 import { diasDelMes, mesDe, primerDia, sumarMesesAMes, ultimoDia, type Fecha, type Mes } from "../dominio/fechas.ts";
 import { mensualEn } from "../dominio/recurrencia.ts";
 import type { Aviso } from "../reglas/tipos.ts";
+import { NETO } from "./compartidos.ts";
 import { leerRecurrentes } from "./finanzas.ts";
 
 /*
@@ -30,7 +31,8 @@ export function presupuestoPorCategoria(bd: BaseDatos, mes: Mes, hoy: Fecha): Li
   const gastos = new Map(
     bd
       .todos<{ categoria_id: number; gastado: number }>(
-        "SELECT categoria_id, -sum(importe) AS gastado FROM apuntes WHERE importe < 0 AND recurrente_id IS NULL AND coalesce(traspaso, 0) = 0 AND categoria_id IS NOT NULL AND fecha BETWEEN ? AND ? GROUP BY categoria_id",
+        `SELECT a.categoria_id, -sum(${NETO}) AS gastado FROM apuntes a WHERE a.importe < 0 AND a.recurrente_id IS NULL AND coalesce(a.traspaso, 0) = 0
+         AND a.categoria_id IS NOT NULL AND a.fecha BETWEEN ? AND ? GROUP BY a.categoria_id`,
         primerDia(mes),
         ultimoDia(mes),
       )
@@ -96,7 +98,7 @@ export interface GastoMensual {
 export function gastoPorCategoriaMeses(bd: BaseDatos, hasta: Mes, numeroMeses = 12): GastoMensual {
   const meses = Array.from({ length: numeroMeses }, (_, i) => sumarMesesAMes(hasta, i - (numeroMeses - 1)));
   const filas = bd.todos<{ mes: string; categoria: string | null; total: number }>(
-    `SELECT substr(a.fecha, 1, 7) AS mes, c.nombre AS categoria, -sum(a.importe) AS total FROM apuntes a LEFT JOIN categorias c ON c.id = a.categoria_id
+    `SELECT substr(a.fecha, 1, 7) AS mes, c.nombre AS categoria, -sum(${NETO}) AS total FROM apuntes a LEFT JOIN categorias c ON c.id = a.categoria_id
      WHERE a.importe < 0 AND coalesce(a.traspaso, 0) = 0 AND a.fecha BETWEEN ? AND ? GROUP BY mes, categoria`,
     primerDia(meses[0]!),
     ultimoDia(hasta),

@@ -5,6 +5,7 @@ import type { Parametros } from "../reglas/parametros.ts";
 import { ETAPAS, NOMBRE_ETAPA, type Aviso, type Etapa, type Resultado, type Situacion } from "../reglas/tipos.ts";
 import { leerAportaciones, totalMensual } from "./aportaciones.ts";
 import { esEspeculativo, leerCartera, type Posicion } from "./cartera.ts";
+import { NETO } from "./compartidos.ts";
 import { leerMercado, leerParametros, leerPerfil, limiteFgd, productoDe, type PerfilCompleto } from "./configuracion.ts";
 import { esAhorro, esLiquida, leerCuentas, type Cuenta } from "./cuentas.ts";
 import { deudas, finesProximos, leerRecurrentes, presupuestoMes, provisiones, type PresupuestoMes, type RecurrenteCompleto } from "./finanzas.ts";
@@ -28,12 +29,15 @@ export interface Contexto {
 }
 
 /** Gasto en ocio de un mes: apuntes con categoría de ocio (los gastos son importes negativos). Los que son el
- * cargo de un gasto fijo no cuentan (ese gasto ya está en el presupuesto), ni los traspasos entre tus cuentas. */
+ * cargo de un gasto fijo no cuentan (ese gasto ya está en el presupuesto), ni los traspasos entre tus cuentas.
+ * Un gasto compartido cuenta solo lo tuyo (sin lo que te devolvieron); una entrada de ocio suelta, que no es la
+ * devolución de un gasto concreto, también resta. */
 export function ocioGastadoEn(bd: BaseDatos, mes: string): number {
   return (
     0 -
     (bd.uno<{ total: number | null }>(
-      "SELECT sum(a.importe) AS total FROM apuntes a JOIN categorias c ON c.id = a.categoria_id WHERE c.tipo = 'ocio' AND a.recurrente_id IS NULL AND coalesce(a.traspaso, 0) = 0 AND a.fecha BETWEEN ? AND ?",
+      `SELECT sum(CASE WHEN a.importe < 0 THEN ${NETO} WHEN a.devuelve_a IS NULL THEN a.importe ELSE 0 END) AS total FROM apuntes a JOIN categorias c ON c.id = a.categoria_id
+       WHERE c.tipo = 'ocio' AND a.recurrente_id IS NULL AND coalesce(a.traspaso, 0) = 0 AND a.fecha BETWEEN ? AND ?`,
       primerDia(mesDe(mes)),
       ultimoDia(mesDe(mes)),
     )?.total ?? 0)

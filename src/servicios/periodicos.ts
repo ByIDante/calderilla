@@ -40,6 +40,7 @@ interface FilaApunte {
   traspaso_par: number | null;
   vinculo_manual: number;
   origen: string;
+  devuelve_a: number | null;
 }
 
 interface Categoria {
@@ -134,7 +135,7 @@ const sinSigno = (clave: string) => clave.replace(/^[+-]:/, "");
 
 function leerApuntes(bd: BaseDatos, hoy: Fecha): FilaApunte[] {
   return bd.todos<FilaApunte>(
-    "SELECT id, fecha, importe, concepto, categoria_id, cuenta_id, recurrente_id, traspaso, traspaso_par, vinculo_manual, origen FROM apuntes WHERE fecha >= ? ORDER BY fecha, id",
+    "SELECT id, fecha, importe, concepto, categoria_id, cuenta_id, recurrente_id, traspaso, traspaso_par, vinculo_manual, origen, devuelve_a FROM apuntes WHERE fecha >= ? ORDER BY fecha, id",
     sumarDias(hoy, -DIAS_HISTORIA),
   );
 }
@@ -227,8 +228,8 @@ function leerContexto(bd: BaseDatos, hoy: Fecha): Contexto {
   };
 }
 
-/** Libres: sin gasto fijo, que no son traspaso y que no desvinculaste a mano */
-const libresDe = (ctx: Contexto) => ctx.apuntes.filter((a) => a.recurrente_id === null && a.traspaso !== 1 && !a.vinculo_manual);
+/** Libres: sin gasto fijo, que no son traspaso, que no desvinculaste a mano y que no son la devolución de un gasto */
+const libresDe = (ctx: Contexto) => ctx.apuntes.filter((a) => a.recurrente_id === null && a.traspaso !== 1 && !a.vinculo_manual && a.devuelve_a === null);
 
 /**
  * Gastos e ingresos que se repiten: crear uno nuevo o unirlos al que ya tienes. Devuelve también todos los

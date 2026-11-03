@@ -3,6 +3,7 @@ import { mesDe, nombreMes, nombreMesCorto, primerDia, sumarDias, sumarMesesAMes,
 import { estadoEn, importeEn, MESES_FRECUENCIA, ocurrencias } from "../../dominio/recurrencia.ts";
 import { NOMBRE_ETAPA, type Etapa } from "../../reglas/tipos.ts";
 import { leerAportaciones, totalMensual } from "../../servicios/aportaciones.ts";
+import { NETO } from "../../servicios/compartidos.ts";
 import { ingresosDelMes, leerRecurrentes, presupuestoMes } from "../../servicios/finanzas.ts";
 import { calcularPropuestas } from "../../servicios/periodicos.ts";
 import { avisosPresupuesto, gastoPorCategoriaMeses, presupuestoPorCategoria } from "../../servicios/presupuesto.ts";
@@ -96,7 +97,7 @@ function mesPasado(c: Context, estado: Estado, mes: string) {
     mes,
   );
   const gastos = base.todos<{ categoria: string | null; total: number }>(
-    `SELECT c.nombre AS categoria, -sum(a.importe) AS total FROM apuntes a LEFT JOIN categorias c ON c.id = a.categoria_id
+    `SELECT c.nombre AS categoria, -sum(${NETO}) AS total FROM apuntes a LEFT JOIN categorias c ON c.id = a.categoria_id
      WHERE a.importe < 0 AND coalesce(a.traspaso, 0) = 0 AND a.fecha BETWEEN ? AND ? GROUP BY c.nombre ORDER BY total DESC`,
     primerDia(mes),
     ultimoDia(mes),

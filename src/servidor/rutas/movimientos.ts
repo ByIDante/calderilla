@@ -4,12 +4,15 @@ import { importeEditable } from "../../dominio/dinero.ts";
 import { formatoFecha, mesDe, nombreMes, primerDia, sumarMesesAMes, ultimoDia } from "../../dominio/fechas.ts";
 import { estadoEn } from "../../dominio/recurrencia.ts";
 import { claveConcepto } from "../../importar/periodicos.ts";
+import { aplicarCategorias, proponerCategorias } from "../../servicios/categorias.ts";
+import { devolucionesDe, entradasCercanas, gastosCercanos, NETO, proponerDevoluciones, separarDevoluciones, unirDevoluciones } from "../../servicios/compartidos.ts";
 import { leerCuentas } from "../../servicios/cuentas.ts";
 import { leerRecurrentes } from "../../servicios/finanzas.ts";
 import { guardarLimites, presupuestoPorCategoria } from "../../servicios/presupuesto.ts";
 import { bd, render, type Estado } from "../app.ts";
 import { Formulario, idDe, redirigir } from "../formulario.ts";
 import { botonAccion, campo, casilla, eur, selector, vacio, type Html } from "../vistas/comun.ts";
+import { seccionDevolucionEntrada, seccionDevolucionesGasto, tarjetaCategoriasPropuestas, tarjetaCompartidos } from "../vistas/compartidos.ts";
 import { tarjetaPresupuesto } from "../vistas/presupuesto.ts";
 
 interface Movimiento {
@@ -27,6 +30,11 @@ interface Movimiento {
   origen: string;
   traspaso: number | null;
   vinculo_manual: number;
+  /** Lo que te devolvieron de este gasto (gastos compartidos) */
+  devuelto: number | null;
+  devuelve_a: number | null;
+  /** Si es una devolución: el gasto del que es */
+  devuelve_concepto: string | null;
 }
 
 interface Categoria {
@@ -117,16 +125,19 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
     }
     const cuentas = leerCuentas(base, hoy);
     const movimientos = base.todos<Movimiento>(
-      `SELECT a.id, a.fecha, a.importe, a.concepto, a.categoria_id, a.cuenta_id, a.origen, a.traspaso, a.recurrente_id, a.vinculo_manual,
-              c.nombre AS categoria, c.tipo AS tipo_categoria, cu.nombre AS cuenta, r.nombre AS recurrente
+      `SELECT a.id, a.fecha, a.importe, a.concepto, a.categoria_id, a.cuenta_id, a.origen, a.traspaso, a.recurrente_id, a.vinculo_manual, a.devuelve_a,
+              c.nombre AS categoria, c.tipo AS tipo_categoria, cu.nombre AS cuenta, r.nombre AS recurrente, g.concepto AS devuelve_concepto,
+              (SELECT sum(d.importe) FROM apuntes d WHERE d.devuelve_a = a.id) AS devuelto
        FROM apuntes a LEFT JOIN categorias c ON c.id = a.categoria_id LEFT JOIN cuentas cu ON cu.id = a.cuenta_id LEFT JOIN recurrentes r ON r.id = a.recurrente_id
+       LEFT JOIN apuntes g ON g.id = a.devuelve_a
        WHERE ${condiciones.join(" AND ")} ORDER BY a.fecha DESC, a.id DESC`,
       ...parametros,
     );
     const lista = categorias();
     const cifras = base.uno<{ ingresos: number | null; gastos: number | null; sin: number }>(
-      // Los traspasos entre tus cuentas no son ni entradas ni salidas de verdad
-      `SELECT sum(CASE WHEN a.importe > 0 THEN a.importe END) AS ingresos, -sum(CASE WHEN a.importe < 0 THEN a.importe END) AS gastos,
+      // Los traspasos entre tus cuentas no son ni entradas ni salidas de verdad; lo que te devuelven de un gasto
+      // compartido no es una entrada, y el gasto cuenta solo lo tuyo
+      `SELECT sum(CASE WHEN a.importe > 0 AND a.devuelve_a IS NULL THEN a.importe END) AS ingresos, -sum(CASE WHEN a.importe < 0 THEN ${NETO} END) AS gastos,
               count(CASE WHEN a.categoria_id IS NULL THEN 1 END) AS sin
        FROM apuntes a LEFT JOIN cuentas cu ON cu.id = a.cuenta_id WHERE coalesce(a.traspaso, 0) = 0 AND ${condicionesCifras.join(" AND ")}`,
       ...parametrosCifras,
@@ -134,7 +145,9 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
     const ingresos = cifras?.ingresos ?? 0;
     const gastos = cifras?.gastos ?? 0;
     const porCategoria = new Map<string, number>();
-    for (const m of movimientos.filter((x) => x.importe < 0 && x.traspaso !== 1)) porCategoria.set(m.categoria ?? "Sin categoría", (porCategoria.get(m.categoria ?? "Sin categoría") ?? 0) - m.importe);
+    for (const m of movimientos.filter((x) => x.importe < 0 && x.traspaso !== 1)) {
+      porCategoria.set(m.categoria ?? "Sin categoría", (porCategoria.get(m.categoria ?? "Sin categoría") ?? 0) - Math.min(0, m.importe + (m.devuelto ?? 0)));
+    }
     const sinCategoria = cifras?.sin ?? 0;
     const filtros = { ...(tipo ? { tipo } : {}), ...(banco ? { banco } : {}), ...(/^\d+$/.test(filtroCuenta) ? { cuenta: filtroCuenta } : {}), ...(filtroCategoria ? { categoria: filtroCategoria } : {}), ...(buscar ? { buscar } : {}) };
     const enlace = (cambios: Record<string, string>) => {
@@ -205,6 +218,7 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
             <div class="cifra-nota">${filtroCategoria === "sin" ? "Ver todos" : sinCategoria ? "Ver cuáles y ponérsela" : "Todos tienen categoría"}</div>
           </a>
         </div>
+        ${tarjetaCompartidos(proponerDevoluciones(base, hoy), aqui)} ${tarjetaCategoriasPropuestas(proponerCategorias(base, hoy), lista, aqui)}
         ${banco || filtroCuenta ? "" : tarjetaPresupuesto(presupuestoPorCategoria(base, mes, hoy), aqui)}
         <section class="tarjeta">
           <nav class="pestanas pestanas-secundarias" aria-label="Qué movimientos mostrar">
@@ -248,7 +262,14 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
                         <td class="m-concepto">
                           <a href="/movimientos/${m.id}?volver=${encodeURIComponent(aqui)}">${m.concepto}</a>
                           <div class="apagado pequeno">
-                            ${[m.cuenta, ORIGEN[m.origen] ?? m.origen, m.recurrente ? `es «${m.recurrente}» (gasto fijo, ya contado)` : null, m.traspaso === 1 ? "traspaso entre tus cuentas (no cuenta como gasto ni ingreso)" : null]
+                            ${[
+                              m.cuenta,
+                              ORIGEN[m.origen] ?? m.origen,
+                              m.recurrente ? `es «${m.recurrente}» (gasto fijo, ya contado)` : null,
+                              m.traspaso === 1 ? "traspaso entre tus cuentas (no cuenta como gasto ni ingreso)" : null,
+                              m.devuelto ? `te devolvieron ${eur(m.devuelto)}: cuenta ${eur(Math.max(-m.importe - m.devuelto, 0))}` : null,
+                              m.devuelve_concepto ? `devolución de «${m.devuelve_concepto.slice(0, 40)}» (no cuenta como ingreso)` : null,
+                            ]
                               .filter(Boolean)
                               .join(" · ")}
                           </div>
@@ -359,6 +380,14 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
             <div class="botones"><button class="boton" type="submit">Guardar</button></div>
           </form>
         </section>
+        ${m.importe < 0
+          ? seccionDevolucionesGasto(m, devolucionesDe(base, m.id), entradasCercanas(base, m), `/movimientos/${m.id}?volver=${encodeURIComponent(volver)}`)
+          : seccionDevolucionEntrada(
+              m.devuelve_a ? (base.uno<{ id: number; fecha: string; importe: number; concepto: string }>("SELECT id, fecha, importe, concepto FROM apuntes WHERE id = ?", m.devuelve_a) ?? null) : null,
+              gastosCercanos(base, m),
+              m.id,
+              `/movimientos/${m.id}?volver=${encodeURIComponent(volver)}`,
+            )}
         <section class="tarjeta">
           <h2>Que se categorice solo la próxima vez</h2>
           <p class="apagado">Crea una regla: los movimientos que importes cuyo concepto contenga este texto irán a la categoría que elijas.</p>
@@ -390,6 +419,35 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
       aplicados = base.ejecutar("UPDATE apuntes SET categoria_id = ? WHERE recurrente_id IS NULL AND lower(concepto) LIKE ?", categoria, `%${patron}%`).cambios;
     }
     return redirigir(c, volver, { ok: `Regla «${patron}» creada${aplicados ? ` y aplicada a ${aplicados} movimientos` : ""}.` });
+  });
+
+  // Categorías por parecido y gastos compartidos (antes de /movimientos/:id, por lo mismo)
+  app.post("/movimientos/proponer-categorias", async (c) => {
+    const f = await Formulario.de(c);
+    const validas = new Set(categorias().map((x) => x.id));
+    const elegidas = f
+      .enteros("elegir")
+      .map((i) => ({ clave: f.texto(`clave_${i}`), categoriaId: f.entero(`categoria_${i}`) ?? 0, regla: f.casilla(`regla_${i}`) }))
+      .filter((e) => e.clave && validas.has(e.categoriaId));
+    if (!elegidas.length) return redirigir(c, volverA(f.texto("volver")), { error: "Marca primero los que quieras categorizar." });
+    const n = aplicarCategorias(bd(estado), estado.hoy(), elegidas);
+    return redirigir(c, volverA(f.texto("volver")), { ok: `${n} ${n === 1 ? "movimiento ya tiene" : "movimientos ya tienen"} categoría.` });
+  });
+
+  app.post("/movimientos/compartidos", async (c) => {
+    const f = await Formulario.de(c);
+    const volver = volverA(f.texto("volver"));
+    const base = bd(estado);
+    // Se vuelve a calcular: solo cuentan las entradas que la app proponía para ese gasto
+    const propuesta = proponerDevoluciones(base, estado.hoy()).find((p) => p.gasto.id === f.entero("gasto"));
+    if (!propuesta) return redirigir(c, volver, { error: "Eso ya no está en la lista." });
+    const marcadas = new Set(f.casilla("no") ? [] : f.enteros("entradas"));
+    const unir = propuesta.entradas.filter((e) => marcadas.has(e.id)).map((e) => e.id);
+    unirDevoluciones(base, propuesta.gasto.id, unir);
+    separarDevoluciones(base, propuesta.entradas.filter((e) => !marcadas.has(e.id)).map((e) => e.id));
+    return redirigir(c, volver, {
+      ok: unir.length ? `Juntado: ${unir.length} ${unir.length === 1 ? "devolución" : "devoluciones"} de «${propuesta.gasto.concepto}».` : "Hecho: no se volverán a proponer.",
+    });
   });
 
   // Varios movimientos a la vez (va antes de /movimientos/:id para que «categoria» no se tome por un id)
@@ -430,6 +488,32 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
     if (categoria !== null && !categorias().some((x) => x.id === categoria)) return redirigir(c, volverA(f.texto("volver")), { error: "Esa categoría no existe." });
     bd(estado).ejecutar("UPDATE apuntes SET categoria_id = ? WHERE id = ?", categoria, idDe(c));
     return redirigir(c, volverA(f.texto("volver")));
+  });
+
+  // Gastos compartidos a mano: añadir una devolución a un gasto, unir una entrada a su gasto o separarla
+  app.post("/movimientos/:id/devoluciones", async (c) => {
+    const f = await Formulario.de(c);
+    const base = bd(estado);
+    const gasto = base.uno<{ id: number }>("SELECT id FROM apuntes WHERE id = ? AND importe < 0", idDe(c));
+    const entrada = f.entero("entrada");
+    if (!gasto || !entrada) return redirigir(c, volverA(f.texto("volver")), { error: "Elige la devolución." });
+    unirDevoluciones(base, gasto.id, [entrada]);
+    return redirigir(c, `${volverA(f.texto("volver"))}#devoluciones`, { ok: "Devolución añadida: el gasto cuenta solo lo tuyo." });
+  });
+
+  app.post("/movimientos/:id/devolucion", async (c) => {
+    const f = await Formulario.de(c);
+    const base = bd(estado);
+    const gasto = base.uno<{ id: number }>("SELECT id FROM apuntes WHERE id = ? AND importe < 0", f.entero("gasto") ?? 0);
+    if (!gasto) return redirigir(c, volverA(f.texto("volver")), { error: "Elige el gasto." });
+    unirDevoluciones(base, gasto.id, [idDe(c)]);
+    return redirigir(c, `${volverA(f.texto("volver"))}#devoluciones`, { ok: "Unida a su gasto: ya no cuenta como ingreso." });
+  });
+
+  app.post("/movimientos/:id/separar", async (c) => {
+    const f = await Formulario.de(c);
+    separarDevoluciones(bd(estado), [idDe(c)]);
+    return redirigir(c, `${volverA(f.texto("volver"))}#devoluciones`, { ok: "Separada: vuelve a contar como una entrada suelta." });
   });
 
   // Unir a mano un movimiento a su gasto fijo (o separarlo) y marcarlo como traspaso: la detección lo respeta
