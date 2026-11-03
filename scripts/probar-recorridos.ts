@@ -169,7 +169,8 @@ for (const tamano of [
   const [sobraAntes] = await fila(pagina, "Te sobra al mes");
   await cambiar(pagina, () => pagina.fill(`#importe-${ids.nomina}`, "2250"));
   const [, sobraDespues] = await fila(pagina, "Te sobra al mes");
-  comprobar(sobraDespues - sobraAntes === 117, `subir la nómina 100 € (con 14 pagas): sobran 117 € más (${sobraAntes} → ${sobraDespues})`);
+  // Las cifras salen en euros redondeados: 116,67 € más puede verse como 116 o 117
+  comprobar(Math.abs(sobraDespues - sobraAntes - 117) <= 1, `subir la nómina 100 € (con 14 pagas): sobran 117 € más (${sobraAntes} → ${sobraDespues})`);
   const ahorro = await fila(pagina, "Toca ahorrar este mes");
   const ocio = await fila(pagina, "Para ocio este mes");
   comprobar(Math.abs(ahorro[1] - ahorro[0] + (ocio[1] - ocio[0]) - 117) <= 1, `y se reparten entre ahorro (+${ahorro[1] - ahorro[0]}) y ocio (+${ocio[1] - ocio[0]})`);
@@ -286,13 +287,25 @@ for (const tamano of [
       [`/gastos/${ids.traducciones}`, "traducciones"],
       ["/ajustes?bruto=30000#irpf", "irpf"],
       ["/anio", "anio"],
+      ["/gastos/suscripciones", "suscripciones"],
+      ["/movimientos?buscar=consum&todo=1", "buscar"],
       [`/calculadora/aplicar?importe_${ids.netflix}=17%2C99&quitar_${ids.clases}=1&liquidez=0`, "aplicar"],
     ] as const) {
       await pagina.goto(`${base}${ruta}`, { waitUntil: "networkidle" });
       const px = await ancho(pagina);
-      comprobar(px <= 391, `${ruta.split("?")[0]} no se sale de lado (${px} px)`);
+      comprobar(px <= 391, `${ruta} no se sale de lado (${px} px)`);
       await pagina.screenshot({ path: path.join(capturas, `9-${nombre}-movil.png`), fullPage: true });
     }
+    // Movimientos en el móvil: cada uno en dos líneas, sin «Borrar» (está en su ficha), y lo secundario plegado
+    await pagina.goto(`${base}/movimientos`, { waitUntil: "networkidle" });
+    const filas = await pagina.evaluate(() => {
+      const lista = [...document.querySelectorAll(".tabla-movimientos tbody tr")];
+      const borrar = [...document.querySelectorAll(".tabla-movimientos .m-borrar")].some((x) => x.getBoundingClientRect().height > 0);
+      return { media: lista.reduce((s, f) => s + f.getBoundingClientRect().height, 0) / lista.length, borrar };
+    });
+    comprobar(filas.media <= 90 && !filas.borrar, `en el móvil, cada movimiento ocupa unos ${Math.round(filas.media)} px, sin «Borrar» en la lista`);
+    const plegadas = await pagina.evaluate(() => ["presupuesto", "compartidos"].map((id) => (document.getElementById(id) as HTMLDetailsElement | null)?.open));
+    comprobar(plegadas[0] === false && plegadas[1] === true, "el presupuesto empieza plegado; los gastos compartidos, abiertos");
     await contexto.close();
   }
 
@@ -365,7 +378,7 @@ for (const tamano of [
   const textoPropuestas = (await propuestas.textContent()) ?? "";
   comprobar(/Fnac · 1 sin categoría[\s\S]*Compras[\s\S]*Si contiene «fnac» \(en pagos\)/.test(textoPropuestas), "propone «Compras» para la compra de Fnac sin categoría, con su regla para pagos");
   const medias = (await pagina.locator("#presupuesto").textContent()) ?? "";
-  comprobar(/Frente a lo que sueles gastar[\s\S]*Compras\s*89,99\s€\s*34,00\s€\s*\+165 %/.test(medias), "el presupuesto compara cada categoría con lo que sueles gastar");
+  comprobar(/Frente a lo que sueles gastar[\s\S]*Compras\s*90\s€\s*34\s€\s*\+165 %/.test(medias), "el presupuesto compara cada categoría con lo que sueles gastar");
   await propuestas.screenshot({ path: path.join(capturas, "12-categorias.png") });
   await propuestas.locator("button:has-text('Poner las categorías marcadas')").click();
   await pagina.waitForURL(/ok=/);
@@ -386,6 +399,30 @@ for (const tamano of [
   await pagina.click("a:has-text('← 2025')");
   await pagina.waitForURL(/anio=2025/);
   comprobar(/Antes de octubre de 2025 no hay movimientos/.test((await pagina.textContent("main")) ?? ""), "y 2025 empieza en el primer mes con movimientos");
+
+  // Buscar en todos los meses
+  await pagina.goto(`${base}/movimientos`, { waitUntil: "networkidle" });
+  await pagina.fill("#campo-buscar", "consum");
+  await pagina.check("#campo-todo");
+  await pagina.click("button:has-text('Filtrar')");
+  await pagina.waitForURL(/todo=1/);
+  const busqueda = ((await pagina.textContent(".resumen-busqueda")) ?? "").replace(/\s+/g, " ");
+  comprobar(/«consum» en todos los meses: 20 movimientos · salen 1\.060,00\s€/.test(busqueda), `buscar en todos los meses encuentra los 20 de Consum, con su total («${busqueda.trim()}»)`);
+  comprobar((await pagina.locator(".tabla-movimientos td.m-fecha", { hasText: "/06/2026" }).count()) > 0, "también los de junio");
+
+  // Tus suscripciones
+  await pagina.goto(`${base}/gastos`, { waitUntil: "networkidle" });
+  await pagina.click("a:has-text('Tus suscripciones')");
+  await pagina.waitForURL(/\/gastos\/suscripciones/);
+  const suscripciones = (await pagina.textContent("main")) ?? "";
+  comprobar(/Netflix[\s\S]*Subió de 12,99\s€ a 13,99\s€ el 01\/03\/2026/.test(suscripciones), "«Tus suscripciones» enseña Netflix y su subida de marzo");
+  comprobar(/HBO Max[\s\S]*69,90\s€\s*al año/.test(suscripciones), "y HBO Max, que se paga una vez al año");
+  await pagina.screenshot({ path: path.join(capturas, "16-suscripciones.png"), fullPage: true });
+  const alAnioAntes = euros(await pagina.locator(".cifra", { hasText: "Al año" }).locator(".cifra-valor").textContent());
+  await pagina.locator("tr", { hasText: "Clases de yoga" }).locator("button:has-text('Es una suscripción')").click();
+  await pagina.waitForURL(/ok=/);
+  const alAnio = euros(await pagina.locator(".cifra", { hasText: "Al año" }).locator(".cifra-valor").textContent());
+  comprobar(alAnio - alAnioAntes === 300, `al añadir las clases de yoga, 300 € más al año (${alAnioAntes} → ${alAnio} €)`);
 
   await pagina.goto(`${base}/ajustes?bruto=30000#irpf`, { waitUntil: "networkidle" });
   const irpf = pagina.locator("#irpf");

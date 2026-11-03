@@ -52,6 +52,11 @@ export async function arrancarEjemplo(puerto: number) {
   crearRecurrente(bd, { ...fijo, tipo: "gasto", nombre: "Comida", categoriaId: cat("Alimentación"), frecuencia: "mensual", inicio: "2024-01-01", importe: 32000, clase: "estimacion" });
   crearRecurrente(bd, { ...fijo, tipo: "gasto", nombre: "Seguro de hogar multirriesgo con cobertura ampliada", categoriaId: cat("Seguros"), frecuencia: "anual", inicio: "2027-02-01", importe: 41235 });
   const netflix = crearRecurrente(bd, { ...fijo, tipo: "gasto", nombre: "Netflix", categoriaId: cat("Suscripciones"), frecuencia: "mensual", inicio: "2024-01-01", importe: 1399, esencial: false });
+  // Netflix subió en marzo; HBO Max se paga una vez al año y las clases de yoga quizá sean una suscripción
+  bd.ejecutar("UPDATE recurrentes_importes SET importe = 1299 WHERE recurrente_id = ?", netflix);
+  bd.ejecutar("INSERT INTO recurrentes_importes (recurrente_id, valido_desde, importe) VALUES (?, '2026-03-01', 1399)", netflix);
+  crearRecurrente(bd, { ...fijo, tipo: "gasto", nombre: "HBO Max", categoriaId: cat("Ocio"), frecuencia: "anual", inicio: "2025-12-15", importe: 6990, esencial: false });
+  crearRecurrente(bd, { ...fijo, tipo: "gasto", nombre: "Clases de yoga", categoriaId: cat("Salud"), frecuencia: "mensual", inicio: "2026-02-01", importe: 2500, esencial: false });
   crearRecurrente(bd, { ...fijo, tipo: "gasto", nombre: "Gimnasio", categoriaId: cat("Ocio"), frecuencia: "mensual", inicio: "2025-01-10", fin: "2026-09-10", importe: 3900, esencial: false });
   const coche = crearRecurrente(bd, {
     ...fijo,
