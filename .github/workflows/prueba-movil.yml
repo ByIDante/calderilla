@@ -1,0 +1,28 @@
+name: Prueba en el móvil
+
+# Publica la prueba de la fase 0 en Cloudflare Pages, en su propia dirección (rama «prueba»), para abrirla en los
+# móviles. No toca la versión de los ordenadores.
+on:
+  push:
+    branches: [spike/movil]
+  workflow_dispatch:
+
+jobs:
+  publicar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: node spike/construir.ts
+      - name: Publicar en Cloudflare Pages
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          npx --yes wrangler@4.157.0 pages project create calderilla --production-branch=main || true
+          npx --yes wrangler@4.157.0 pages deploy dist-prueba --project-name=calderilla --branch=prueba
