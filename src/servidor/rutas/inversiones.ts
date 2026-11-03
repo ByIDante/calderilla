@@ -314,7 +314,7 @@ export function rutasInversiones(app: Hono, estado: Estado) {
                   ${movimientos.map(
                     (m) => html`<tr>
                       <td>${formatoFecha(m.fecha)}</td><td>${m.tipo}</td><td class="numero">${formatoNumero(m.cantidad)}</td><td class="numero">${eur(m.importe)}</td>
-                      <td>${botonAccion(`/movimientos/${m.id}/borrar`, "Borrar", { estilo: "enlace", confirmar: "¿Borrar este movimiento?", campos: { volver: String(id) } })}</td>
+                      <td>${botonAccion(`/activos/movimientos/${m.id}/borrar`, "Borrar", { estilo: "enlace", confirmar: "¿Borrar este movimiento?", campos: { volver: String(id) } })}</td>
                     </tr>`,
                   )}
                 </tbody>
@@ -357,7 +357,8 @@ export function rutasInversiones(app: Hono, estado: Estado) {
     return redirigir(c, "/inversiones", { ok: "Activo archivado." });
   });
 
-  app.post("/movimientos/:id/borrar", async (c) => {
+  // Bajo /activos: /movimientos/:id/borrar es el de Movimientos (los apuntes), que se registra antes
+  app.post("/activos/movimientos/:id/borrar", async (c) => {
     const volver = (await Formulario.de(c)).entero("volver");
     bd(estado).ejecutar("DELETE FROM movimientos_cartera WHERE id = ?", idDe(c));
     return redirigir(c, volver ? `/activos/${volver}` : "/inversiones", { ok: "Movimiento borrado." });
