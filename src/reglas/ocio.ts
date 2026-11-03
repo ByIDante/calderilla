@@ -35,10 +35,13 @@ export function calcularPresupuesto(s: Situacion, etapa: Etapa, p: Parametros, r
   const liberada = Math.min(cuotaLiberada(s, p), Math.max(sobrante, 0));
   const proporcion = PROPORCION[etapa](p) / 100;
 
-  const objetivoAhorro =
+  const ahorroRegla =
     etapa === "deficit"
       ? 0
       : Math.min(Math.max(Math.round(proporcion * (sobrante - liberada)) + liberada, requeridoMetas, 0), maximoAhorro);
+  // Si tu ahorro automático aparta más de lo que pide la regla, cuenta lo que de verdad apartas (sin pasar de lo
+  // que te sobra): ese dinero ya no está para ocio. Lo de más va a tu etapa.
+  const objetivoAhorro = etapa === "deficit" ? 0 : Math.max(ahorroRegla, Math.min(s.ahorroAutomatico, Math.max(sobrante, 0)));
   const paraMetas = Math.min(requeridoMetas, objetivoAhorro);
   const ocioPlan = Math.max(sobrante - objetivoAhorro, 0);
 
@@ -56,6 +59,8 @@ export function calcularPresupuesto(s: Situacion, etapa: Etapa, p: Parametros, r
     sobrante,
     ocioMinimo,
     objetivoAhorro,
+    ahorroRegla,
+    ahorroAutomatico: s.ahorroAutomatico,
     paraMetas,
     paraEtapa: objetivoAhorro - paraMetas,
     cuotaLiberada: liberada,

@@ -65,6 +65,8 @@ export interface Prueba {
   parametros: Partial<Record<ParametroPrueba, number>>;
   /** Pagos anticipados de préstamos, por el id del gasto: sale de tus cuentas hoy */
   adelantos: Map<number, { importe: Centimos; modo: "cuota" | "plazo" }>;
+  /** Lo que traspasas solo cada mes a tu ahorro (si apartas más de lo que pide la regla, sale del ocio) */
+  ahorroAutomatico: Centimos | null;
 }
 
 export function sinCambios(): Prueba {
@@ -79,6 +81,7 @@ export function sinCambios(): Prueba {
     metaNueva: null,
     parametros: {},
     adelantos: new Map(),
+    ahorroAutomatico: null,
   };
 }
 
@@ -94,7 +97,8 @@ export function cambios(prueba: Prueba): number {
     prueba.metasQuitadas.size +
     (prueba.metaNueva ? 1 : 0) +
     Object.keys(prueba.parametros).length +
-    prueba.adelantos.size
+    prueba.adelantos.size +
+    (prueba.ahorroAutomatico === null ? 0 : 1)
   );
 }
 
@@ -197,6 +201,7 @@ export function simular(base: Base, prueba: Prueba): Simulacion {
     prestamosTerminados: fines.terminados,
     prestamosPorTerminar: fines.porTerminar,
     ocioGastado: prueba.ocioGastado ?? base.situacion.ocioGastado,
+    ahorroAutomatico: prueba.ahorroAutomatico ?? base.situacion.ahorroAutomatico,
     metas,
     apartadoMetas: metas.reduce((suma, meta) => suma + meta.ahorrado, 0),
   };

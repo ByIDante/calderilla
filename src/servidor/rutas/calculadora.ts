@@ -55,6 +55,8 @@ export function leerPrueba(f: Formulario, base: Base): Prueba {
   if (liquidez !== null && liquidez !== base.situacion.liquidez) prueba.liquidez = liquidez;
   const ocioGastado = f.importe("ocio_gastado");
   if (ocioGastado !== null && ocioGastado >= 0 && ocioGastado !== base.situacion.ocioGastado) prueba.ocioGastado = ocioGastado;
+  const automatico = f.importe("ahorro_automatico");
+  if (automatico !== null && automatico >= 0 && automatico !== base.situacion.ahorroAutomatico) prueba.ahorroAutomatico = automatico;
 
   for (const meta of base.situacion.metas) {
     if (meta.id === undefined) continue;
@@ -115,6 +117,7 @@ function valoresReales(base: Base): Record<string, string> {
   const valores: Record<string, string> = {
     liquidez: importeEditable(base.situacion.liquidez),
     ocio_gastado: importeEditable(base.situacion.ocioGastado),
+    ahorro_automatico: importeEditable(base.situacion.ahorroAutomatico),
   };
   for (const { recurrente: r } of base.presupuesto.lineas) valores[`importe_${r.id}`] = importeEditable(importeDelMes(r, base.hoy));
   for (const meta of base.situacion.metas) {

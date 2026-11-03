@@ -3,6 +3,7 @@ import { diasEntre, mesDe, primerDia, sumarMesesAMes, ultimoDia, type Fecha } fr
 import { evaluar } from "../reglas/escalera.ts";
 import type { Parametros } from "../reglas/parametros.ts";
 import { ETAPAS, NOMBRE_ETAPA, type Aviso, type Etapa, type Resultado, type Situacion } from "../reglas/tipos.ts";
+import { leerAportaciones, totalMensual } from "./aportaciones.ts";
 import { esEspeculativo, leerCartera, type Posicion } from "./cartera.ts";
 import { leerMercado, leerParametros, leerPerfil, limiteFgd, productoDe, type PerfilCompleto } from "./configuracion.ts";
 import { esAhorro, esLiquida, leerCuentas, type Cuenta } from "./cuentas.ts";
@@ -102,6 +103,7 @@ export function construir(bd: BaseDatos, hoy: Fecha): Omit<Contexto, "resultado"
     etapaAnterior,
     ocioGastado: ocioGastadoEn(bd, hoy),
     ocioRemanente: cierreAnterior?.ocio_sobrante ?? 0,
+    ahorroAutomatico: totalMensual(leerAportaciones(bd), mes),
     saldosPorEntidad: [...porEntidad].map(([entidad, saldo]) => ({ entidad, saldo })),
     limiteFgd: limiteFgd(mercado),
   };

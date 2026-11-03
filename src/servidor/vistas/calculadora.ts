@@ -239,6 +239,13 @@ export function vistaCalculadora(d: DatosCalculadora, v: Valores): Html {
               ayuda: "Cuentas, efectivo y lo que puedes sacar pronto. Con esto se mira tu colchón y tu fondo de emergencia.",
             })}
             ${campo({ etiqueta: "Ya gastado en ocio este mes", nombre: "ocio_gastado", valor: v.ocio_gastado, sufijo: "€" })}
+            ${campo({
+              etiqueta: "Ahorro automático al mes",
+              nombre: "ahorro_automatico",
+              valor: v.ahorro_automatico,
+              sufijo: "€",
+              ayuda: "Lo que traspasas solo cada mes a tu ahorro. Si es más de lo que pide la regla, lo de más sale del ocio.",
+            })}
           </div>
         </section>
         <section class="tarjeta">
@@ -403,8 +410,8 @@ function tablaComparada(filas: readonly Comparada[]): Html {
 
 /** El cálculo del ocio paso a paso, con tus números y con la prueba, fila a fila */
 function tablaPasosComparada(d: DatosCalculadora): Html {
-  const ahora = pasosOcio(d.real.resultado.presupuesto, d.real.resultado.etapa, d.automatico);
-  const prueba = pasosOcio(d.simulada.resultado.presupuesto, d.simulada.resultado.etapa, d.automatico);
+  const ahora = pasosOcio(d.real.resultado.presupuesto, d.real.resultado.etapa);
+  const prueba = pasosOcio(d.simulada.resultado.presupuesto, d.simulada.resultado.etapa);
   return html`<div class="tabla-contenedor">
     <table class="tabla-apilable tabla-comparada">
       <caption class="sr">De dónde sale el ocio, ahora y con tu prueba</caption>

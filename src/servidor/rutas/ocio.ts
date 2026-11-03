@@ -1,7 +1,6 @@
 import type { Context, Hono } from "hono";
 import { html } from "hono/html";
 import { formatoFecha, mesDe, nombreMes, primerDia, sumarMesesAMes, ultimoDia } from "../../dominio/fechas.ts";
-import { leerAportaciones, totalMensual } from "../../servicios/aportaciones.ts";
 import { contexto, ocioGastadoEn } from "../../servicios/situacion.ts";
 import { bd, render, type Estado } from "../app.ts";
 import { Formulario, idDe, redirigir } from "../formulario.ts";
@@ -74,7 +73,6 @@ export function rutasOcio(app: Hono, estado: Estado) {
       ultimoDia(mes),
     );
     const categorias = base.todos<{ id: number; nombre: string; tipo: string }>("SELECT id, nombre, tipo FROM categorias WHERE archivada = 0 AND tipo != 'ingreso' ORDER BY tipo != 'ocio', nombre");
-    const automatico = totalMensual(leerAportaciones(base), mes);
 
     return render(
       c,
@@ -111,7 +109,7 @@ export function rutasOcio(app: Hono, estado: Estado) {
             ${barraReparto(p)} ${medidorOcio(p)}
             <details class="como-tabla" style="margin-top:10px">
               <summary>Ver el cálculo paso a paso</summary>
-              ${tablaPasos(pasosOcio(p, ctx.resultado.etapa, automatico))}
+              ${tablaPasos(pasosOcio(p, ctx.resultado.etapa))}
             </details>
             <p class="pequeno"><a href="/calculadora">¿Y si cobraras o gastaras otra cosa? Pruébalo en la Calculadora</a></p>
             ${porque(

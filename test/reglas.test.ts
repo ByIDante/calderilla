@@ -41,6 +41,7 @@ function situacion(cambios: Partial<Situacion>): Situacion {
     etapaAnterior: null,
     ocioGastado: 0,
     ocioRemanente: 0,
+    ahorroAutomatico: 0,
     saldosPorEntidad: [],
     limiteFgd: e(100000),
     ...cambios,

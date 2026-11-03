@@ -80,10 +80,15 @@ function tarjetaMes(p: Presupuesto, etapa: Etapa, automatico: number, ultimoCier
   return html`<section class="tarjeta tarjeta-mes">
     <h2>Tu mes en claro</h2>
     <p class="frase-mes">
-      ${p.objetivoAhorro > 0
-        ? html`Este mes toca ahorrar <b>${eurR(p.objetivoAhorro)}</b> y tienes <b>${eurR(ocioDelMes)}</b> para ocio.`
-        : html`Este mes no da para ahorrar: lo que te sobra, <b>${eurR(ocioDelMes)}</b>, es tu ocio.`}
+      ${p.objetivoAhorro > p.ahorroRegla
+        ? html`Este mes apartas <b>${eurR(p.objetivoAhorro)}</b> con tu ahorro automático y tienes <b>${eurR(ocioDelMes)}</b> para ocio.`
+        : p.objetivoAhorro > 0
+          ? html`Este mes toca ahorrar <b>${eurR(p.objetivoAhorro)}</b> y tienes <b>${eurR(ocioDelMes)}</b> para ocio.`
+          : html`Este mes no da para ahorrar: lo que te sobra, <b>${eurR(ocioDelMes)}</b>, es tu ocio.`}
     </p>
+    ${p.objetivoAhorro > p.ahorroRegla
+      ? html`<p class="apagado pequeno">La regla pide ${eurR(p.ahorroRegla)}; los ${eurR(p.objetivoAhorro - p.ahorroRegla)} de más van a tu etapa y salen del ocio.</p>`
+      : ""}
     ${barraReparto(p)} ${notaCobros(cobros)}
     <div class="rejilla">
       <div>

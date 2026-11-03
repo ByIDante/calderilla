@@ -51,17 +51,17 @@ export interface Paso {
   siempre: boolean;
 }
 
-/** Cuánto se ahorra de cada 100 € que sobran (sin la cuota liberada de un préstamo, que va entera a ahorro) */
+/** Cuánto pide ahorrar la regla de cada 100 € que sobran (sin la cuota liberada de un préstamo, que va entera a ahorro) */
 export function ahorroDeCada100(p: Presupuesto): number {
-  return p.sobrante > 0 ? Math.round(((p.objetivoAhorro - p.cuotaLiberada) / Math.max(p.sobrante - p.cuotaLiberada, 1)) * 100) : 0;
+  return p.sobrante > 0 ? Math.round(((p.ahorroRegla - p.cuotaLiberada) / Math.max(p.sobrante - p.cuotaLiberada, 1)) * 100) : 0;
 }
 
 /** De los ingresos a lo que te queda para ocio, paso a paso. Lo usan Ocio y la Calculadora. */
-export function pasosOcio(p: Presupuesto, etapa: Etapa, automatico: number): Paso[] {
+export function pasosOcio(p: Presupuesto, etapa: Etapa): Paso[] {
   const notaAhorro = [
     `${ahorroDeCada100(p)} € de cada 100 € que te sobran`,
     p.cuotaLiberada ? `más la cuota liberada de ${eurR(p.cuotaLiberada)}` : "",
-    automatico ? `tu ahorro automático cubre ${eurR(automatico)}` : "",
+    p.ahorroAutomatico && p.ahorroAutomatico <= p.ahorroRegla ? `tu ahorro automático cubre ${eurR(p.ahorroAutomatico)}` : "",
   ]
     .filter(Boolean)
     .join(", ");
@@ -70,7 +70,15 @@ export function pasosOcio(p: Presupuesto, etapa: Etapa, automatico: number): Pas
     { clave: "esenciales", texto: "− Gastos esenciales", importe: -p.esenciales, tramo: 1, siempre: true },
     { clave: "no-esenciales", texto: "− Gastos no esenciales", importe: -p.noEsenciales, tramo: 2, siempre: true },
     { clave: "sobra", texto: "= Te sobra", importe: p.sobrante, siempre: true },
-    { clave: "ahorro", texto: `− Ahorro de la etapa «${NOMBRE_ETAPA[etapa]}»`, importe: -(p.objetivoAhorro - p.paraMetas), nota: notaAhorro, tramo: 3, siempre: true },
+    { clave: "ahorro", texto: `− Ahorro de la etapa «${NOMBRE_ETAPA[etapa]}»`, importe: -(p.ahorroRegla - p.paraMetas), nota: notaAhorro, tramo: 3, siempre: true },
+    {
+      clave: "ahorro-extra",
+      texto: "− Lo que apartas de más",
+      importe: -(p.objetivoAhorro - p.ahorroRegla),
+      nota: `tu ahorro automático aparta ${eurR(p.ahorroAutomatico)}, más de lo que pide la regla: ese dinero ya no está para ocio`,
+      tramo: 3,
+      siempre: false,
+    },
     { clave: "metas", texto: "− Para tus metas", importe: -p.paraMetas, tramo: 4, siempre: false },
     { clave: "ocio-previsto", texto: "= Ocio previsto", importe: p.ocioPlan, tramo: 5, siempre: true },
     { clave: "correccion", texto: "− Corrección por los cierres", importe: -p.correccion, nota: "ahorraste menos de lo previsto en 2 de los 3 últimos cierres", siempre: false },

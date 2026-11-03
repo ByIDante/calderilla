@@ -112,6 +112,8 @@ export interface Situacion {
   etapaAnterior: Etapa | null;
   ocioGastado: Centimos;
   ocioRemanente: Centimos;
+  /** Lo que traspasas solo cada mes a tu cuenta de ahorro o a un fondo (Cuentas → Ahorro automático). */
+  ahorroAutomatico: Centimos;
   saldosPorEntidad: { entidad: string; saldo: Centimos }[];
   limiteFgd: Centimos;
 }
@@ -141,7 +143,11 @@ export interface Presupuesto {
   /** S = I − E − NE */
   sobrante: Centimos;
   ocioMinimo: Centimos;
+  /** Lo que apartas este mes: lo que pide la regla o, si tu ahorro automático aparta más, eso. */
   objetivoAhorro: Centimos;
+  /** Lo que pide la regla según tu etapa y tus metas. */
+  ahorroRegla: Centimos;
+  ahorroAutomatico: Centimos;
   /** Parte del ahorro que va a metas. */
   paraMetas: Centimos;
   /** Parte del ahorro que va a la etapa (colchón, deuda, fondo o inversión). */
