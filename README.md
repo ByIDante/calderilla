@@ -6,7 +6,8 @@ Web local para llevar el control de tu economía: ingresos, gastos fijos y a pla
 - **Cobros cada 15 días y pagas extra.** Una vez al mes, cada semana, cada 2 semanas o dos veces al mes, y con pagas extra en los meses que elijas (junio y diciembre, cada 2 meses…). Todo se reparte para que el presupuesto sea igual cada mes, y la app te enseña mes a mes lo que cobras de verdad.
 - **Resumen del mes.** Muestra lo que entra, lo que sale y lo que sobra, con gráficos y una tabla de cierres.
 - **Ocio.** Calcula cuánto te queda este mes para ocio y explica de dónde sale la cifra.
-- **Calculadora.** Cambia cualquier número (tu sueldo, un gasto, lo que tienes ahorrado, una meta…) y mira cómo quedarían el ocio, el ahorro y tu etapa. Es solo para probar: no se guarda nada.
+- **Calculadora.** Cambia cualquier número (tu sueldo, un gasto, lo que tienes ahorrado, una meta…) y mira cómo quedarían el ocio, el ahorro y tu etapa. Es solo para probar: no se guarda nada, salvo que elijas aplicar los cambios.
+- **Revisa tus datos.** Avisa de lo que suele ser un error al apuntar (un gasto apuntado dos veces, un gasto que empieza más tarde que sus cargos), te dice cuánto contar de un ingreso que varía y junta lo que te devuelven tus amigos con el gasto que pagaste tú.
 - **Escalera de inversión.** Según tus gastos y lo que te sobra, te dice en qué etapa estás y qué hacer. Cuando cumples los requisitos, pasas a la siguiente etapa o se desbloquean más opciones.
 - **Cartera.** Fondos, ETF, acciones, cripto y divisas, con su valor y lo que ganas o pierdes. Los precios se actualizan solos con fuentes gratuitas, y también puedes ponerlos a mano.
 - **Tus movimientos.** Importa el extracto del banco (CSV o Excel) o conecta el banco para que traiga saldos y movimientos solo.
@@ -104,6 +105,8 @@ Los tipos de interés de cuentas y Letras, los tramos del IRPF y los límites de
 | Qué | Dónde |
 |---|---|
 | Nómina, alquiler, recibos, el préstamo del coche | Ingresos y gastos |
+| Una financiación con cuota final (coche, moto) | Ingresos y gastos → Añadir préstamo, con su «Cuota final» |
+| Un ingreso que varía (autónomo, comisiones, clases) | Ingresos y gastos, como estimación: su ficha te dice lo prudente |
 | Una nómina que cobras cada 15 días o cada semana | Ingresos y gastos, en «Cada cuánto»: dos veces al mes, cada 2 semanas o cada semana |
 | Las pagas extra (14 pagas, una extra cada 2 meses…) | En el mismo ingreso: «¿Cobras pagas extra?» y eliges los meses y el importe |
 | Tu cuenta de Trade Republic u otra cuenta que paga intereses | Cuentas, tipo «Cuenta remunerada», con su TAE |
@@ -111,6 +114,8 @@ Los tipos de interés de cuentas y Letras, los tramos del IRPF y los límites de
 | Los intereses que te paga la cuenta | No hace falta: aparecen al actualizar el saldo (la app te enseña la estimación) |
 | Fondos, ETF, acciones, cripto, divisas | Inversiones |
 | Gastos sueltos de ocio | Ocio, o importando el extracto del banco |
+| Lo que te devuelven por Bizum de una cena que pagaste tú | Movimientos: se une a ese gasto (Gastos compartidos) |
+| Tu tipo marginal de IRPF | Ajustes → «¿Cuál es tu tipo marginal?»: lo calcula con tu sueldo |
 
 **¿Y si un mes no hago la aportación?** No rompe nada.
 
@@ -143,7 +148,7 @@ Sirve para comprobar los números y para preguntarte «¿y si…?». Parte de tu
   - el importe de cada ingreso y gasto, o quitarlo;
   - cuánto adelantar de un préstamo, y si reduces el plazo o la cuota;
   - hasta 3 ingresos o gastos de prueba;
-  - el dinero de tus cuentas y lo ya gastado en ocio;
+  - el dinero de tus cuentas, lo ya gastado en ocio y tu ahorro automático;
   - tus metas, o una de prueba;
   - en «Las reglas (avanzado)», cuánto se ahorra de cada 100 € que te sobran en cada etapa, el ocio mínimo, el colchón y los meses del fondo de emergencia.
 - **Lo que ves:**
@@ -154,14 +159,31 @@ Sirve para comprobar los números y para preguntarte «¿y si…?». Parte de tu
   - **los próximos 2 años:** un gráfico con lo que tendrías ahorrado y cuándo llegas al colchón, al fondo de emergencia, a invertir y a cada meta. Si gastas más de lo que ingresas, también cuándo te quedarías sin dinero en las cuentas. Supone que cada mes ahorras lo que pide la regla (cambiando de etapa cuando toca) y no cuenta intereses ni la bolsa;
   - el cálculo del ocio paso a paso, con tus números y con los de la prueba.
 - **Mismas cuentas.** Usa las mismas fórmulas que el resto de la app: sin cambios, sale exactamente lo mismo que en el Resumen y en Ocio.
+- **Aplicar estos cambios de verdad.** Si te convence, el enlace de «Así quedaría» te enseña cada cambio con su casilla y solo guarda lo que marques:
+  - los importes nuevos cuentan desde hoy (los meses pasados conservan el suyo), lo que quitas deja de contar desde hoy y lo nuevo empieza hoy;
+  - también las metas, la meta nueva y las reglas;
+  - borrar una meta y apuntar un adelanto de préstamo vienen sin marcar: márcalos solo si ya no quieres la meta o ya has pagado el adelanto;
+  - el dinero de tus cuentas, lo gastado en ocio y el ahorro automático no se guardan desde aquí, porque salen de tus saldos y movimientos: te dice dónde cambiarlos.
 
 ## Cuánto puedo gastar en ocio
 
 1. Lo que te sobra = ingresos − gastos esenciales − gastos no esenciales.
 2. A eso se le resta el ahorro que pide tu etapa (80 % de lo que sobra al empezar, 50 % al invertir) y lo que piden tus metas. Lo que queda es tu ocio, con un mínimo del 5 % de tus ingresos.
+   - Si tu ahorro automático aparta **más** de lo que pide la regla, se cuenta lo que apartas de verdad: lo de más va a tu etapa y sale del ocio, porque ese dinero ya no está en tu cuenta.
+   - Si te devolvieron parte de un gasto (gastos compartidos), cuenta solo lo tuyo.
 3. Una vez al mes, en **Cuentas y cierres**, apuntas los saldos y cierras el mes. Si en 2 de los 3 últimos cierres ahorraste menos de lo previsto, hay gastos sin apuntar y el ocio baja hasta que cuadre.
 4. La mitad de lo que no gastes pasa al mes siguiente.
 5. Cuando terminas un préstamo, su cuota va entera a ahorro durante 3 meses antes de repartirse.
+
+## Revisar tus datos
+
+Calderilla solo avisa: tú decides. Los avisos salen en el Resumen y en Ingresos y gastos, con un enlace a lo que hay que mirar.
+
+- **Un gasto apuntado dos veces:** dos gastos (o ingresos) fijos con el mismo importe, la misma frecuencia y la misma categoría.
+- **Un gasto que empieza tarde:** si sus cargos en el banco empiezan más de 10 días antes que él, los meses de antes no lo cuentan.
+- **Un ingreso que varía:** en su ficha ves **lo prudente**, lo que cobraste en un mes flojo (el segundo más bajo de los últimos 6 meses completos; con 3 o 4, el más bajo), y puedes usarlo desde este mes. Si cobras más, te sobra; rara vez te faltará. Si tus ingresos varían, la app te propone marcarlos como inestables en tu perfil para que el fondo de emergencia cubra más meses.
+- **Al cerrar el mes**, si un ingreso llega el último día o el anterior (aunque la nómina no llegue siempre el mismo día), te recuerda poner el saldo de después de cobrarlo.
+- **Tu tipo marginal de IRPF** (Ajustes): con tu sueldo bruto, o con tu nómina neta si no lo sabes, estima la Seguridad Social, el IRPF y cuánto te ahorrarías por cada 100 € que aportes a un plan de pensiones. Es una aproximación para asalariados (sin hijos ni deducciones), con las escalas de 2026 estatal y de Cataluña; para otras comunidades usa la estatal también para la parte autonómica. Con un botón lo guardas en tu perfil.
 
 ## Precios, extractos y bancos
 
@@ -184,8 +206,13 @@ Todo esto es gratis y funciona solo con conexión a internet, sin cuentas de pag
   - **Gasto variable de cada mes** (súper, gasolina…): lo normal de los últimos meses completos que has importado, como estimación de cada categoría.
   - **Traspasos de cada mes a otra cuenta tuya**, como ahorro automático.
   - **Precios que han cambiado** en tus gastos fijos.
+  - **Lo que te pasas a cuentas tuyas que no importas:** un envío con tu nombre («hucha · Laura Gomez Ferrer») se pregunta como traspaso. Tu nombre sale de tus cuentas del banco o lo pones en tu perfil; un recibo que solo lo lleva dentro (el de una financiera, por ejemplo) no cuenta.
+  - **Ingresos que varían:** al reconocer un ingreso que cambia cada mes, cuenta lo de un mes flojo (el segundo más bajo de los últimos 6), no la media.
   - **Pagas extra:** si la nómina de un mes llega doble, o con otro movimiento aparte, se propone con sus pagas extra. Si solo se ve la de verano porque lo importado no llega a diciembre, también se propone la de diciembre. Si la nómina ya la tienes apuntada, se proponen las pagas que le faltan.
   - Hacen falta al menos 3 cargos para reconocer algo mensual; un seguro o un impuesto que solo aparece una vez se pregunta como posible anual. Lo que ignores no vuelve a salir.
+- **En Movimientos**, también propuesto y sin hacer nada hasta que lo confirmes:
+  - **Categoría por parecido:** si ya categorizaste movimientos con el mismo texto (los Bizums a una persona, una tienda), propone la misma para los que no la tienen y, si quieres, crea la regla para los siguientes.
+  - **Gastos compartidos:** pagas la cena de todos y te devuelven su parte por Bizum. Se proponen las devoluciones de la misma persona en los 30 días siguientes, o varios Bizums justo después de un gasto grande. Al juntarlos, el gasto cuenta solo lo tuyo (en el ocio, el presupuesto y los gráficos) y las devoluciones dejan de ser ingresos. En la ficha de cada movimiento puedes añadir otra devolución o **separar** una: nada se borra, y lo que decides a mano no se vuelve a proponer.
 - **Conectar el banco** (Ajustes → Bancos). Se hace con [Enable Banking](https://enablebanking.com):
   - **Qué necesitas:** una cuenta gratuita y una aplicación registrada en su web, que te da un ID y un archivo de clave `.pem`. Después autorizas cada banco desde su propia app o web.
   - **Coste:** es gratis para uso personal («modo restringido»: solo lee tus propias cuentas).
@@ -194,6 +221,7 @@ Todo esto es gratis y funciona solo con conexión a internet, sin cuentas de pag
   - **Bancos:** en octubre de 2026 su lista de España incluía CaixaBank, BBVA, Santander y Sabadell. ING, Openbank, Revolut y Trade Republic no estaban: para esos, importa el extracto.
   - **Dos ordenadores:** algunos bancos solo permiten una sesión por persona, así que vincular el mismo banco en los dos ordenadores puede desconectar uno.
 - **Préstamos.** Si amortizas antes de tiempo, apúntalo en el préstamo y elige si reduces la cuota o el plazo. La app recalcula el cuadro, la fecha de fin y los intereses que te ahorras.
+  - **Cuota final** (financiaciones de coche o moto con valor futuro garantizado): el pago grande del final, el mes siguiente a la última cuota. Cada mes cuenta solo la cuota; la cuota final sigue siendo deuda hasta pagarla, la app avisa unos meses antes para que decidas si la pagas, la refinancias o devuelves el vehículo, y puede crear una meta para ir apartándola.
 - **Perfil de riesgo.** En Ajustes → Perfil hay un cuestionario de 5 preguntas. Tu perfil es el menor entre el riesgo que aguantas y el que te puedes permitir.
 
 ## Desarrollo
@@ -216,7 +244,14 @@ npm run paquete-windows                  # crea dist/Calderilla-Windows.zip (con
   - sube el sueldo, quita un gasto, añade otro y una meta, y cambia una regla;
   - prueba los botones «¿Y si…?» y adelanta parte del préstamo del coche;
   - mira la proyección a 2 años;
-- comprueba que después el Resumen y Ocio siguen igual y que no se ha guardado nada.
+- comprueba que después el Resumen y Ocio siguen igual y que no se ha guardado nada;
+- revisa los datos:
+  - la cuota final de la moto en el Resumen, en su ficha y en su cuadro;
+  - lo prudente de un ingreso que varía;
+  - un envío con tu nombre que se acepta como traspaso;
+  - una cena con tres Bizums que se juntan y luego se separan, mirando cuánto te queda para ocio;
+  - la categoría por parecido y el IRPF;
+- en la Calculadora, que lo que apartas de más con el ahorro automático sale del ocio, y aplica un cambio de verdad.
 
 Si algo no cuadra, termina con error.
 
