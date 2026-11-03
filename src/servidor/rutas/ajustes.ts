@@ -3,13 +3,16 @@ import path from "node:path";
 import type { Hono } from "hono";
 import { html } from "hono/html";
 import { carpetaAjustes, carpetasSugeridas } from "../../config/ajustes.ts";
-import { importeEditable, numeroEditable } from "../../dominio/dinero.ts";
-import { formatoFecha } from "../../dominio/fechas.ts";
+import type { BaseDatos } from "../../datos/db.ts";
+import { importeEditable, leerNumero, numeroEditable } from "../../dominio/dinero.ts";
+import { formatoFecha, mesDe } from "../../dominio/fechas.ts";
+import { brutoDeNeto, estimarIrpf, type Tramo } from "../../reglas/irpf.ts";
 import { PARAMETROS, type ClaveParametro } from "../../reglas/parametros.ts";
 import { PREGUNTAS, puntuar } from "../../reglas/cuestionario.ts";
 import { NOMBRE_ESTABILIDAD, NOMBRE_RIESGO } from "../../reglas/tipos.ts";
 import { ESTABILIDADES, guardarParametros, guardarPerfil, leerMercado, leerParametros, leerPerfil, RIESGOS, type PerfilCompleto } from "../../servicios/configuracion.ts";
 import { fechaDeMarca } from "../../datos/sync.ts";
+import { leerRecurrentes, presupuestoMes } from "../../servicios/finanzas.ts";
 import { importarJson } from "../../servicios/importarJson.ts";
 import { titularSugerido } from "../../servicios/titular.ts";
 import { bd, render, type Estado } from "../app.ts";
@@ -62,6 +65,72 @@ function formularioPerfil(perfil: PerfilCompleto, titularSugerido: string | null
       <a class="boton" href="/ajustes/cuestionario">Calcular mi perfil con 5 preguntas</a>
     </div>
   </form>`;
+}
+
+/**
+ * Las escalas del IRPF para la estimación: la estatal y la de tu comunidad. Si no es Cataluña (la única que trae
+ * la app), se usa la estatal también para la parte autonómica: suele parecerse, pero es una aproximación.
+ */
+function escalasIrpf(base: BaseDatos, comunidad: string): { estatal: Tramo[]; autonomica: Tramo[]; aproximada: boolean } | null {
+  const tramos = (clave: string) => leerMercado(base).find((d) => d.clave === clave)?.valor as Tramo[] | undefined;
+  const estatal = tramos("irpf_general_estatal");
+  if (!estatal) return null;
+  const cataluna = /catal/i.test(comunidad.normalize("NFD").replace(/[̀-ͯ]/g, "")) ? tramos("irpf_general_cataluna") : undefined;
+  return { estatal, autonomica: cataluna ?? estatal, aproximada: !cataluna };
+}
+
+/** «¿Cuál es tu tipo marginal?»: con tu sueldo bruto o, si no lo sabes, con tu nómina neta */
+function tarjetaIrpf(base: BaseDatos, hoy: string, consulta: { bruto: string; neto: string }): Html {
+  const perfil = leerPerfil(base);
+  const escalas = escalasIrpf(base, perfil.comunidad);
+  // La nómina neta de cada mes, de tus ingresos fijos (para proponerla si no sabes el bruto)
+  const ingresos = presupuestoMes(leerRecurrentes(base), mesDe(hoy)).ingresos;
+  const bruto = leerNumero(consulta.bruto);
+  const neto = leerNumero(consulta.neto);
+  const estimacion = escalas && (bruto || neto) ? estimarIrpf(bruto ?? brutoDeNeto((neto ?? 0) * 12, escalas.estatal, escalas.autonomica), escalas.estatal, escalas.autonomica) : null;
+  return html`<section class="tarjeta" id="irpf">
+    <h2>¿Cuál es tu tipo marginal?</h2>
+    <p class="apagado">
+      Es lo que te ahorras de IRPF por cada euro que aportas a un plan de pensiones: con él se mira si te compensa. Aquí lo estimo con tu sueldo (asalariado, sin
+      hijos ni deducciones); lo exacto está en tu declaración de la renta.
+    </p>
+    ${escalas?.aproximada
+      ? html`<p class="apagado pequeno">
+          Solo tengo la escala de Cataluña: para ${perfil.comunidad ? html`«${perfil.comunidad}»` : "tu comunidad"} uso la estatal también para la parte autonómica,
+          que suele parecerse. Pon tu comunidad en tu perfil.
+        </p>`
+      : ""}
+    <form method="get" action="/ajustes#irpf" class="formulario">
+      <div class="fila-campos">
+        ${campo({ etiqueta: "Sueldo bruto al año", nombre: "bruto", valor: consulta.bruto, sufijo: "€", ayuda: "Sale en tu contrato o en el certificado de retenciones." })}
+        ${campo({
+          etiqueta: "O tu nómina neta de cada mes",
+          nombre: "neto",
+          valor: consulta.neto || (bruto ? "" : ingresos ? importeEditable(ingresos) : ""),
+          sufijo: "€",
+          ayuda: "Si no sabes el bruto: lo que te llega cada mes, con las pagas extra repartidas (como en Ingresos y gastos).",
+        })}
+      </div>
+      <div class="botones"><button class="boton" type="submit">Calcular</button></div>
+    </form>
+    ${estimacion
+      ? html`<ul class="lista-plana bloque">
+            <li><span>Sueldo bruto al año${bruto ? "" : " (calculado con tu neto)"}</span><span class="numero">${eur(Math.round(estimacion.bruto * 100))}</span></li>
+            <li><span>Seguridad Social</span><span class="numero">${eur(Math.round(estimacion.cotizaciones * 100))}</span></li>
+            <li><span>IRPF al año</span><span class="numero">${eur(Math.round(estimacion.cuota * 100))} (${pct(estimacion.tipoMedio, 1)} de media)</span></li>
+            <li><span><b>Tu tipo marginal</b></span><span class="numero"><b>${pct(estimacion.marginal, 1)}</b></span></li>
+          </ul>
+          <p class="apagado pequeno">
+            ${estimacion.marginal < 1
+              ? "Con este sueldo casi no pagas IRPF: un plan de pensiones no te ahorraría impuestos."
+              : `Por cada 100 € que aportes a un plan de pensiones te ahorrarías unos ${Math.round(estimacion.marginal)} € de IRPF.`}
+          </p>
+          <form method="post" action="/ajustes/irpf" class="botones">
+            <input type="hidden" name="tipo" value="${Math.round(estimacion.marginal * 10) / 10}" />
+            <button class="boton boton-principal" type="submit">Usar ${pct(Math.round(estimacion.marginal * 10) / 10, 1)} en mi perfil</button>
+          </form>`
+      : ""}
+  </section>`;
 }
 
 /** Exporta todas las tablas (salvo el estado de sincronización) a JSON. */
@@ -135,6 +204,7 @@ export function rutasAjustes(app: Hono, estado: Estado) {
           <h2>Tu perfil</h2>
           ${formularioPerfil(leerPerfil(base), titularSugerido(base))}
         </section>
+        ${tarjetaIrpf(base, estado.hoy(), { bruto: c.req.query("bruto") ?? "", neto: c.req.query("neto") ?? "" })}
         <div class="rejilla">
           <section class="tarjeta">
             <h2>Reglas</h2>
@@ -217,6 +287,13 @@ export function rutasAjustes(app: Hono, estado: Estado) {
       titular: f.texto("titular"),
     });
     return redirigir(c, "/ajustes", { ok: "Perfil guardado." });
+  });
+
+  app.post("/ajustes/irpf", async (c) => {
+    const tipo = (await Formulario.de(c)).numero("tipo");
+    if (tipo === null || tipo < 0 || tipo > 60) return redirigir(c, "/ajustes", { error: "Ese tipo marginal no es válido." });
+    guardarPerfil(bd(estado), { tipoMarginal: tipo });
+    return redirigir(c, "/ajustes", { ok: `Tu tipo marginal es ahora el ${pct(tipo, 1)}.` });
   });
 
   app.get("/ajustes/cuestionario", (c) => {
