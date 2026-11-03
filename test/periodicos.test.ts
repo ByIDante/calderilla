@@ -124,7 +124,11 @@ describe("traspasos entre tus cuentas", () => {
 
 describe("encontrado en tus movimientos (con la base de datos)", () => {
   const carpeta = mkdtempSync(path.join(os.tmpdir(), "calderilla-periodicos-"));
-  after(() => rmSync(carpeta, { recursive: true, force: true }));
+  // Windows no deja borrar un archivo abierto: la base se cierra antes de borrar la carpeta
+  after(() => {
+    bd.cerrar();
+    rmSync(carpeta, { recursive: true, force: true });
+  });
   const bd = new BaseDatos(path.join(carpeta, "datos.db"));
   prepararBase(bd);
   const cat = (nombre: string) => bd.uno<{ id: number }>("SELECT id FROM categorias WHERE nombre = ?", nombre)!.id;
@@ -221,7 +225,11 @@ describe("encontrado en tus movimientos (con la base de datos)", () => {
 
 describe("parecidos que no son lo mismo", () => {
   const carpeta = mkdtempSync(path.join(os.tmpdir(), "calderilla-parecidos-"));
-  after(() => rmSync(carpeta, { recursive: true, force: true }));
+  // Windows no deja borrar un archivo abierto: la base se cierra antes de borrar la carpeta
+  after(() => {
+    bd.cerrar();
+    rmSync(carpeta, { recursive: true, force: true });
+  });
   const bd = new BaseDatos(path.join(carpeta, "datos.db"));
   prepararBase(bd);
   const cat = (nombre: string) => bd.uno<{ id: number }>("SELECT id FROM categorias WHERE nombre = ?", nombre)!.id;
