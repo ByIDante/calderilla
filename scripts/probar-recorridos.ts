@@ -1,6 +1,7 @@
 // Recorre con Playwright (el Chrome instalado) lo que hace la gente, comprobando los números en pantalla:
-// apuntar cobros dos veces al mes y pagas extra, y jugar con la Calculadora sin que cambien tus datos.
-// Saca capturas de cada paso.
+// apuntar cobros dos veces al mes y pagas extra, jugar con la Calculadora sin que cambien tus datos y, después,
+// lo de revisar tus datos (avisos, traspasos, gastos compartidos, categorías, lo prudente, el IRPF) y aplicar
+// una prueba de la Calculadora de verdad. Saca capturas de cada paso.
 //
 //   npm run probar-recorridos [-- carpeta-de-capturas]
 //
@@ -265,6 +266,134 @@ for (const tamano of [
   await pagina.goto(`${base}/ocio`, { waitUntil: "networkidle" });
   comprobar(euros(await pagina.locator(".cifra", { hasText: "Te queda para ocio" }).locator(".cifra-valor").textContent()) === realQueda, "Ocio sigue igual");
   comprobar(bd.leerMeta("sucio") === "0", "y no se ha guardado nada en tus datos");
+  await contexto.close();
+}
+
+// ── 3. Revisar tus datos y aplicar una prueba de verdad (esto sí cambia los datos de ejemplo) ──
+{
+  const id = (concepto: string) => bd.uno<{ id: number }>("SELECT id FROM apuntes WHERE concepto = ? ORDER BY fecha DESC LIMIT 1", concepto)!.id;
+  const ancho = (pagina: Page) => pagina.evaluate(() => document.documentElement.scrollWidth);
+
+  // Antes de tocar nada, en el móvil: las tarjetas nuevas no se salen de lado
+  console.log("\nLo nuevo en el móvil (390 px)");
+  {
+    const contexto = await navegador.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
+    const pagina = await contexto.newPage();
+    for (const [ruta, nombre] of [
+      ["/movimientos", "movimientos"],
+      ["/gastos/detectar", "detectar"],
+      [`/gastos/${ids.moto}`, "moto"],
+      [`/gastos/${ids.traducciones}`, "traducciones"],
+      ["/ajustes?bruto=30000#irpf", "irpf"],
+      [`/calculadora/aplicar?importe_${ids.netflix}=17%2C99&quitar_${ids.clases}=1&liquidez=0`, "aplicar"],
+    ] as const) {
+      await pagina.goto(`${base}${ruta}`, { waitUntil: "networkidle" });
+      const px = await ancho(pagina);
+      comprobar(px <= 391, `${ruta.split("?")[0]} no se sale de lado (${px} px)`);
+      await pagina.screenshot({ path: path.join(capturas, `9-${nombre}-movil.png`), fullPage: true });
+    }
+    await contexto.close();
+  }
+
+  console.log("\nRevisar tus datos (1366 px)");
+  const contexto = await navegador.newContext({ viewport: { width: 1366, height: 900 } });
+  const pagina = await contexto.newPage();
+  const queda = async () => {
+    await pagina.goto(`${base}/ocio`, { waitUntil: "networkidle" });
+    return euros(await pagina.locator(".cifra", { hasText: "Te queda para ocio" }).locator(".cifra-valor").textContent());
+  };
+
+  await pagina.goto(`${base}/`, { waitUntil: "networkidle" });
+  const resumen = (await pagina.textContent("main")) ?? "";
+  comprobar(/toca la cuota final de «Moto»: 3\.000\s€/.test(resumen), "el Resumen avisa de la cuota final de la moto");
+  comprobar(/«Traducciones» varía: .*lo prudente es 250\s€/.test(resumen), "y de que «Traducciones» varía (lo prudente, 250 €)");
+
+  await pagina.goto(`${base}/gastos/${ids.moto}`, { waitUntil: "networkidle" });
+  comprobar(/Cuota final \(la pagas, la refinancias o devuelves el vehículo\)\s*3\.000,00\s€ el 20\/12\/2026/.test((await pagina.textContent("main")) ?? ""), "la ficha de la moto enseña la cuota final y su fecha");
+  await pagina.goto(`${base}/gastos/${ids.moto}/cuadro`, { waitUntil: "networkidle" });
+  comprobar(/Final\s*20\/12\/2026\s*3\.000,00/.test((await pagina.locator("tr", { has: pagina.locator("td:text-is('Final')") }).textContent()) ?? ""), "y su cuadro de amortización la marca como «Final»");
+
+  await pagina.goto(`${base}/gastos/${ids.traducciones}`, { waitUntil: "networkidle" });
+  comprobar(/Lo prudente: 250,00\s€/.test((await pagina.textContent("main")) ?? ""), "la ficha de «Traducciones» calcula lo prudente: 250 €, el segundo mes más flojo");
+  await pagina.click("button:has-text('Usar 250,00')");
+  await pagina.waitForURL(/ok=/);
+  comprobar(/cuenta ahora 250\s€/.test((await pagina.textContent("main")) ?? ""), "al usarlo, cuenta 250 € desde este mes");
+  await pagina.goto(`${base}/gastos`, { waitUntil: "networkidle" });
+  comprobar(!/«Traducciones» varía/.test((await pagina.textContent("main")) ?? ""), "y el aviso desaparece");
+
+  const envio = id("Envío a mi cuenta · Laura;Gomez Ferrer");
+  await pagina.goto(`${base}/gastos/detectar`, { waitUntil: "networkidle" });
+  const traspasos = pagina.locator("section", { has: pagina.locator("h2", { hasText: "Lo que te pasas a cuentas tuyas" }) });
+  comprobar(/Envío a mi cuenta/.test((await traspasos.textContent()) ?? ""), "«Buscar en mis movimientos» pregunta si el envío con tu nombre es un traspaso");
+  await traspasos.screenshot({ path: path.join(capturas, "10-traspasos.png") });
+  await pagina.check(`input[name='ids'][value='t${envio}']`);
+  await pagina.click("button:has-text('Añadir lo marcado')");
+  await esperarHtmx(pagina);
+  comprobar(/1 traspaso a una cuenta tuya/.test((await pagina.textContent("main")) ?? ""), "al aceptarlo, lo cuenta como traspaso");
+  comprobar(bd.uno<{ traspaso: number }>("SELECT traspaso FROM apuntes WHERE id = ?", envio)?.traspaso === 1, "y ya no es un gasto");
+
+  const quedaAntes = await queda();
+  await pagina.goto(`${base}/movimientos`, { waitUntil: "networkidle" });
+  const compartidos = pagina.locator("#compartidos");
+  comprobar(/RESTAURANTE LA PEPICA[\s\S]*te devolvieron 105,00\s€: cuenta 35,00\s€/.test((await compartidos.textContent()) ?? ""), "Movimientos propone juntar la cena con los 3 Bizums");
+  await compartidos.screenshot({ path: path.join(capturas, "11-compartidos.png") });
+  await compartidos.locator("button:has-text('Juntar')").click();
+  await pagina.waitForURL(/ok=/);
+  const cena = pagina.locator("tr", { has: pagina.locator("a:text-is('RESTAURANTE LA PEPICA')") });
+  comprobar(/te devolvieron 105,00\s€: cuenta 35,00\s€/.test((await cena.textContent()) ?? ""), "en la lista, la cena cuenta solo tu parte");
+  comprobar(/devolución de «RESTAURANTE LA PEPICA» \(no cuenta como ingreso\)/.test((await pagina.locator("tr", { hasText: "Marta;Ruiz" }).first().textContent()) ?? ""), "y cada Bizum dice que es su devolución");
+  const quedaJuntos = await queda();
+  comprobar(quedaJuntos - quedaAntes === 105, `y para ocio te quedan 105 € más (${quedaAntes} → ${quedaJuntos} €)`);
+
+  await pagina.goto(`${base}/movimientos/${id("Bizum recibido · Nuria;Gil")}`, { waitUntil: "networkidle" });
+  comprobar(/Es la devolución de RESTAURANTE LA PEPICA/.test((await pagina.textContent("#devoluciones")) ?? ""), "la ficha del Bizum dice de qué gasto es");
+  await pagina.click("#devoluciones button:has-text('Separar de ese gasto')");
+  await pagina.waitForURL(/ok=/);
+  const quedaSeparado = await queda();
+  comprobar(quedaJuntos - quedaSeparado === 35, `al separarlo, la cena vuelve a contar esos 35 € (${quedaJuntos} → ${quedaSeparado} €)`);
+  comprobar(bd.uno("SELECT 1 FROM apuntes WHERE id = ?", id("Bizum recibido · Nuria;Gil")) !== undefined, "sin borrar nada");
+
+  await pagina.goto(`${base}/movimientos`, { waitUntil: "networkidle" });
+  const propuestas = pagina.locator("#categorias-propuestas");
+  comprobar(/Fnac[\s\S]*Compras/i.test((await propuestas.textContent()) ?? ""), "propone «Compras» para la compra de Fnac sin categoría");
+  await propuestas.screenshot({ path: path.join(capturas, "12-categorias.png") });
+  await propuestas.locator("button:has-text('Poner las categorías marcadas')").click();
+  await pagina.waitForURL(/ok=/);
+  const fnac = id("COMPRA TARJ 4589 FNAC SAN AGUSTIN");
+  comprobar(bd.uno<{ nombre: string }>("SELECT c.nombre FROM apuntes a JOIN categorias c ON c.id = a.categoria_id WHERE a.id = ?", fnac)?.nombre === "Compras", "al aceptarlo, la compra queda en «Compras»");
+  comprobar(bd.uno("SELECT 1 FROM reglas_categoria WHERE patron LIKE 'fnac%'") !== undefined, "con una regla para las siguientes");
+
+  await pagina.goto(`${base}/ajustes?bruto=30000#irpf`, { waitUntil: "networkidle" });
+  const irpf = pagina.locator("#irpf");
+  // El perfil de ejemplo no dice comunidad: usa la escala estatal también para la parte autonómica
+  comprobar(/IRPF al año\s*[\d.]+,\d\d\s€/.test((await irpf.textContent()) ?? ""), "con 30.000 € brutos, estima el IRPF del año");
+  await irpf.screenshot({ path: path.join(capturas, "13-irpf.png") });
+  const usar = irpf.locator("button:has-text('Usar')");
+  const marginal = Number(/Usar ([\d,]+)/.exec((await usar.textContent()) ?? "")?.[1]?.replace(",", "."));
+  comprobar(marginal > 25 && marginal < 35, `con un tipo marginal razonable (${marginal} %)`);
+  await usar.click();
+  await pagina.waitForURL(/ok=/);
+  comprobar(Number(bd.uno<{ valor: string }>("SELECT valor FROM perfil WHERE clave = 'tipoMarginal'")?.valor) === marginal, "y «Usar» lo guarda en tu perfil");
+
+  // La Calculadora: lo que apartas de verdad sale del ocio; y una prueba que se aplica
+  await pagina.goto(`${base}/calculadora`, { waitUntil: "networkidle" });
+  const [ahorroAntes] = await fila(pagina, "Toca ahorrar este mes");
+  await cambiar(pagina, () => pagina.fill("#campo-ahorro_automatico", String(ahorroAntes + 200)));
+  const ahorro = await fila(pagina, "Toca ahorrar este mes");
+  const ocio = await fila(pagina, "Para ocio este mes");
+  comprobar(ahorro[1] - ahorro[0] === 200 && ocio[0] - ocio[1] === 200, `si tu ahorro automático aparta 200 € más de lo que pide la regla, salen del ocio (${ocio[0]} → ${ocio[1]} €)`);
+  await pagina.click(".calculadora-datos a:has-text('Volver a mis números')");
+  await esperarHtmx(pagina);
+  await cambiar(pagina, () => pagina.fill(`#importe-${ids.netflix}`, "17,99"));
+  await pagina.click("#calculadora-resultado a:has-text('Aplicar estos cambios de verdad')");
+  await pagina.waitForURL(/\/calculadora\/aplicar/);
+  comprobar(/«Netflix»: de 13,99\s€ a 17,99\s€/.test((await pagina.textContent("#aplicar")) ?? ""), "«Aplicar estos cambios de verdad» enseña el cambio antes de guardarlo");
+  await pagina.screenshot({ path: path.join(capturas, "14-aplicar.png"), fullPage: true });
+  await pagina.click("button:has-text('Aplicar lo marcado')");
+  await pagina.waitForURL(/ok=/);
+  comprobar(/1 cambio aplicado/.test((await pagina.textContent("main")) ?? ""), "al confirmarlo, avisa de que lo ha aplicado");
+  await pagina.goto(`${base}/gastos`, { waitUntil: "networkidle" });
+  comprobar(/17,99/.test((await pagina.locator("tr", { hasText: "Netflix" }).first().textContent()) ?? ""), "y Netflix cuenta 17,99 € desde hoy");
   await contexto.close();
 }
 

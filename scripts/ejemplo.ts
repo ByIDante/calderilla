@@ -34,7 +34,7 @@ export async function arrancarEjemplo(puerto: number) {
 
   const cat = (nombre: string) => bd.uno<{ id: number }>("SELECT id FROM categorias WHERE nombre = ?", nombre)!.id;
   const fijo = { fin: null, esencial: true, clase: "fijo" as const, nota: null, prestamo: null };
-  guardarPerfil(bd, { estabilidad: "normal", riesgo: "moderado", tipoMarginal: 30, tipoRescate: 21, aportacionEmpresa: 0 });
+  guardarPerfil(bd, { estabilidad: "normal", riesgo: "moderado", tipoMarginal: 30, tipoRescate: 21, aportacionEmpresa: 0, titular: "Laura Gómez Ferrer" });
   // 14 pagas: la nómina con las extras de junio y diciembre, y unas clases que se cobran dos veces al mes
   const nomina = crearRecurrente(bd, {
     ...fijo,
@@ -63,6 +63,19 @@ export async function arrancarEjemplo(puerto: number) {
     importe: 0,
     prestamo: { capital: 1_500_000, tin: 5.5, tae: null, plazoMeses: 60, comisionAmortizacion: 0.5, vinculado: true },
   });
+  // Una moto financiada con cuota final: la última cuota normal en noviembre y el pago grande en diciembre
+  const moto = crearRecurrente(bd, {
+    ...fijo,
+    tipo: "gasto",
+    nombre: "Moto",
+    categoriaId: cat("Transporte"),
+    frecuencia: "mensual",
+    inicio: "2023-12-20",
+    importe: 0,
+    prestamo: { capital: 600_000, tin: 5.85, tae: 6.71, plazoMeses: 36, comisionAmortizacion: 0, vinculado: false, cuotaFinal: 300_000 },
+  });
+  // Un ingreso que varía cada mes (traducciones sueltas): «lo prudente» es un mes flojo
+  const traducciones = crearRecurrente(bd, { ...fijo, tipo: "ingreso", nombre: "Traducciones", categoriaId: null, frecuencia: "mensual", inicio: "2026-04-01", importe: 45000, clase: "estimacion" });
   const cuenta = (nombre: string, tipo: string, entidad: string | null, saldo: number, tae: number | null = null) => {
     const id = bd.ejecutar("INSERT INTO cuentas (nombre, tipo, entidad, tae) VALUES (?, ?, ?, ?)", nombre, tipo, entidad, tae).id;
     guardarSaldo(bd, id, "2026-10-01", saldo);
@@ -103,6 +116,21 @@ export async function arrancarEjemplo(puerto: number) {
   for (const mes of ["2026-06", "2026-07", "2026-08", "2026-09", "2026-10"]) {
     importado(`${mes}-29`, mes === "2026-06" ? 220000 : 110000, "TRANSFERENCIA RECIBIDA RESTAURANTE MARE SL", cuentaNomina, null);
   }
+  for (const [mes, importe] of Object.entries({ "2026-04": 40000, "2026-05": 25000, "2026-06": 60000, "2026-07": 30000, "2026-08": 45000, "2026-09": 20000 })) {
+    const id = importado(`${mes}-15`, importe, "TRANSFERENCIA RECIBIDA TRADUCCIONES", cuentaNomina, null).id;
+    bd.ejecutar("UPDATE apuntes SET recurrente_id = ? WHERE id = ?", traducciones, id);
+  }
+  // Un envío a una cuenta tuya que no importas (lleva tu nombre): «Buscar en mis movimientos» pregunta si es un traspaso
+  importado("2026-10-21", -25000, "Envío a mi cuenta · Laura;Gomez Ferrer", cuentaNomina, null);
+  // Una cena que pagaste tú y tres Bizums de tus amigos: Movimientos propone juntarlos
+  importado("2026-10-24", -14000, "RESTAURANTE LA PEPICA", cuentaNomina, "Restaurantes");
+  importado("2026-10-24", 3500, "Bizum recibido · Marta;Ruiz", cuentaNomina, null);
+  importado("2026-10-25", 3500, "Bizum recibido · Pablo;Sanz Torres", cuentaNomina, null);
+  importado("2026-10-26", 3500, "Bizum recibido · Nuria;Gil", cuentaNomina, null);
+  // Compras en la misma tienda, dos con categoría y una sin: Movimientos propone la misma
+  importado("2026-07-19", -2599, "COMPRA TARJ 4589 FNAC SAN AGUSTIN", cuentaNomina, "Compras");
+  importado("2026-09-02", -4999, "COMPRA TARJ 4589 FNAC SAN AGUSTIN", cuentaNomina, "Compras");
+  importado("2026-10-22", -1999, "COMPRA TARJ 4589 FNAC SAN AGUSTIN", cuentaNomina, null);
   // Un trabajo de fin de semana que paga cada 2 semanas: lo encuentra «Buscar en mis movimientos»
   for (let fecha = "2026-06-05"; fecha <= "2026-10-28"; fecha = sumarDias(fecha, 14)) importado(fecha, 18000, "TRANSFERENCIA RECIBIDA EVENTOS LEVANTE SL", cuentaNomina, null);
   const fondo = bd.ejecutar("INSERT INTO activos (nombre, isin, tipo, renta) VALUES ('Fondo indexado mundial', 'IE00B03HCZ61', 'fondo', 'variable')").id;
@@ -120,7 +148,7 @@ export async function arrancarEjemplo(puerto: number) {
     base: `http://127.0.0.1:${puerto}`,
     estado,
     bd,
-    ids: { coche, fondo, nomina, clases, netflix },
+    ids: { coche, moto, fondo, nomina, clases, netflix, traducciones },
     cerrar() {
       servidor.close();
       estado.sync?.cerrar();

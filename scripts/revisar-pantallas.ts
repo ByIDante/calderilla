@@ -14,8 +14,10 @@ import { arrancarEjemplo } from "./ejemplo.ts";
 
 const capturas = path.resolve(process.argv[2] ?? path.join(os.tmpdir(), "calderilla-capturas"));
 mkdirSync(capturas, { recursive: true });
-const { base, ids, cerrar } = await arrancarEjemplo(5190);
-const { coche, fondo, nomina } = ids;
+const { base, bd, ids, cerrar } = await arrancarEjemplo(5190);
+const { coche, moto, fondo, nomina, netflix, clases, traducciones } = ids;
+// La cena compartida y uno de sus Bizums (sus fichas enseñan «¿Te devolvieron parte?»)
+const apunte = (concepto: string) => bd.uno<{ id: number }>("SELECT id FROM apuntes WHERE concepto = ?", concepto)!.id;
 
 const PAGINAS = [
   "/",
@@ -27,16 +29,23 @@ const PAGINAS = [
   `/gastos/${coche}`,
   `/gastos/${nomina}`,
   `/gastos/${coche}/cuadro`,
+  `/gastos/${moto}`,
+  `/gastos/${moto}/cuadro`,
+  `/gastos/${traducciones}`,
   "/ocio",
   "/movimientos",
   "/movimientos/1",
+  `/movimientos/${apunte("RESTAURANTE LA PEPICA")}`,
+  `/movimientos/${apunte("Bizum recibido · Marta;Ruiz")}`,
   "/cuentas",
   "/cierre",
   "/inversiones",
   `/activos/${fondo}`,
   "/metas",
   "/calculadora",
+  `/calculadora/aplicar?importe_${netflix}=17%2C99&quitar_${clases}=1&liquidez=0`,
   "/ajustes",
+  "/ajustes?bruto=30000",
   "/ajustes/mercado",
   "/ajustes/parametros",
   "/ajustes/cuestionario",
