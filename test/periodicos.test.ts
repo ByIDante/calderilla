@@ -110,7 +110,7 @@ describe("traspasos entre tus cuentas", () => {
     const parejas = emparejarTraspasos(
       [
         cuenta(1, "2026-10-01", -50000, "TRANSFERENCIA A OPENBANK", 1),
-        cuenta(2, "2026-10-02", 50000, "TRANSFERENCIA RECIBIDA IVAN", 2),
+        cuenta(2, "2026-10-02", 50000, "TRANSFERENCIA RECIBIDA LAURA", 2),
         cuenta(3, "2026-10-05", -2000, "COMPRA TARJ BAR PEPE", 1),
         cuenta(4, "2026-10-05", 2000, "BIZUM DE MARIA", 2),
         cuenta(5, "2026-10-07", -10000, "TRANSFERENCIA A JUAN", 1),
