@@ -181,14 +181,18 @@ document.addEventListener("click", (evento) => {
   ultimaMarcada = casilla;
 });
 
-// Tarjetas plegables con data-recordar-plegado: se recuerda si las dejaste cerradas
+// Tarjetas plegables con data-recordar-plegado: se recuerda si las dejaste cerradas. Las que llevan
+// data-plegar-en-movil empiezan cerradas en el móvil (hasta que las abras), para no alargar tanto la página.
 function recordarPlegado(raiz) {
+  const movil = window.matchMedia("(max-width: 700px)").matches;
   for (const detalle of raiz.querySelectorAll?.("details[data-recordar-plegado]") ?? []) {
     const clave = `calderilla:plegado:${detalle.dataset.recordarPlegado}`;
     try {
-      if (localStorage.getItem(clave) === "cerrado") detalle.open = false;
+      const guardado = localStorage.getItem(clave);
+      if (guardado === "cerrado" || (!guardado && movil && "plegarEnMovil" in detalle.dataset)) detalle.open = false;
     } catch {
       // Sin almacenamiento, se queda como venga
+      if (movil && "plegarEnMovil" in detalle.dataset) detalle.open = false;
     }
     detalle.addEventListener("toggle", () => {
       try {

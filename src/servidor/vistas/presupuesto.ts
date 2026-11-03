@@ -21,20 +21,21 @@ export function barrasPresupuesto(lineas: readonly LineaPresupuesto[]): Html {
 function tablaMedias(lineas: readonly LineaPresupuesto[]): Html | string {
   const filas = lineas.filter((l) => l.media !== null && (l.gastado > 0 || l.media > 0)).sort((a, b) => b.gastado - a.gastado || b.media! - a.media!);
   if (!filas.length) return "";
+  // Cuánto más (o menos) que tu media; por encima, en rojo solo si ya es bastante más de lo normal
   const frente = (l: LineaPresupuesto) => {
     if (!l.media) return html`<span class="apagado">nuevo</span>`;
-    const pct = Math.round((l.gastado / l.media) * 100);
-    return pct > 100 ? html`<span class="${disparada(l) ? "negativo" : ""}">+${pct - 100} %</span>` : html`<span class="apagado">${pct} % de tu media</span>`;
+    const cambio = Math.round((l.gastado / l.media - 1) * 100);
+    return cambio > 0 ? html`<span class="${disparada(l) ? "negativo" : ""}">+${cambio} %</span>` : html`<span class="apagado">${cambio ? `−${-cambio} %` : "igual"}</span>`;
   };
   return html`<h3>Frente a lo que sueles gastar</h3>
     <p class="apagado pequeno">Tu media es lo que gastaste al mes en cada categoría en los ${filas[0]!.mesesMedia} meses anteriores.</p>
     <div class="tabla-contenedor">
-      <table class="tabla-apilable">
-        <thead><tr><th>Categoría</th><th class="numero">Este mes</th><th class="numero">Tu media</th><th class="numero">Frente a tu media</th></tr></thead>
+      <table class="tabla-compacta">
+        <thead><tr><th>Categoría</th><th class="numero">Este mes</th><th class="numero">Tu media</th><th class="numero">Diferencia</th></tr></thead>
         <tbody>
           ${filas.map(
             (l) => html`<tr>
-              <td>${l.nombre}</td><td class="numero">${eur(l.gastado)}</td><td class="numero">${eur(l.media!)}</td><td class="numero">${frente(l)}</td>
+              <td>${l.nombre}</td><td class="numero">${eurR(l.gastado)}</td><td class="numero">${eurR(l.media!)}</td><td class="numero">${frente(l)}</td>
             </tr>`,
           )}
         </tbody>
@@ -46,7 +47,7 @@ export function tarjetaPresupuesto(lineas: readonly LineaPresupuesto[], volver: 
   const conLimite = lineas.filter((l) => l.limite);
   const sinLimite = lineas.filter((l) => !l.limite && l.gastado > 0);
   const pasadas = conLimite.filter((l) => l.gastado > l.limite!).length;
-  return html`<details class="tarjeta" id="presupuesto" open data-recordar-plegado="presupuesto-movimientos">
+  return html`<details class="tarjeta" id="presupuesto" open data-recordar-plegado="presupuesto-movimientos" data-plegar-en-movil>
     <summary>
       <h2>Presupuesto por categorías</h2>
       <span class="resumen-plegado">${conLimite.length ? (pasadas ? `${pasadas} de ${conLimite.length} pasadas de su límite` : `${conLimite.length} dentro de su límite`) : "sin límites"}</span>

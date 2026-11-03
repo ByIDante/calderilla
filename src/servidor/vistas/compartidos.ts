@@ -15,8 +15,11 @@ type Categorias = readonly { id: number; nombre: string; tipo: string }[];
 export function tarjetaCategoriasPropuestas(propuestas: readonly PropuestaCategoria[], categorias: Categorias, volver: string): Html | string {
   if (!propuestas.length) return "";
   const n = propuestas.reduce((s, p) => s + p.apunteIds.length, 0);
-  return html`<section class="tarjeta" id="categorias-propuestas">
-    <h2>Te propongo categoría para ${n} ${n === 1 ? "movimiento" : "movimientos"}</h2>
+  return html`<details class="tarjeta" id="categorias-propuestas" open data-recordar-plegado="categorias-propuestas">
+    <summary>
+      <h2>Te propongo categoría</h2>
+      <span class="resumen-plegado">${n} ${n === 1 ? "movimiento" : "movimientos"}</span>
+    </summary>
     <p class="apagado">Ya pusiste categoría a otros con el mismo texto. Marca los que quieras y, si se repiten, crea la regla para que los siguientes se categoricen solos.</p>
     <form method="post" action="/movimientos/proponer-categorias" class="formulario">
       <input type="hidden" name="volver" value="${volver}" />
@@ -49,14 +52,17 @@ export function tarjetaCategoriasPropuestas(propuestas: readonly PropuestaCatego
       </div>
       <div class="botones"><button class="boton boton-principal" type="submit">Poner las categorías marcadas</button></div>
     </form>
-  </section>`;
+  </details>`;
 }
 
 /** «Gastos compartidos»: cada gasto con los Bizums que parecen su devolución, para confirmarlos o descartarlos */
 export function tarjetaCompartidos(propuestas: readonly PropuestaDevolucion[], volver: string): Html | string {
   if (!propuestas.length) return "";
-  return html`<section class="tarjeta" id="compartidos">
-    <h2>Gastos compartidos</h2>
+  return html`<details class="tarjeta" id="compartidos" open data-recordar-plegado="compartidos">
+    <summary>
+      <h2>Gastos compartidos</h2>
+      <span class="resumen-plegado">${propuestas.length} ${propuestas.length === 1 ? "gasto" : "gastos"} con devoluciones</span>
+    </summary>
     <p class="apagado">
       Parece que te devolvieron parte de estos gastos. Si es así, júntalos: el gasto contará solo lo tuyo (en el ocio y en el presupuesto) y las devoluciones dejarán
       de contar como ingresos. Desmarca las que no sean.
@@ -83,7 +89,7 @@ export function tarjetaCompartidos(propuestas: readonly PropuestaDevolucion[], v
         </div>
       </form>`,
     )}
-  </section>`;
+  </details>`;
 }
 
 /** En la ficha de un gasto: lo que te devolvieron (con «Separar») y cómo añadir otra devolución */

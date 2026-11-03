@@ -11,7 +11,7 @@ import { leerRecurrentes } from "../../servicios/finanzas.ts";
 import { guardarLimites, presupuestoPorCategoria } from "../../servicios/presupuesto.ts";
 import { bd, render, type Estado } from "../app.ts";
 import { Formulario, idDe, redirigir } from "../formulario.ts";
-import { botonAccion, campo, casilla, eur, selector, vacio, type Html } from "../vistas/comun.ts";
+import { botonAccion, campo, casilla, eur, eurR, selector, vacio, type Html } from "../vistas/comun.ts";
 import { seccionDevolucionEntrada, seccionDevolucionesGasto, tarjetaCategoriasPropuestas, tarjetaCompartidos } from "../vistas/compartidos.ts";
 import { tarjetaPresupuesto } from "../vistas/presupuesto.ts";
 
@@ -86,6 +86,18 @@ function leerMovimiento(f: Formulario, categorias: Categoria[]): { error: string
 
 /** En «todos los meses» se enseñan como mucho estos (los más recientes) */
 const MAXIMO_TODOS = 300;
+
+/** Lo que conviene saber de un movimiento: si es de un gasto fijo, un traspaso o parte de un gasto compartido */
+function notasMovimiento(m: Movimiento): string {
+  return [
+    m.recurrente ? `es «${m.recurrente}» (gasto fijo, ya contado)` : null,
+    m.traspaso === 1 ? "traspaso entre tus cuentas (no cuenta como gasto ni ingreso)" : null,
+    m.devuelto ? `te devolvieron ${eur(m.devuelto)}: cuenta ${eur(Math.max(-m.importe - m.devuelto, 0))}` : null,
+    m.devuelve_concepto ? `devolución de «${m.devuelve_concepto.slice(0, 40)}» (no cuenta como ingreso)` : null,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+}
 
 export function rutasMovimientos(app: Hono, estado: Estado) {
   const categorias = () => bd(estado).todos<Categoria>("SELECT id, nombre, tipo FROM categorias WHERE archivada = 0 ORDER BY tipo = 'ingreso', nombre");
@@ -290,17 +302,10 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
                         <td class="m-fecha">${formatoFecha(m.fecha)}</td>
                         <td class="m-concepto">
                           <a href="/movimientos/${m.id}?volver=${encodeURIComponent(aqui)}">${m.concepto}</a>
-                          <div class="apagado pequeno">
-                            ${[
-                              m.cuenta,
-                              ORIGEN[m.origen] ?? m.origen,
-                              m.recurrente ? `es «${m.recurrente}» (gasto fijo, ya contado)` : null,
-                              m.traspaso === 1 ? "traspaso entre tus cuentas (no cuenta como gasto ni ingreso)" : null,
-                              m.devuelto ? `te devolvieron ${eur(m.devuelto)}: cuenta ${eur(Math.max(-m.importe - m.devuelto, 0))}` : null,
-                              m.devuelve_concepto ? `devolución de «${m.devuelve_concepto.slice(0, 40)}» (no cuenta como ingreso)` : null,
-                            ]
-                              .filter(Boolean)
-                              .join(" · ")}
+                          <div class="apagado pequeno m-meta">
+                            <span class="m-origen">${[m.cuenta, ORIGEN[m.origen] ?? m.origen].filter(Boolean).join(" · ")}</span>${notasMovimiento(m)
+                              ? html`<span class="m-notas">${notasMovimiento(m)}</span>`
+                              : ""}
                           </div>
                         </td>
                         <td class="numero m-importe ${m.importe > 0 ? "positivo" : ""}">${eur(m.importe)}</td>
@@ -324,18 +329,21 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
             : vacio("No hay movimientos con estos filtros.")}
         </section>
         <div class="rejilla">
-          <section class="tarjeta">
-            <h2>Gastos por categoría</h2>
+          <details class="tarjeta" open data-recordar-plegado="gastos-por-categoria" data-plegar-en-movil>
+            <summary>
+              <h2>${todo ? "Gastos por categoría de lo que ves" : "Gastos por categoría"}</h2>
+              <span class="resumen-plegado">${eurR([...porCategoria.values()].reduce((s, v) => s + v, 0))}</span>
+            </summary>
             ${porCategoria.size
               ? html`<ul class="lista-plana">
                   ${[...porCategoria].sort((a, b) => b[1] - a[1]).map(([nombre, total]) => html`<li><span>${nombre}</span><span class="numero">${eur(total)}</span></li>`)}
                 </ul>`
               : html`<p class="apagado">Sin gastos este mes.</p>`}
-          </section>
-          <section class="tarjeta">
-            <h2>Apuntar un movimiento</h2>
+          </details>
+          <details class="tarjeta" open data-recordar-plegado="apuntar-movimiento" data-plegar-en-movil>
+            <summary><h2>Apuntar un movimiento</h2></summary>
             ${formularioMovimiento("/movimientos", lista, cuentas, { fecha: mes === mesDe(hoy) ? hoy : ultimoDia(mes) })}
-          </section>
+          </details>
         </div>
       `,
     );
@@ -430,6 +438,10 @@ export function rutasMovimientos(app: Hono, estado: Estado) {
             <div class="botones"><button class="boton boton-principal" type="submit">Crear regla</button></div>
           </form>
         </section>
+        <p class="apagado pequeno">
+          ¿Lo apuntaste por error o está repetido?
+          ${botonAccion(`/movimientos/${m.id}/borrar`, "Borrar este movimiento", { estilo: "enlace", confirmar: "¿Borrar este movimiento?", campos: { volver } })}
+        </p>
       `,
     );
   });
