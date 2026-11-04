@@ -3,7 +3,7 @@ import { html } from "hono/html";
 import { fechaDeMarca } from "../../datos/copias.ts";
 import { render } from "../../servidor/estado.ts";
 import { Formulario, redirigir } from "../../servidor/formulario.ts";
-import { botonAccion, campo, vacio, type Html } from "../../servidor/vistas/comun.ts";
+import { aviso, botonAccion, campo, pagina, vacio, type Html } from "../../servidor/vistas/comun.ts";
 import { guardarAjustes, type EstadoMovil } from "../estado.ts";
 
 const fecha = (marca: string) => fechaDeMarca(marca).toLocaleString("es-ES", { dateStyle: "medium", timeStyle: "short" });
@@ -22,6 +22,7 @@ export function tarjetasEsteMovil(estado: EstadoMovil): Html {
         <li><span>Última copia</span><span>${base ? fecha(base) : "ninguna"}</span></li>
         <li><span>Cambios sin copiar</span><span>${local.sucio ? "sí (se copian en unos segundos)" : "no"}</span></li>
         <li><span>Google Drive</span><span>${permiso ? `conectado hasta las ${new Date(permiso.caduca).toLocaleTimeString("es-ES", { timeStyle: "short" })}` : "sin conectar"}</span></li>
+        ${estado.version ? html`<li><span>Versión de la app</span><span class="pequeno">${estado.version}</span></li>` : ""}
       </ul>
       <div class="botones bloque">
         ${botonAccion("/ajustes/copiar", "Guardar copia ahora")}
@@ -55,8 +56,27 @@ export function tarjetasEsteMovil(estado: EstadoMovil): Html {
     </section>`;
 }
 
-/** Lo de Ajustes que solo tiene el móvil: su nombre, su clave de CoinGecko y la lista de copias de Drive. */
+/** Lo de Ajustes que solo tiene el móvil: su nombre, su clave de CoinGecko, la lista de copias de Drive y actualizar. */
 export function rutasMovil(app: Hono, estado: EstadoMovil) {
+  // La banda de «versión nueva» lleva aquí, como en el PC
+  app.get("/reiniciar", (c) =>
+    render(
+      c,
+      estado,
+      { titulo: "Actualizar Calderilla", seccion: "ajustes" },
+      html`<section class="tarjeta">
+        <p>Hay una versión nueva de Calderilla. Se instala en un momento y la app se recarga sola: lo que tienes apuntado no se toca.</p>
+        ${botonAccion("/reiniciar", "Actualizar ahora", { estilo: "secundario" })}
+      </section>`,
+    ),
+  );
+
+  app.post("/reiniciar", (c) => {
+    estado.activarVersion?.();
+    // movil.js recarga la página en cuanto la versión nueva toma el control
+    return c.html(pagina({ titulo: "Actualizando…", seccion: "bienvenida" }, aviso("info", "Instalando la versión nueva. La app se recargará sola en un momento.")));
+  });
+
   app.post("/ajustes/movil", async (c) => {
     const nombre = (await Formulario.de(c)).texto("nombre");
     if (!nombre) return redirigir(c, "/ajustes", { error: "Ponle un nombre al móvil." });
