@@ -26,6 +26,12 @@ export interface EstadoMovil extends Estado {
   /** La dirección de la app («https://calderilla-app.pages.dev»). */
   origen: string;
   ahora: () => number;
+  /** Renovar el permiso sin preguntar no ha funcionado: hasta que se conecte a mano, no se vuelve a intentar. */
+  renovacionFallida?: boolean;
+  /** Pasa a la versión nueva que espera instalada (la pone el service worker). */
+  activarVersion?: () => void;
+  /** La versión de la app que está respondiendo. */
+  version?: string;
 }
 
 export interface Dependencias {

@@ -6,6 +6,8 @@
 
 export interface PeticionVista {
   method: string;
+  /** «navigate» cuando es una página entera (y no htmx o fetch). */
+  mode?: string;
   destination: string;
   referrer: string;
   headers: Headers;

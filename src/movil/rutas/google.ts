@@ -41,7 +41,12 @@ export function rutasGoogle(app: Hono, estado: EstadoMovil) {
     const resultado = leerVuelta(await c.req.json<Record<string, string>>(), peticion?.estado, estado.ahora());
     await estado.almacen.borrar("oauth");
     const volver = peticion?.volver ?? "/";
-    if ("error" in resultado) return c.json({ ok: false, error: resultado.error, volver });
+    if ("error" in resultado) {
+      // Si renovar sin preguntar no ha podido, se sigue en la página y la banda avisa de volver a conectar
+      if (resultado.silencioso) estado.renovacionFallida = true;
+      return c.json({ ok: false, error: resultado.error, volver, seguir: Boolean(resultado.silencioso) });
+    }
+    estado.renovacionFallida = false;
     estado.permiso = resultado.permiso;
     await estado.almacen.guardar("permiso", resultado.permiso);
     // Si la sincronización se paró por el permiso, se vuelve a mirar ya

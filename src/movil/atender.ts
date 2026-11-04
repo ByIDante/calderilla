@@ -1,25 +1,10 @@
 import type { Hono } from "hono";
 import { aviso, pagina } from "../servidor/vistas/comun.ts";
+import { CABECERA_CRUDO, type DatosCrudo } from "./crudo.ts";
 import type { EstadoMovil } from "./estado.ts";
 import { CABECERAS_SEGURIDAD, motivoParaRechazar, type PeticionVista } from "./seguridad.ts";
 
-/** La cabecera con la que la página manda un archivo «en crudo» (ver desdeCrudo). */
-export const CABECERA_CRUDO = "X-Calderilla-Archivo";
-
-export interface DatosCrudo {
-  /** El campo del archivo, su nombre y su tipo. */
-  campo: string;
-  nombre: string;
-  tipo: string;
-  /** Los demás campos del formulario, en orden. */
-  campos: [string, string][];
-}
-
-/**
- * En iPhone, el service worker recibe vacío el cuerpo de un formulario con archivo. Por eso la página lee el
- * archivo y lo manda solo, con el resto del formulario en una cabecera, y aquí se rehace el formulario tal cual:
- * la ruta no se entera.
- */
+/** Rehace el formulario de un archivo subido «en crudo» (crudo.ts), tal cual: la ruta no se entera. */
 export async function desdeCrudo(peticion: Request): Promise<Request> {
   const cabecera = peticion.headers.get(CABECERA_CRUDO);
   if (!cabecera) return peticion;
@@ -40,6 +25,18 @@ export interface Contexto {
   preparar: () => Promise<{ app: Hono; estado: EstadoMovil }>;
   /** Para que el sistema no pare el service worker con algo a medias (FetchEvent.waitUntil). */
   esperar: (trabajo: Promise<unknown>) => void;
+  /** Si hay conexión: sin ella no se intenta renovar el permiso de Google. */
+  enLinea?: () => boolean;
+}
+
+/**
+ * Al abrir una página con el permiso de Google caducado, se renueva sin preguntar: Google vuelve enseguida a la
+ * misma página. Solo con conexión, con la carpeta ya elegida y si la última vez no falló.
+ */
+function hayQueRenovar(peticion: Request, original: PeticionVista, estado: EstadoMovil, enLinea: boolean): boolean {
+  const ruta = new URL(peticion.url).pathname;
+  const caducado = !estado.permiso || estado.permiso.caduca <= estado.ahora();
+  return original.mode === "navigate" && peticion.method === "GET" && enLinea && caducado && Boolean(estado.sync) && !estado.renovacionFallida && !ruta.startsWith("/drive/");
 }
 
 /**
@@ -53,6 +50,10 @@ export async function atender(peticion: Request, original: PeticionVista, contex
     return new Response(String(cuerpo), { status: 403, headers: { ...CABECERAS_SEGURIDAD, "Content-Type": "text/html; charset=utf-8" } });
   }
   const { app, estado } = await contexto.preparar();
+  if (hayQueRenovar(peticion, original, estado, contexto.enLinea?.() ?? true)) {
+    const url = new URL(peticion.url);
+    return Response.redirect(`${contexto.origen}/drive/conectar?silencioso=1&volver=${encodeURIComponent(url.pathname + url.search)}`, 302);
+  }
   const antes = estado.sync?.cambiosTotales();
   const respuesta = await app.fetch(await desdeCrudo(peticion));
   const sync = estado.sync;

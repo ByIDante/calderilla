@@ -10,7 +10,8 @@ import { leerNombre, nombreCopia } from "../src/datos/copias.ts";
 import { BaseDatos } from "../src/datos/db.ts";
 import { almacenEnMemoria } from "../src/movil/almacen.ts";
 import { crearAppMovil } from "../src/movil/app.ts";
-import { atender, CABECERA_CRUDO, type DatosCrudo } from "../src/movil/atender.ts";
+import { atender } from "../src/movil/atender.ts";
+import { CABECERA_CRUDO, type DatosCrudo } from "../src/movil/crudo.ts";
 import { arrancar, type EstadoMovil } from "../src/movil/estado.ts";
 import { CLIENTE_GOOGLE, PERMISO_DRIVE } from "../src/movil/google.ts";
 import { arrancarSqlite, MotorWasm } from "../src/movil/sqlite/motor.ts";
@@ -215,6 +216,26 @@ describe("la app en el móvil", () => {
     await terminar();
     assert.deepEqual(fallos, []);
     assert.ok(vistas.size > 30, `recorridas ${vistas.size} páginas`);
+  });
+
+  it("al abrir una página con el permiso caducado, lo renueva sin preguntar si hay conexión", async () => {
+    const navegar = (ruta: string, enLinea = true) =>
+      atender(new Request(`${ORIGEN}${ruta}`), { method: "GET", mode: "navigate", destination: "document", referrer: "", headers: new Headers() }, { origen: ORIGEN, preparar: async () => ({ app, estado }), esperar: () => {}, enLinea: () => enLinea });
+    const bueno = estado.permiso;
+    estado.permiso = { token: "bueno", caduca: estado.ahora() - 1 };
+    const renovar = await navegar("/ocio?mes=2026-10");
+    assert.equal(renovar.status, 302);
+    assert.equal(renovar.headers.get("location"), `${ORIGEN}/drive/conectar?silencioso=1&volver=%2Focio%3Fmes%3D2026-10`);
+    const conectar = await pedir("/drive/conectar?silencioso=1&volver=%2Focio%3Fmes%3D2026-10");
+    assert.equal(new URL(conectar.headers.get("location")!).searchParams.get("prompt"), "none", "sin preguntar nada");
+    assert.equal((await navegar("/ocio", false)).status, 200, "sin conexión no se intenta");
+    // Si Google no puede sin preguntar, se sigue en la página y no se insiste
+    const sinSesion = await (await conectarGoogle((state) => ({ error: "interaction_required", state }))).json();
+    assert.equal(sinSesion.seguir, true);
+    assert.equal((await navegar("/ocio")).status, 200);
+    estado.renovacionFallida = false;
+    estado.permiso = bueno;
+    await terminar();
   });
 
   it("si el permiso de Google caduca, lo avisa y deja seguir apuntando", async () => {
