@@ -10,7 +10,7 @@ import { guardarSaldo, leerCuentas, NOMBRE_TIPO_CUENTA, type Cuenta, type TipoCu
 import { leerRecurrentes } from "../../servicios/finanzas.ts";
 import { cobrosAlCerrar } from "../../servicios/revision.ts";
 import { contexto } from "../../servicios/situacion.ts";
-import { bd, render, type Estado } from "../app.ts";
+import { bd, render, type Estado } from "../estado.ts";
 import { Formulario, idDe, redirigir } from "../formulario.ts";
 import { botonAccion, campo, eur, eurR, pct, selector, vacio, type Html } from "../vistas/comun.ts";
 

@@ -8,7 +8,7 @@ import { esAhorro } from "../../servicios/cuentas.ts";
 import { contexto } from "../../servicios/situacion.ts";
 import { actualizarPrecios, cotizar, guardarCotizacion } from "../../precios/actualizar.ts";
 import { buscarCoingecko, buscarYahoo, type ResultadoBusqueda } from "../../precios/fuentes.ts";
-import { bd, render, type Estado } from "../app.ts";
+import { bd, render, type Estado } from "../estado.ts";
 import { Formulario, idDe, redirigir } from "../formulario.ts";
 import { botonAccion, campo, casilla, cifra, eur, eurR, grafico, pct, porque, selector, vacio, type Html } from "../vistas/comun.ts";
 import { listaDesbloqueos, tarjetaEtapa } from "../vistas/escalera.ts";

@@ -4,7 +4,7 @@ import { FRECUENCIAS } from "../../dominio/recurrencia.ts";
 import { aplicarPrueba, cambiosAplicables } from "../../servicios/aplicarPrueba.ts";
 import { importeDelMes, PARAMETROS_PRUEBA, simular, sinCambios, type Base, type CambioMeta, type ParametroPrueba, type Prueba } from "../../servicios/calculadora.ts";
 import { construir } from "../../servicios/situacion.ts";
-import { bd, render, type Estado } from "../app.ts";
+import { bd, render, type Estado } from "../estado.ts";
 import { Formulario, redirigir } from "../formulario.ts";
 import { resultadoCalculadora, vistaAplicar, vistaCalculadora, type DatosCalculadora } from "../vistas/calculadora.ts";
 

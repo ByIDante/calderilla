@@ -10,7 +10,7 @@ import { calcularPropuestas } from "../../servicios/periodicos.ts";
 import { avisosPresupuesto, gastoPorCategoriaMeses, presupuestoPorCategoria } from "../../servicios/presupuesto.ts";
 import { revisarDatos } from "../../servicios/revision.ts";
 import { contexto, ocioGastadoEn } from "../../servicios/situacion.ts";
-import { bd, render, type Estado } from "../app.ts";
+import { bd, render, type Estado } from "../estado.ts";
 import { Formulario, redirigir } from "../formulario.ts";
 import { vistaAnio } from "../vistas/anio.ts";
 import { necesitaDesglose } from "../vistas/cobros.ts";

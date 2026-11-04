@@ -15,7 +15,8 @@ import { fechaDeMarca } from "../../datos/sync.ts";
 import { leerRecurrentes, presupuestoMes } from "../../servicios/finanzas.ts";
 import { importarJson } from "../../servicios/importarJson.ts";
 import { titularSugerido } from "../../servicios/titular.ts";
-import { bd, render, type Estado } from "../app.ts";
+import type { Estado } from "../app.ts";
+import { bd, render } from "../estado.ts";
 import { Formulario, redirigir } from "../formulario.ts";
 import { aviso, botonAccion, campo, eur, pct, selector, vacio, type Html } from "../vistas/comun.ts";
 

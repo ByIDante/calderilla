@@ -2,7 +2,7 @@ import type { Context, Hono } from "hono";
 import { html } from "hono/html";
 import { formatoFecha, mesDe, nombreMes, primerDia, sumarMesesAMes, ultimoDia } from "../../dominio/fechas.ts";
 import { contexto, ocioGastadoEn } from "../../servicios/situacion.ts";
-import { bd, render, type Estado } from "../app.ts";
+import { bd, render, type Estado } from "../estado.ts";
 import { Formulario, idDe, redirigir } from "../formulario.ts";
 import { botonAccion, campo, cifra, eur, eurR, porque, selector, vacio, type Html } from "../vistas/comun.ts";
 import { barraReparto, medidorOcio, pasosOcio, tablaPasos } from "../vistas/reparto.ts";

@@ -4,7 +4,7 @@ import { importeEditable } from "../../dominio/dinero.ts";
 import { diferenciaMeses, formatoFecha } from "../../dominio/fechas.ts";
 import { leerParametros } from "../../servicios/configuracion.ts";
 import { leerCuentas } from "../../servicios/cuentas.ts";
-import { bd, render, type Estado } from "../app.ts";
+import { bd, render, type Estado } from "../estado.ts";
 import { Formulario, idDe, redirigir } from "../formulario.ts";
 import { barra, botonAccion, campo, eur, selector, vacio } from "../vistas/comun.ts";
 

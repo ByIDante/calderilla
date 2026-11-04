@@ -6,7 +6,7 @@ import { adivinar, firma, interpretar, leerArchivo, type Configuracion, type Fil
 import { leerCuentas } from "../../servicios/cuentas.ts";
 import { importar, leerReglas, perfilPorFirma, proponer } from "../../servicios/importacion.ts";
 import { calcularPropuestas } from "../../servicios/periodicos.ts";
-import { bd, render, type Estado } from "../app.ts";
+import { bd, render, type Estado } from "../estado.ts";
 import { Formulario, idDe, redirigir } from "../formulario.ts";
 import { botonAccion, campo, casilla, eur, selector, vacio } from "../vistas/comun.ts";
 

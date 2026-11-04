@@ -9,7 +9,7 @@ import { devolucionesDe, entradasCercanas, gastosCercanos, NETO, proponerDevoluc
 import { leerCuentas } from "../../servicios/cuentas.ts";
 import { leerRecurrentes } from "../../servicios/finanzas.ts";
 import { guardarLimites, presupuestoPorCategoria } from "../../servicios/presupuesto.ts";
-import { bd, render, type Estado } from "../app.ts";
+import { bd, render, type Estado } from "../estado.ts";
 import { Formulario, idDe, redirigir } from "../formulario.ts";
 import { botonAccion, campo, casilla, eur, eurR, selector, vacio, type Html } from "../vistas/comun.ts";
 import { seccionDevolucionEntrada, seccionDevolucionesGasto, tarjetaCategoriasPropuestas, tarjetaCompartidos } from "../vistas/compartidos.ts";

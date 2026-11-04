@@ -19,7 +19,7 @@ import {
 import { aceptarPropuestas, calcularPropuestas, ignorarPropuesta, marcarTraspasos, type Eleccion } from "../../servicios/periodicos.ts";
 import { ingresoPrudente, revisarDatos } from "../../servicios/revision.ts";
 import { leerSuscripciones, marcarSuscripcion } from "../../servicios/suscripciones.ts";
-import { bd, render, type Estado } from "../app.ts";
+import { bd, render, type Estado } from "../estado.ts";
 import { Formulario, idDe, redirigir } from "../formulario.ts";
 import { frasePresupuesto, mesesDeOpcion, necesitaDesglose } from "../vistas/cobros.ts";
 import { aviso, claveAviso, eurR } from "../vistas/comun.ts";

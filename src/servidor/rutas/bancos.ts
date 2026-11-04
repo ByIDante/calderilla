@@ -6,7 +6,8 @@ import type { Banco } from "../../bancos/enablebanking.ts";
 import { formatoFecha } from "../../dominio/fechas.ts";
 import { leerCuentas } from "../../servicios/cuentas.ts";
 import type { BaseDatos } from "../../datos/db.ts";
-import { bd, render, type Estado } from "../app.ts";
+import type { Estado } from "../app.ts";
+import { bd, render } from "../estado.ts";
 import { Formulario, redirigir } from "../formulario.ts";
 import { aviso, botonAccion, campo, selector, vacio } from "../vistas/comun.ts";
 
