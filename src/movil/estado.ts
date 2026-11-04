@@ -32,6 +32,8 @@ export interface EstadoMovil extends Estado {
   activarVersion?: () => void;
   /** La versión de la app que está respondiendo. */
   version?: string;
+  /** Cuando cambia el estado de la sincronización (el service worker se lo cuenta a las páginas abiertas). */
+  alCambiarSync?: () => void;
 }
 
 export interface Dependencias {
@@ -94,6 +96,7 @@ export function abrirSync(estado: EstadoMovil, guardada: Uint8Array | null): Sin
       equipoNombre: estado.ajustes.equipoNombre,
       alAbrir: prepararBase,
       guardarLocal: (bytes) => estado.almacen.guardar("base", bytes),
+      alCambiar: () => estado.alCambiarSync?.(),
       ahora: () => new Date(estado.ahora()),
     },
     guardada,

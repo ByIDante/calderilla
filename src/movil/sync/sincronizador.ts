@@ -36,6 +36,8 @@ export interface OpcionesMovil {
   alAbrir: (bd: BaseDatos) => void;
   /** Guarda la base local (en el móvil, en IndexedDB): se llama tras cambiarla por otra o tocar su estado. */
   guardarLocal: (bytes: Uint8Array) => Promise<void>;
+  /** Cuando cambia lo que enseña el indicador: si está subiendo, si queda algo por subir o si hay un error. */
+  alCambiar?: () => void;
   ahora?: () => Date;
 }
 
@@ -63,6 +65,7 @@ export class SincronizadorMovil implements Sincronia {
   #motor: MotorWasm;
   #bd: BaseDatos;
   #cola: Promise<unknown> = Promise.resolve();
+  #trabajando = 0;
   #ultimaComprobacion = 0;
   #temporizador: ReturnType<typeof setTimeout> | undefined;
   /** Se cumple cuando sale el envío programado (aunque se reprograme varias veces antes). */
@@ -105,9 +108,24 @@ export class SincronizadorMovil implements Sincronia {
     await this.#opciones.guardarLocal(this.#motor.aBytes());
   }
 
+  /** Si está hablando con la carpeta ahora mismo (para el indicador de «subiendo»). */
+  get ocupado(): boolean {
+    return this.#trabajando > 0;
+  }
+
   /** Lo que toca la carpeta va de uno en uno: lo siguiente espera a que acabe lo anterior, salga bien o mal. */
   #enCola<T>(trabajo: () => Promise<T>): Promise<T> {
-    const hecho = this.#cola.then(trabajo, trabajo);
+    const conAviso = async () => {
+      this.#trabajando++;
+      this.#opciones.alCambiar?.();
+      try {
+        return await trabajo();
+      } finally {
+        this.#trabajando--;
+        this.#opciones.alCambiar?.();
+      }
+    };
+    const hecho = this.#cola.then(conAviso, conAviso);
     this.#cola = hecho.catch(() => {});
     return hecho;
   }
@@ -165,6 +183,7 @@ export class SincronizadorMovil implements Sincronia {
   /** Tras un cambio, espera un poco por si llegan más y sube una sola copia. */
   programarEnvio(esperaMs = 1_500) {
     clearTimeout(this.#temporizador);
+    this.#opciones.alCambiar?.();
     if (!this.#programado) {
       let avisar = () => {};
       const hecho = new Promise<void>((listo) => (avisar = listo));
