@@ -65,18 +65,35 @@ export function aviso(nivel: Banda["nivel"], contenido: string | Html, enlace?: 
   </div>`;
 }
 
+/** Lo que cambia de la página entre el PC y el móvil. Por defecto, lo del PC. */
+export interface Plataforma {
+  /** El contenido de <meta name="viewport">. */
+  viewport: string;
+  /** Lo que se añade al final de <head> (en el móvil, el manifiesto, sus estilos y su script). */
+  cabecera: Html;
+  /** Lo que va justo después del menú de secciones (en el móvil, la barra inferior). */
+  menu: (seccion: Seccion) => Html;
+}
+
+let plataforma: Plataforma = { viewport: "width=device-width, initial-scale=1", cabecera: raw(""), menu: () => raw("") };
+
+/** La usa el móvil al arrancar para cambiar lo suyo; el PC no la llama. */
+export function usarPlataforma(cambios: Partial<Plataforma>) {
+  plataforma = { ...plataforma, ...cambios };
+}
+
 export function pagina(op: OpcionesPagina, contenido: Html): Html {
   return html`<!doctype html>
     <html lang="es">
       <head>
         <meta charset="utf-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1" />
+        <meta name="viewport" content="${plataforma.viewport}" />
         <title>${op.titulo} · Calderilla</title>
         <link rel="icon" href="/estatico/icono.svg" type="image/svg+xml" />
         <link rel="stylesheet" href="/estatico/estilos.css" />
         <script src="/estatico/htmx.min.js" defer></script>
         <script src="/estatico/chart.umd.min.js" defer></script>
-        <script src="/estatico/app.js" defer></script>
+        <script src="/estatico/app.js" defer></script>${plataforma.cabecera}
       </head>
       <body hx-boost="true">
         <a class="saltar" href="#contenido">Ir al contenido</a>
@@ -88,7 +105,7 @@ export function pagina(op: OpcionesPagina, contenido: Html): Html {
               : html`<ul>
                   ${SECCIONES.map((s) => html`<li><a href="${s.ruta}" ${s.id === op.seccion ? raw('aria-current="page"') : ""}>${s.nombre}</a></li>`)}
                 </ul>`}
-          </nav>
+          </nav>${plataforma.menu(op.seccion)}
           <main id="contenido">
             ${(op.bandas ?? []).map((b) => aviso(b.nivel, b.texto, b.enlace))} ${op.ok ? aviso("logro", op.ok) : ""} ${op.error ? aviso("error", op.error) : ""}
             <h1>${op.titulo}</h1>
