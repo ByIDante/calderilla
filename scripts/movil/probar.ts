@@ -31,9 +31,19 @@ const nueva = `${primera}-nueva`;
 construir(primera);
 
 const fallos: string[] = [];
+// En GitHub Actions, cada fallo sale además como aviso en la propia ejecución (se ve sin abrir el registro)
+const enGithub = Boolean(process.env.GITHUB_ACTIONS);
+const avisarEnGithub = (texto: string) => enGithub && console.log(`::error title=Prueba de la app del móvil::${texto.replace(/\n/g, "%0A")}`);
+process.on("uncaughtException", (error) => {
+  avisarEnGithub(`Se ha parado: ${error.message}`);
+  throw error;
+});
 const comprobar = (cierto: boolean, texto: string) => {
   console.log(`  ${cierto ? "✓" : "✗"} ${texto}`);
-  if (!cierto) fallos.push(texto);
+  if (!cierto) {
+    fallos.push(texto);
+    avisarEnGithub(texto);
+  }
 };
 async function hasta(condicion: () => boolean | Promise<boolean>, ms = 10_000) {
   for (const fin = Date.now() + ms; Date.now() < fin; await new Promise((r) => setTimeout(r, 200))) if (await condicion()) return true;
