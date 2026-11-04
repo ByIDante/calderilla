@@ -74,6 +74,22 @@ La primera vez te pide una **carpeta de datos**. Elige una que se sincronice ent
 - **Copias de seguridad.** Esas copias ya hacen de copia de seguridad: se guarda todo de la última semana, una copia por día del último mes y una por mes del último año. En Ajustes también puedes exportarlo todo a JSON.
 - **Nada va a GitHub.** Ni tus datos ni tus claves se suben, y `.gitignore` y un hook de git lo impiden. Los ajustes de cada ordenador (carpeta de datos y claves) están en `%APPDATA%\calderilla` en Windows, `~/.config/calderilla` en Linux y `~/Library/Application Support/calderilla` en macOS.
 
+## En el móvil
+
+Calderilla también funciona como una app en el móvil, sin tiendas de apps: se instala desde **https://calderilla-app.pages.dev**. Funciona sin conexión y se sincroniza con tus ordenadores a través de la misma carpeta de Google Drive.
+
+1. **Ábrela en el móvil** y añádela a la pantalla de inicio:
+   - **Android:** en Chrome, menú ⋮ → «Instalar app» (o «Añadir a pantalla de inicio»).
+   - **iPhone:** en **Safari**, Compartir → «Añadir a pantalla de inicio». Todavía se está probando en iPhone.
+2. **Conecta tu Google Drive.** Google avisa de que no ha verificado la app (es para ti y tus amigos, no para el público): pulsa «Configuración avanzada» → «Ir a…». Si te pregunta a qué puede acceder, marca Google Drive.
+3. **Elige tu carpeta de copias**: la misma que usa Calderilla en tu ordenador (sincronizada con Google Drive para ordenador o con rclone). Si no tienes Calderilla en ningún ordenador, crea una nueva.
+4. **Ponle nombre al móvil** y empieza: se trae la última copia y ya está.
+
+- **Cómo se guarda.** Lo que apuntas se guarda en el móvil al momento y, a los pocos segundos, sube a Drive una copia nueva, con las mismas reglas que los ordenadores: nada se sobrescribe y, si guardas en dos sitios a la vez, eliges con qué versión sigues.
+- **El permiso de Google** dura una hora y se renueva solo al abrir la app. Si un día no puede, la banda de arriba te avisa: lo apuntado se queda en el móvil y sube al volver a conectar.
+- **Lo que no está en el móvil:** conectar el banco, actualizar los precios de Yahoo (llegan del ordenador) y cambiar la carpeta de datos.
+- **Tus datos** no pasan por ningún servidor: están en el móvil y en tu Drive. Lo explica la [política de privacidad](https://calderilla-app.pages.dev/privacidad).
+
 ## La escalera de inversión
 
 La etapa actual es la primera cuyo requisito aún no cumples:
@@ -258,7 +274,12 @@ npm run typecheck  # comprobación de tipos
 npm run revisar-pantallas -- capturas   # revisa todas las páginas en móvil, tablet, portátil y pantallas grandes
 npm run probar-recorridos -- capturas   # apunta pagas extra y juega con la Calculadora en el navegador, comprobando los números
 npm run paquete-windows                  # crea dist/Calderilla-Windows.zip (con Node y dependencias dentro)
+npm run movil:construir                  # construye la app del móvil en dist-movil/
+npm run movil:servir                     # la sirve en local como Cloudflare Pages (http://localhost:5199)
+npm run movil:probar                     # la prueba en un Chrome como de móvil, con un Google Drive falso
 ```
+
+**La app del móvil** es la misma app, entera dentro del *service worker* del navegador: las mismas pantallas (Hono), SQLite en WebAssembly con la base en memoria, guardada en IndexedDB tras cada cambio, y la sincronización por copias contra la API de Google Drive. `movil:probar` hace la primera vez (Google, la carpeta, traerse los datos del PC), recorre todas las pantallas, apunta y comprueba que la copia llega a Drive y el PC la abre, para el *service worker*, quita la conexión, provoca un conflicto y pasa a una versión nueva. Con `-- --copia ruta/a/una/copia.db` usa esa copia en vez de los datos de ejemplo. Cuando la Comprobación pasa en `main`, GitHub Actions la prueba y la publica en Cloudflare Pages.
 
 `paquete-windows` empaqueta el último commit (hay que tenerlo todo en commit) con Node 24 para Windows, comprobado con las sumas de nodejs.org, y las dependencias ya instaladas. Para que la gente lo descargue, súbelo a una release de GitHub con el nombre `Calderilla-Windows.zip`: el enlace de «la forma fácil» siempre apunta a la última. Solo hace falta un paquete nuevo si cambia la versión de Node; el código se actualiza solo desde la rama `main`, y las dependencias se reinstalan si cambia `package-lock.json`.
 
@@ -307,6 +328,7 @@ src/
   precios/                precios (Yahoo Finance, CoinGecko) y tipos de cambio (BCE)
   importar/               lectura de extractos CSV y Excel
   bancos/                 conexión con Enable Banking
-  servidor/               rutas, vistas y seguridad de la web local
+  servidor/               rutas, vistas y seguridad de la web local (montar.ts y estado.ts, comunes al móvil)
+  movil/                  la app del móvil: SQLite en WebAssembly, Google Drive, service worker y página
 test/                     tests (sin red: las respuestas de las APIs están grabadas)
 ```
