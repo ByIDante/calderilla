@@ -130,12 +130,14 @@ console.log("Las pantallas en el móvil, en claro y en oscuro");
 // Lo mismo que revisar-pantallas: nada se sale, se lee bien y se puede pulsar con el dedo
 const capturas = process.argv.includes("--capturas") ? path.resolve(process.argv[process.argv.indexOf("--capturas") + 1]!) : null;
 const problemas: string[] = [];
-for (const oscuro of [false, true]) {
+// También con una letra más ancha (DejaVu Sans, la de los ejecutores de GitHub): en algunos móviles no cabe lo mismo
+for (const [oscuro, letra] of [[false, null], [true, null], [false, "DejaVu Sans"]] as const) {
   await pagina.emulateMedia({ colorScheme: oscuro ? "dark" : "light" });
   for (const ruta of ["/", "/ocio", "/apuntar", "/movimientos", "/mas", "/gastos", "/ajustes"]) {
     await pagina.goto(`${base}${ruta}`);
-    for (const problema of await pagina.evaluate(revisar)) problemas.push(`${oscuro ? "oscuro " : ""}${ruta}: ${problema}`);
-    if (capturas) await pagina.screenshot({ path: path.join(capturas, `${oscuro ? "oscuro-" : ""}${ruta === "/" ? "resumen" : ruta.slice(1)}.png`), fullPage: true });
+    if (letra) await pagina.addStyleTag({ content: `* { font-family: "${letra}" !important; }` });
+    for (const problema of await pagina.evaluate(revisar)) problemas.push(`${oscuro ? "oscuro " : ""}${letra ? `${letra} ` : ""}${ruta}: ${problema}`);
+    if (capturas && !letra) await pagina.screenshot({ path: path.join(capturas, `${oscuro ? "oscuro-" : ""}${ruta === "/" ? "resumen" : ruta.slice(1)}.png`), fullPage: true });
   }
 }
 await pagina.emulateMedia({ colorScheme: "light" });
