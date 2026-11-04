@@ -1,3 +1,6 @@
+# El manifiesto lleva un solo color (theme_color y background_color) y Chrome pinta con él la barra de abajo del
+# sistema en la app instalada: no puede cambiar con el modo oscuro. Va el oscuro, que en modo claro se ve como una
+# franja oscura y en modo oscuro no deslumbra. La barra de arriba sí sigue al modo (theme-color de cada página).
 # Cabeceras de Cloudflare Pages. Las páginas de la app las genera el service worker, que pone las suyas
 # (movil/seguridad.ts). El propio sw.js no lleva política de contenido: le limitaría hablar con Google Drive.
 /sw.js
