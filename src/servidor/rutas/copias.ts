@@ -74,7 +74,7 @@ export function rutasCopias(app: Hono, estado: Estado) {
           "Se han guardado cambios en dos sitios a la vez (en otro ordenador, o aquí mientras la carpeta no estaba sincronizada). Calderilla no mezcla nada por su cuenta: elige con qué versión sigues. Las demás no se borran, quedan apartadas en la carpeta de copias.",
         )}
         <div class="opciones">
-          ${localConCambios ? tarjeta("Este ordenador (con cambios sin guardar)", local, "local") : ""}
+          ${localConCambios ? tarjeta(`${estado.esteEquipo ?? "Este ordenador"} (con cambios sin guardar)`, local, "local") : ""}
           ${versiones.map((v, i) => tarjeta(`Versión de ${resumenes[i]!.equipo}`, resumenes[i]!, v.archivo))}
         </div>
       `,

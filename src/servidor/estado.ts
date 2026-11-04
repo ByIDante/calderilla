@@ -25,6 +25,8 @@ export interface Estado {
   versionNueva?: "instalada" | "disponible";
   /** Avisos de la banda superior que solo tiene una plataforma (en el PC, los permisos de los bancos). */
   bandasPlataforma?: () => Banda[];
+  /** Cómo se llama este equipo en los textos («Este ordenador» si no se dice otra cosa). */
+  esteEquipo?: string;
 }
 
 /** La base de datos de esta petición (solo existe con una carpeta de datos elegida). */
