@@ -48,7 +48,11 @@ usarPlataforma({
   viewport: "width=device-width, initial-scale=1, viewport-fit=cover",
   menu: (seccion) => barraMovil(seccion, actual, self.navigator.onLine),
   cabecera: raw(
-    '<link rel="manifest" href="/manifest.webmanifest" /><meta name="theme-color" content="#f6f4ef" /><link rel="apple-touch-icon" href="/icono-180.png" /><link rel="stylesheet" href="/estatico/movil.css" /><script src="/estatico/movil.js" defer></script>',
+    // Las barras del sistema (la de la hora y la de abajo) van del color de la cabecera, también en modo oscuro.
+    // movil.js las ajusta además al color de verdad, por si el navegador no entiende el «media»
+    '<link rel="manifest" href="/manifest.webmanifest" /><meta name="color-scheme" content="light dark" />' +
+      '<meta name="theme-color" media="(prefers-color-scheme: light)" content="#fffefb" /><meta name="theme-color" media="(prefers-color-scheme: dark)" content="#1c1f23" />' +
+      '<link rel="apple-touch-icon" href="/icono-180.png" /><link rel="stylesheet" href="/estatico/movil.css" /><script src="/estatico/movil.js" defer></script>',
   ),
 });
 

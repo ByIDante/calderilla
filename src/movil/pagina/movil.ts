@@ -113,6 +113,21 @@ function indicador() {
   window.addEventListener("online", () => navigator.serviceWorker?.controller?.postMessage({ tipo: "mirar" }));
 }
 
+/**
+ * Las barras del sistema (la de la hora arriba y la de los gestos abajo) toman el color de «theme-color». Se pone
+ * el de la cabecera tal como sale en pantalla, y se cambia si el móvil pasa a modo oscuro con la app abierta.
+ */
+function colorDeLasBarras() {
+  const poner = () => {
+    const cabecera = $(".menu") ?? document.body;
+    const color = getComputedStyle(cabecera).backgroundColor;
+    if (!color || color === "rgba(0, 0, 0, 0)") return;
+    for (const meta of document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')) meta.content = color;
+  };
+  poner();
+  matchMedia("(prefers-color-scheme: dark)").addEventListener("change", () => requestAnimationFrame(poner));
+}
+
 /** Al volver a la app se mira si hay cambios de otro equipo; al irse, se sube enseguida lo pendiente. */
 function avisarAlServiceWorker() {
   const avisar = (tipo: string) => navigator.serviceWorker?.controller?.postMessage({ tipo });
@@ -123,6 +138,7 @@ function avisarAlServiceWorker() {
 
 void instalar();
 document.addEventListener("DOMContentLoaded", () => {
+  colorDeLasBarras();
   void navigator.storage?.persist?.();
   void vueltaDeGoogle();
   subirEnCrudo();
