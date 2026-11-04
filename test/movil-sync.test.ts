@@ -230,7 +230,7 @@ describe("el móvil y el PC sobre la misma carpeta", () => {
     await movil.comprobar();
     assert.equal(movil.estadoLocal().sucio, true, "sigue con cambios");
     reloj.avanzar(1);
-    await movil.pendiente();
+    await movil.pendiente(true);
     assert.equal(movil.estadoLocal().sucio, false);
     assert.equal(pc.comprobar()?.tipo, "descargar");
     assert.deepEqual(cuentas(pc.bd), ["Antes de subir", "Mientras sube"]);

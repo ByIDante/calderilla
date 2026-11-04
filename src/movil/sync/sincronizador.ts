@@ -65,6 +65,8 @@ export class SincronizadorMovil implements Sincronia {
   #cola: Promise<unknown> = Promise.resolve();
   #ultimaComprobacion = 0;
   #temporizador: ReturnType<typeof setTimeout> | undefined;
+  /** Se cumple cuando sale el envío programado (aunque se reprograme varias veces antes). */
+  #programado: { hecho: Promise<void>; avisar: () => void } | null = null;
   /** Las versiones descargadas para enseñarlas en un conflicto: se bajan una vez. */
   readonly #descargadas = new Map<string, Uint8Array>();
 
@@ -163,22 +165,29 @@ export class SincronizadorMovil implements Sincronia {
   /** Tras un cambio, espera un poco por si llegan más y sube una sola copia. */
   programarEnvio(esperaMs = 1_500) {
     clearTimeout(this.#temporizador);
-    this.#temporizador = setTimeout(() => {
-      this.#temporizador = undefined;
-      void this.comprobar();
-    }, esperaMs);
+    if (!this.#programado) {
+      let avisar = () => {};
+      const hecho = new Promise<void>((listo) => (avisar = listo));
+      this.#programado = { hecho, avisar };
+    }
+    this.#temporizador = setTimeout(() => void this.#enviarProgramado(), esperaMs);
+  }
+
+  async #enviarProgramado() {
+    clearTimeout(this.#temporizador);
+    this.#temporizador = undefined;
+    const programado = this.#programado;
+    this.#programado = null;
+    await this.comprobar();
+    programado?.avisar();
   }
 
   /**
-   * Termina lo que esté por hacer: adelanta el envío programado y espera a la cola. El service worker lo espera
-   * antes de que el sistema lo pare (al pasar la app a segundo plano no se puede esperar al temporizador).
+   * Espera a lo que esté por hacer: el envío programado y la cola. El service worker lo espera para que el sistema
+   * no lo pare a medias; con `adelantar`, el envío sale ya (al pasar la app a segundo plano no se puede esperar).
    */
-  async pendiente() {
-    if (this.#temporizador !== undefined) {
-      clearTimeout(this.#temporizador);
-      this.#temporizador = undefined;
-      await this.comprobar();
-    }
+  async pendiente(adelantar = false) {
+    if (this.#programado) await (adelantar ? this.#enviarProgramado() : this.#programado.hecho);
     await this.#cola;
   }
 
