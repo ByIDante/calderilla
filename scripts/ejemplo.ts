@@ -5,6 +5,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { serve } from "@hono/node-server";
+import type { BaseDatos } from "../src/datos/db.ts";
 import { sumarDias } from "../src/dominio/fechas.ts";
 
 export const HOY = "2026-10-30";
@@ -16,9 +17,6 @@ export async function arrancarEjemplo(puerto: number) {
   const { Sincronizador } = await import("../src/datos/sync.ts");
   const { crearApp } = await import("../src/servidor/app.ts");
   const { prepararBase } = await import("../src/servicios/semillas.ts");
-  const { crearRecurrente } = await import("../src/servicios/finanzas.ts");
-  const { guardarSaldo } = await import("../src/servicios/cuentas.ts");
-  const { guardarPerfil } = await import("../src/servicios/configuracion.ts");
 
   const estado = {
     ajustes: { carpetaDatos: path.join(carpeta, "datos"), equipoId: "aaaaaaaa", equipoNombre: "Revisión", puerto, abrirNavegador: false, coingeckoClave: null },
@@ -32,6 +30,27 @@ export async function arrancarEjemplo(puerto: number) {
   estado.sync = new Sincronizador({ carpetaDatos: estado.ajustes.carpetaDatos, rutaTrabajo: path.join(carpeta, "trabajo.db"), equipoId: "aaaaaaaa", equipoNombre: "Revisión", alAbrir: prepararBase });
   const bd = estado.sync.bd;
 
+  const ids = await sembrarEjemplo(bd);
+
+  const servidor = serve({ fetch: crearApp(estado).fetch, hostname: "127.0.0.1", port: puerto });
+  return {
+    base: `http://127.0.0.1:${puerto}`,
+    estado,
+    bd,
+    ids,
+    cerrar() {
+      servidor.close();
+      estado.sync?.cerrar();
+      rmSync(carpeta, { recursive: true, force: true });
+    },
+  };
+}
+
+/** Los datos de ejemplo, sobre una base ya preparada (también la usan los tests del móvil, con SQLite en WebAssembly). */
+export async function sembrarEjemplo(bd: BaseDatos) {
+  const { crearRecurrente } = await import("../src/servicios/finanzas.ts");
+  const { guardarSaldo } = await import("../src/servicios/cuentas.ts");
+  const { guardarPerfil } = await import("../src/servicios/configuracion.ts");
   const cat = (nombre: string) => bd.uno<{ id: number }>("SELECT id FROM categorias WHERE nombre = ?", nombre)!.id;
   const fijo = { fin: null, esencial: true, clase: "fijo" as const, nota: null, prestamo: null };
   guardarPerfil(bd, { estabilidad: "normal", riesgo: "moderado", tipoMarginal: 30, tipoRescate: 21, aportacionEmpresa: 0, titular: "Laura Gómez Ferrer" });
@@ -154,17 +173,5 @@ export async function arrancarEjemplo(puerto: number) {
   bd.ejecutar("INSERT INTO metas (nombre, objetivo, fecha, ahorrado) VALUES ('Entrada del piso en Valencia (20 % más gastos de notaría)', 4500000, '2030-06-01', 120000)");
   bd.ejecutar("INSERT INTO aportaciones (nombre, cuenta_id, importe, dia, inicio) VALUES ('Traspaso a Trade Republic', ?, 30000, 1, '2026-06-01')", ahorro);
   bd.ejecutar("INSERT INTO limites_categoria (categoria_id, limite) VALUES (?, 30000), (?, 6000)", cat("Alimentación"), cat("Restaurantes"));
-
-  const servidor = serve({ fetch: crearApp(estado).fetch, hostname: "127.0.0.1", port: puerto });
-  return {
-    base: `http://127.0.0.1:${puerto}`,
-    estado,
-    bd,
-    ids: { coche, moto, fondo, nomina, clases, netflix, traducciones },
-    cerrar() {
-      servidor.close();
-      estado.sync?.cerrar();
-      rmSync(carpeta, { recursive: true, force: true });
-    },
-  };
+  return { coche, moto, fondo, nomina, clases, netflix, traducciones };
 }
