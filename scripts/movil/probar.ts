@@ -137,6 +137,9 @@ for (const [oscuro, letra] of [[false, null], [true, null], [false, "DejaVu Sans
     await pagina.goto(`${base}${ruta}`);
     if (letra) await pagina.addStyleTag({ content: `* { font-family: "${letra}" !important; }` });
     for (const problema of await pagina.evaluate(revisar)) problemas.push(`${oscuro ? "oscuro " : ""}${letra ? `${letra} ` : ""}${ruta}: ${problema}`);
+    // La barra de la hora del sistema, del color de la cabecera (también en modo oscuro)
+    const barras = await pagina.evaluate(() => ({ cabecera: getComputedStyle(document.querySelector(".menu")!).backgroundColor, metas: [...document.querySelectorAll<HTMLMetaElement>('meta[name="theme-color"]')].map((m) => m.content) }));
+    if (!barras.metas.length || barras.metas.some((c) => c !== barras.cabecera)) problemas.push(`${oscuro ? "oscuro " : ""}${ruta}: la barra del sistema (${barras.metas.join(", ")}) no es del color de la cabecera (${barras.cabecera})`);
     if (capturas && !letra) await pagina.screenshot({ path: path.join(capturas, `${oscuro ? "oscuro-" : ""}${ruta === "/" ? "resumen" : ruta.slice(1)}.png`), fullPage: true });
   }
 }
