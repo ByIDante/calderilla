@@ -18,7 +18,8 @@ export const SECCIONES = [
   { ruta: "/ajustes", id: "ajustes", nombre: "Ajustes" },
 ] as const;
 
-export type Seccion = (typeof SECCIONES)[number]["id"] | "bienvenida";
+/** Las secciones del menú, la bienvenida y las dos que solo tiene el móvil («Apuntar» y «Más»). */
+export type Seccion = (typeof SECCIONES)[number]["id"] | "bienvenida" | "apuntar" | "mas";
 
 export interface Banda {
   nivel: Aviso["nivel"] | "error";

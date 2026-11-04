@@ -96,6 +96,23 @@ function exportarCompartiendo() {
   });
 }
 
+/** El indicador de arriba cambia cuando el service worker lo dice (subiendo, guardado…) o se va la conexión. */
+function indicador() {
+  const poner = (clave: string, texto: string, titulo?: string) => {
+    const enlace = $<HTMLElement>("[data-estado-sync]");
+    if (!enlace) return;
+    enlace.dataset.estadoSync = clave;
+    if (titulo) enlace.title = enlace.ariaLabel = titulo;
+    const hueco = enlace.querySelector<HTMLElement>("[data-estado-sync-texto]");
+    if (hueco) hueco.textContent = texto;
+  };
+  navigator.serviceWorker?.addEventListener("message", (evento: MessageEvent<{ tipo?: string; clave: string; texto: string; titulo: string }>) => {
+    if (evento.data?.tipo === "estado-sync") poner(evento.data.clave, evento.data.texto, evento.data.titulo);
+  });
+  window.addEventListener("offline", () => poner("sin-conexion", "Sin conexión", "Sin conexión: lo apuntado se queda en el móvil"));
+  window.addEventListener("online", () => navigator.serviceWorker?.controller?.postMessage({ tipo: "mirar" }));
+}
+
 /** Al volver a la app se mira si hay cambios de otro equipo; al irse, se sube enseguida lo pendiente. */
 function avisarAlServiceWorker() {
   const avisar = (tipo: string) => navigator.serviceWorker?.controller?.postMessage({ tipo });
@@ -110,5 +127,6 @@ document.addEventListener("DOMContentLoaded", () => {
   void vueltaDeGoogle();
   subirEnCrudo();
   exportarCompartiendo();
+  indicador();
   avisarAlServiceWorker();
 });

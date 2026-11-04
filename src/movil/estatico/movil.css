@@ -1,9 +1,216 @@
-/* Lo propio de la app instalada en el móvil (va después de estilos.css): respetar la muesca y la barra del sistema. */
-@media (display-mode: standalone) {
-  body {
-    padding-top: env(safe-area-inset-top);
-    padding-bottom: env(safe-area-inset-bottom);
-    padding-left: env(safe-area-inset-left);
-    padding-right: env(safe-area-inset-right);
+/*
+ * Lo propio de la app en el móvil (va después de estilos.css, con sus mismos colores y su modo oscuro):
+ * la cabecera con el indicador de Drive, la barra de abajo, «Apuntar» y «Más». El resto de pantallas se ven como
+ * en el navegador del móvil: tablas en una columna, tarjetas plegadas y movimientos en dos líneas.
+ */
+
+/* ── Cabecera: la marca y, a la derecha, el indicador. Las secciones van en la barra de abajo y en «Más» ── */
+.menu {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  padding: calc(10px + env(safe-area-inset-top)) calc(16px + env(safe-area-inset-right)) 10px calc(16px + env(safe-area-inset-left));
+}
+.menu ul {
+  display: none;
+}
+.marca {
+  padding: 0;
+  min-height: 34px;
+}
+main {
+  padding-left: calc(16px + env(safe-area-inset-left));
+  padding-right: calc(16px + env(safe-area-inset-right));
+  padding-bottom: calc(96px + env(safe-area-inset-bottom));
+}
+
+.estado-sync {
+  position: fixed;
+  z-index: 6;
+  top: calc(12px + env(safe-area-inset-top));
+  right: calc(16px + env(safe-area-inset-right));
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 32px;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: var(--superficie-2);
+  color: var(--tinta-suave);
+  font-size: 13px;
+  text-decoration: none;
+}
+.estado-sync-punto {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bien);
+}
+.estado-sync[data-estado-sync="pendiente"] .estado-sync-punto {
+  background: var(--aviso);
+}
+.estado-sync[data-estado-sync="subiendo"] .estado-sync-punto {
+  background: var(--info);
+  animation: latido 1s ease-in-out infinite alternate;
+}
+.estado-sync[data-estado-sync="sin-conexion"] .estado-sync-punto {
+  background: var(--apagado);
+}
+.estado-sync[data-estado-sync="revisar"] {
+  background: var(--mal-suave);
+  color: var(--mal);
+}
+.estado-sync[data-estado-sync="revisar"] .estado-sync-punto {
+  background: var(--mal);
+}
+@keyframes latido {
+  to {
+    opacity: 0.3;
   }
+}
+@media (prefers-reduced-motion: reduce) {
+  .estado-sync[data-estado-sync="subiendo"] .estado-sync-punto {
+    animation: none;
+  }
+}
+
+/* ── La barra de abajo ── */
+.barra-movil {
+  position: fixed;
+  z-index: 10;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  padding: 0 env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+  background: var(--superficie);
+  border-top: 1px solid var(--linea);
+}
+.barra-movil a {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  min-height: 58px;
+  padding: 6px 2px;
+  color: var(--tinta-suave);
+  font-size: 12px;
+  text-decoration: none;
+}
+.barra-movil a[aria-current="page"] {
+  color: var(--acento-fuerte);
+  font-weight: 600;
+}
+.barra-movil .icono {
+  width: 24px;
+  height: 24px;
+}
+.barra-movil .barra-apuntar .icono {
+  width: 40px;
+  height: 40px;
+  margin-top: -14px;
+  padding: 8px;
+  border-radius: 50%;
+  background: var(--acento);
+  color: var(--sobre-acento);
+  box-shadow: 0 2px 6px rgb(0 0 0 / 0.18);
+}
+
+/* ── Apuntar ── */
+.apuntar-importe {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+  padding: 6px 4px 10px;
+  border-bottom: 2px solid var(--linea-fuerte);
+  font-size: 40px;
+  font-weight: 700;
+}
+.apuntar-importe:focus-within {
+  border-bottom-color: var(--acento);
+}
+/* El campo grande, sin caja: solo la raya de abajo (gana a input[type="text"] de estilos.css, que va antes) */
+.apuntar-importe input[type="text"] {
+  flex: 1 1 0;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--tinta);
+  font: inherit;
+  text-align: right;
+}
+.apuntar-importe input[type="text"]:focus {
+  outline: none;
+  box-shadow: none;
+}
+.apuntar-categorias {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.apuntar-categorias input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+.apuntar-categorias label {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  padding: 8px 14px;
+  border: 1px solid var(--linea-fuerte);
+  border-radius: 999px;
+  background: var(--superficie);
+  color: var(--tinta);
+}
+.apuntar-categorias input:checked + label {
+  border-color: var(--acento);
+  background: var(--acento-suave);
+  color: var(--acento-fuerte);
+  font-weight: 600;
+}
+.apuntar-categorias input:focus-visible + label {
+  box-shadow: var(--sombra-foco);
+}
+.apuntar-fecha summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  color: var(--tinta-suave);
+}
+.apuntar-guardar {
+  width: 100%;
+  min-height: 52px;
+  font-size: 18px;
+}
+
+/* ── Más ── */
+.lista-mas {
+  list-style: none;
+  margin: 0 0 20px;
+  padding: 0;
+  border: 1px solid var(--linea);
+  border-radius: var(--radio);
+  background: var(--superficie);
+}
+.lista-mas li + li {
+  border-top: 1px solid var(--linea);
+}
+.lista-mas a {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-height: 56px;
+  justify-content: center;
+  padding: 10px 16px;
+  color: var(--tinta);
+  text-decoration: none;
 }

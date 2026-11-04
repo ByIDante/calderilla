@@ -2,6 +2,7 @@ import { Hono } from "hono";
 import { montar } from "../servidor/montar.ts";
 import { aviso, pagina } from "../servidor/vistas/comun.ts";
 import type { EstadoMovil } from "./estado.ts";
+import { rutasApuntar } from "./rutas/apuntar.ts";
 import { rutasBienvenida } from "./rutas/bienvenida.ts";
 import { rutasGoogle } from "./rutas/google.ts";
 import { rutasMovil, tarjetasEsteMovil } from "./rutas/movil.ts";
@@ -21,6 +22,7 @@ export function crearAppMovil(estado: EstadoMovil): Hono {
   rutasBienvenida(app, estado);
   montar(app, estado, { tarjetasEquipo: () => tarjetasEsteMovil(estado) });
   rutasMovil(app, estado);
+  rutasApuntar(app, estado);
 
   app.onError((error, c) => {
     console.error(error);

@@ -9,6 +9,7 @@ import { crearAppMovil } from "../app.ts";
 import { atender } from "../atender.ts";
 import { arrancar, type EstadoMovil } from "../estado.ts";
 import { arrancarSqlite } from "../sqlite/motor.ts";
+import { barraMovil, estadoIndicador } from "../vistas.ts";
 
 declare const __VERSION__: string;
 /** Lo que se guarda al instalar (lo pone la construcción): estilos, scripts, iconos y sqlite3.wasm. */
@@ -28,7 +29,7 @@ declare const self: {
   location: Location;
   navigator: Navigator;
   registration: ServiceWorkerRegistration;
-  clients: { claim(): Promise<void> };
+  clients: { claim(): Promise<void>; matchAll(): Promise<{ postMessage(mensaje: unknown): void }[]> };
   skipWaiting(): Promise<void>;
   addEventListener(tipo: "install" | "activate", oyente: (evento: EventoExtensible) => void): void;
   addEventListener(tipo: "fetch", oyente: (evento: EventoFetch) => void): void;
@@ -40,8 +41,12 @@ const ESTATICOS = new Set(__ESTATICOS__);
 /** Las páginas sueltas (la política de privacidad y las condiciones): las sirve Cloudflare tal cual. */
 const SUELTAS = new Set(["/privacidad", "/privacidad.html", "/condiciones", "/condiciones.html", "/legal.css"]);
 
+/** El estado de la app, cuando ya ha arrancado: lo usan la barra de abajo y el indicador. */
+let actual: EstadoMovil | null = null;
+
 usarPlataforma({
   viewport: "width=device-width, initial-scale=1, viewport-fit=cover",
+  menu: (seccion) => barraMovil(seccion, actual, self.navigator.onLine),
   cabecera: raw(
     '<link rel="manifest" href="/manifest.webmanifest" /><meta name="theme-color" content="#f6f4ef" /><link rel="apple-touch-icon" href="/icono-180.png" /><link rel="stylesheet" href="/estatico/movil.css" /><script src="/estatico/movil.js" defer></script>',
   ),
@@ -71,11 +76,19 @@ function preparar() {
     const wasm = await ((await cache.match("/sqlite3.wasm")) ?? (await fetch("/sqlite3.wasm"))).arrayBuffer();
     const estado = await arrancar({ almacen: almacenIndexedDb(), sqlite3: await arrancarSqlite(wasm), origen: self.location.origin });
     estado.version = __VERSION__;
+    // Las páginas abiertas cambian el indicador sin recargarse
+    estado.alCambiarSync = () => void avisarPaginas(estado);
     vigilarVersiones(estado);
+    actual = estado;
     return { app: crearAppMovil(estado), estado };
   })();
   lista.catch(() => (lista = null));
   return lista;
+}
+
+async function avisarPaginas(estado: EstadoMovil) {
+  const indicador = estadoIndicador(estado, self.navigator.onLine);
+  for (const pagina of await self.clients.matchAll()) pagina.postMessage({ tipo: "estado-sync", ...indicador });
 }
 
 /** Cuando se ha instalado una versión nueva, la banda lo avisa; al aceptar, pasa a ser la que responde. */
