@@ -1093,10 +1093,14 @@ button {
   table.tabla-apilable .numero {
     text-align: right;
   }
-  /* Tablas cortas de números que caben enteras (lo que sueles gastar): celdas más juntas */
+  /* Tablas cortas de números que caben enteras (lo que sueles gastar): celdas más juntas, y los títulos de las
+     columnas pueden ocupar dos líneas (con letras más anchas, como las de algunos móviles, si no no caben) */
   table.tabla-compacta th,
   table.tabla-compacta td {
     padding: 7px 5px;
+  }
+  table.tabla-compacta th {
+    white-space: normal;
   }
   /* Movimientos, en dos líneas: concepto e importe; debajo, la fecha y la categoría. «Borrar» está en su ficha */
   table.tabla-movimientos tr {
