@@ -25,8 +25,8 @@ jobs:
           CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
         run: |
           set -o pipefail
-          npx --yes wrangler@4.157.0 pages project create calderilla --production-branch=main || true
-          npx --yes wrangler@4.157.0 pages deploy dist-prueba --project-name=calderilla --branch=prueba | tee publicar.log
+          npx --yes wrangler@4.157.0 pages project create calderilla-app --production-branch=main || true
+          npx --yes wrangler@4.157.0 pages deploy dist-prueba --project-name=calderilla-app --branch=prueba | tee publicar.log
           # Si el nombre ya estaba cogido, Cloudflare le añade unas letras: la dirección de verdad sale en el aviso
           direccion=$(grep -oE 'https://prueba\.[a-z0-9-]+\.pages\.dev' publicar.log | head -n 1)
           echo "::notice title=Dirección de la prueba::${direccion:-no salió en la salida de wrangler}"
