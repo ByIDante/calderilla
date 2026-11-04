@@ -164,11 +164,12 @@ export function rutasOcio(app: Hono, estado: Estado) {
   app.post("/ocio/apunte", async (c) => {
     const f = await Formulario.de(c);
     const importe = f.importe("importe");
-    if (!importe || importe <= 0) return redirigir(c, "/ocio", { error: "Indica el importe del gasto." });
+    if (!importe || importe <= 0) return redirigir(c, f.texto("volver") === "/apuntar" ? "/apuntar" : "/ocio", { error: "Indica el importe del gasto." });
     const fecha = f.fecha("fecha") ?? estado.hoy();
     const categoria = f.entero("categoria");
     bd(estado).ejecutar("INSERT INTO apuntes (fecha, importe, concepto, categoria_id, origen) VALUES (?, ?, ?, ?, 'manual')", fecha, -importe, f.texto("concepto") || "Ocio", categoria);
-    return redirigir(c, "/ocio", { ok: `Apuntado: ${eur(importe)}.` });
+    // Desde «Apuntar» del móvil se vuelve allí, para apuntar otro seguido
+    return redirigir(c, f.texto("volver") === "/apuntar" ? "/apuntar" : "/ocio", { ok: `Apuntado: ${eur(importe)}.` });
   });
 
   app.post("/apuntes/:id/borrar", (c) => {
