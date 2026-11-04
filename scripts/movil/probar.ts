@@ -3,7 +3,7 @@
 // versión nueva. No toca tus datos ni tu Drive. Construye ella misma las dos versiones que usa y, al acabar,
 // deja dist-movil como estaba antes de la versión nueva.
 //
-//   node scripts/movil/probar.ts [--copia ruta/a/una/copia.db]
+//   node scripts/movil/probar.ts [--copia ruta/a/una/copia.db] [--capturas carpeta]
 //
 // Con --copia, en lugar de los datos de ejemplo usa esa copia (por ejemplo, una COPIA de las tuyas): así se ve que
 // tus datos de verdad se abren bien en el móvil. Solo se lee; tu carpeta no se toca.
@@ -14,6 +14,7 @@ import path from "node:path";
 import { chromium, devices, type Route } from "playwright-core";
 import { driveFalso } from "../../test/ayuda-carpetas.ts";
 import { sembrarEjemplo } from "../ejemplo.ts";
+import { revisar } from "../revision.ts";
 
 const raiz = path.join(import.meta.dirname, "..", "..");
 const SALIDA = path.join(raiz, "dist-movil");
@@ -114,6 +115,21 @@ while (pendientes.length && vistas.size < 150) {
   for (const enlace of enlaces) if (!/^\/(estatico|drive\/conectar|privacidad|condiciones|ajustes\/exportar)/.test(enlace) && !vistas.has(enlace.split("#")[0]!)) pendientes.push(enlace.split("#")[0]!);
 }
 comprobar(rotas.length === 0 && vistas.size > 30, `${vistas.size} pantallas sin errores${rotas.length ? `; fallan: ${rotas.join(", ")}` : ""}`);
+
+console.log("Las pantallas en el móvil, en claro y en oscuro");
+// Lo mismo que revisar-pantallas: nada se sale, se lee bien y se puede pulsar con el dedo
+const capturas = process.argv.includes("--capturas") ? path.resolve(process.argv[process.argv.indexOf("--capturas") + 1]!) : null;
+const problemas: string[] = [];
+for (const oscuro of [false, true]) {
+  await pagina.emulateMedia({ colorScheme: oscuro ? "dark" : "light" });
+  for (const ruta of ["/", "/ocio", "/apuntar", "/movimientos", "/mas", "/gastos", "/ajustes"]) {
+    await pagina.goto(`${base}${ruta}`);
+    for (const problema of await pagina.evaluate(revisar)) problemas.push(`${oscuro ? "oscuro " : ""}${ruta}: ${problema}`);
+    if (capturas) await pagina.screenshot({ path: path.join(capturas, `${oscuro ? "oscuro-" : ""}${ruta === "/" ? "resumen" : ruta.slice(1)}.png`), fullPage: true });
+  }
+}
+await pagina.emulateMedia({ colorScheme: "light" });
+comprobar(problemas.length === 0, `sin problemas de tamaño, contraste ni dedos${problemas.length ? `:\n    ${problemas.join("\n    ")}` : ""}`);
 
 console.log("Apuntar");
 await pagina.goto(`${base}/ocio`);

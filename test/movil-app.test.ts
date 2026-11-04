@@ -15,6 +15,7 @@ import { CABECERA_CRUDO, type DatosCrudo } from "../src/movil/crudo.ts";
 import { arrancar, type EstadoMovil } from "../src/movil/estado.ts";
 import { CLIENTE_GOOGLE, PERMISO_DRIVE } from "../src/movil/google.ts";
 import { arrancarSqlite, MotorWasm } from "../src/movil/sqlite/motor.ts";
+import { barraMovil, estadoIndicador } from "../src/movil/vistas.ts";
 import { prepararBase } from "../src/servicios/semillas.ts";
 import { driveFalso } from "./ayuda-carpetas.ts";
 
@@ -181,6 +182,45 @@ describe("la app en el móvil", () => {
     assert.equal(extracto.status, 303);
     assert.match(extracto.headers.get("location") ?? "", /^\/importar\/[0-9a-f]{24}/, "pasa a elegir las columnas");
     await terminar();
+  });
+
+  it("«Apuntar»: el importe en grande, las categorías que más usas primero, y vuelve para apuntar otro", async () => {
+    const pagina = await texto("/apuntar");
+    assert.match(pagina, /inputmode="decimal"/);
+    const categorias = [...pagina.matchAll(/<label for="cat-\d+">([^<]+)<\/label>/g)].map((m) => m[1]);
+    const masUsada = estado.sync!.bd.uno<{ nombre: string }>(
+      "SELECT c.nombre FROM apuntes a JOIN categorias c ON c.id = a.categoria_id WHERE a.importe < 0 AND a.fecha >= date(?, '-90 days') AND c.tipo != 'ingreso' GROUP BY c.id ORDER BY count(*) DESC LIMIT 1",
+      HOY,
+    )!.nombre;
+    assert.equal(categorias[0], masUsada);
+    assert.ok(!categorias.includes("Nómina"), "solo categorías de gasto");
+    const id = /id="cat-(\d+)"[^>]*checked/.exec(pagina)?.[1];
+    const respuesta = await pedir("/ocio/apunte", { cuerpo: { volver: "/apuntar", importe: "4,20", concepto: "Churros", categoria: id! } });
+    assert.equal(respuesta.headers.get("location")?.split("?")[0], "/apuntar");
+    assert.equal(mensaje(respuesta), "Apuntado: 4,20\u00a0€.");
+    assert.match(await texto("/apuntar"), /Churros<\/a><span class="numero">4,20\s€/);
+    assert.equal((await pedir("/ocio/apunte", { cuerpo: { volver: "https://otra-web.example/", importe: "1" } })).headers.get("location")?.split("?")[0], "/ocio", "solo vuelve a «Apuntar»");
+    await terminar();
+  });
+
+  it("«Más» lleva al resto de secciones y dice si todo está en Drive", async () => {
+    const mas = await texto("/mas");
+    for (const ruta of ["/gastos", "/cuentas", "/inversiones", "/metas", "/calculadora", "/anio", "/importar", "/ajustes"]) assert.match(mas, new RegExp(`href="${ruta}"`));
+    assert.match(mas, /Guardado en Drive/);
+  });
+
+  it("la barra de abajo marca dónde estás y el indicador dice si está guardado", async () => {
+    await terminar();
+    assert.equal(estadoIndicador(estado, true).clave, "guardado");
+    assert.equal(estadoIndicador(estado, false).clave, "sin-conexion");
+    const barra = String(await barraMovil("gastos", estado, true));
+    assert.match(barra, /href="\/mas" class="" aria-current="page"/, "lo que no tiene botón propio, en «Más»");
+    assert.match(String(await barraMovil("apuntar", estado, true)), /href="\/apuntar" class="barra-apuntar" aria-current="page"/);
+    assert.equal(String(await barraMovil("bienvenida", estado, true)), "", "en la bienvenida no hay barra");
+    estado.sync!.bd.ejecutar("INSERT INTO cuentas (nombre, tipo) VALUES ('Sin subir', 'corriente')");
+    assert.equal(estadoIndicador(estado, true).clave, "pendiente");
+    estado.sync!.bd.ejecutar("DELETE FROM cuentas WHERE nombre = 'Sin subir'");
+    await estado.sync!.comprobar();
   });
 
   it("Ajustes enseña «Este móvil» y nada de lo que solo tiene el PC", async () => {
