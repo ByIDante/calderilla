@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Calderilla</title>
+    <meta name="description" content="Las cuentas de casa, en tu móvil y en tu ordenador, sin que tus datos salgan de lo tuyo." />
+    <meta name="theme-color" content="#f6f4ef" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="/icono-180.png" />
+    <link rel="icon" href="/estatico/icono.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="/legal.css" />
+    <script src="/estatico/movil.js" defer></script>
+  </head>
+  <body>
+    <!-- Lo que se ve la primera vez, hasta que el service worker toma el control y la app responde -->
+    <main>
+      <a class="marca" href="/"><img src="/estatico/icono.svg" alt="" />Calderilla</a>
+      <h1>Las cuentas de casa, sin que tus datos salgan de lo tuyo</h1>
+      <p>
+        Calderilla es una app de finanzas personales: apuntas lo que gastas y lo que ingresas, importas los extractos del banco y ves cuánto te queda para el
+        ocio, cómo van tus metas y tu patrimonio.
+      </p>
+      <div class="tarjeta">
+        <p data-preparando>Preparando la app: la primera vez se descarga lo necesario para que funcione también sin conexión. En unos segundos se abre sola.</p>
+        <noscript><p>Para usar Calderilla hace falta JavaScript.</p></noscript>
+      </div>
+      <footer>
+        <p>
+          <a href="/privacidad">Política de privacidad</a> · <a href="/condiciones">Condiciones de uso</a> ·
+          <a href="https://github.com/ByIDante/calderilla">Código fuente en GitHub</a>
+        </p>
+      </footer>
+    </main>
+  </body>
+</html>

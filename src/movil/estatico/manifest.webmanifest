@@ -1,0 +1,17 @@
+{
+  "id": "/",
+  "name": "Calderilla",
+  "short_name": "Calderilla",
+  "description": "Las cuentas de casa, en tu móvil y en tu ordenador, sin que tus datos salgan de lo tuyo.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#f6f4ef",
+  "theme_color": "#f6f4ef",
+  "lang": "es",
+  "icons": [
+    { "src": "/icono-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icono-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icono-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

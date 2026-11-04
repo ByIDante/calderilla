@@ -1,0 +1,9 @@
+/* Lo propio de la app instalada en el móvil (va después de estilos.css): respetar la muesca y la barra del sistema. */
+@media (display-mode: standalone) {
+  body {
+    padding-top: env(safe-area-inset-top);
+    padding-bottom: env(safe-area-inset-bottom);
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+}

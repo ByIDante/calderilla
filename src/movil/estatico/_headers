@@ -1,0 +1,16 @@
+# Cabeceras de Cloudflare Pages. Las páginas de la app las genera el service worker, que pone las suyas
+# (movil/seguridad.ts). El propio sw.js no lleva política de contenido: le limitaría hablar con Google Drive.
+/sw.js
+  Cache-Control: no-cache
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: same-origin
+  X-Frame-Options: DENY
+/
+  Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; frame-ancestors 'none'; form-action 'self'
+/index.html
+  Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'self'; frame-ancestors 'none'; form-action 'self'
+/privacidad
+  Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'none'; frame-ancestors 'none'; form-action 'none'
+/condiciones
+  Content-Security-Policy: default-src 'self'; img-src 'self' data:; style-src 'self'; script-src 'none'; frame-ancestors 'none'; form-action 'none'
