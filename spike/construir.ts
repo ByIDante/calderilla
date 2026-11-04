@@ -14,5 +14,6 @@ const comun = { bundle: true, platform: "browser" as const, target: ["es2022", "
 await build({ ...comun, entryPoints: [path.join(import.meta.dirname, "sw.ts")], outfile: path.join(salida, "sw.js"), format: "iife", define: { __VERSION__: JSON.stringify(version), "import.meta.url": "self.location.href" } });
 await build({ ...comun, entryPoints: [path.join(import.meta.dirname, "pagina.ts")], outfile: path.join(salida, "pagina.js"), format: "iife" });
 cpSync(path.join(raiz, "node_modules/@sqlite.org/sqlite-wasm/dist/sqlite3.wasm"), path.join(salida, "sqlite3.wasm"));
+cpSync(path.join(raiz, "node_modules/htmx.org/dist/htmx.min.js"), path.join(salida, "htmx.min.js"));
 cpSync(path.join(import.meta.dirname, "estatico"), salida, { recursive: true });
 console.log(`Prueba construida en ${salida} (versión ${version})`);

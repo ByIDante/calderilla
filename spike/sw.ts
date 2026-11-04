@@ -4,13 +4,14 @@
 import sqlite3InitModule from "@sqlite.org/sqlite-wasm";
 import { Hono } from "hono";
 import { html, raw } from "hono/html";
+import { euros, importeEditable, leerImporte } from "../src/dominio/dinero.ts";
 
 declare const __VERSION__: string;
 declare const self: any;
 
 const VERSION = __VERSION__;
 const CACHE = `prueba-${VERSION}`;
-const ESTATICOS = ["/pagina.js", "/estilos.css", "/sqlite3.wasm", "/manifest.webmanifest", "/icono-180.png", "/icono-192.png", "/icono-512.png"];
+const ESTATICOS = ["/pagina.js", "/htmx.min.js", "/estilos.css", "/sqlite3.wasm", "/manifest.webmanifest", "/icono-180.png", "/icono-192.png", "/icono-512.png"];
 
 // ── Ciclo de vida: guarda lo necesario para funcionar sin conexión ──
 self.addEventListener("install", (e: any) => {
@@ -117,6 +118,15 @@ async function persistir(m: Motor): Promise<{ exportar: number; guardar: number;
 type Entorno = { original: Request; evento: any };
 const app = new Hono<{ Bindings: Entorno }>();
 const ms = (n: number) => `${n.toFixed(0)} ms`;
+const bien = (cierto: boolean, si: unknown, no: unknown) => (cierto ? html`<p class="ok">✓ ${si}</p>` : html`<p class="mal">✗ ${no}</p>`);
+
+// Las mismas cabeceras de seguridad que en el PC (src/servidor/seguridad.ts), para ver que htmx y la página funcionan con ellas
+app.use(async (c, next) => {
+  await next();
+  c.header("Content-Security-Policy", "default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; frame-ancestors 'none'; form-action 'self'");
+  c.header("X-Content-Type-Options", "nosniff");
+  c.header("X-Frame-Options", "DENY");
+});
 
 function pagina(titulo: string, cuerpo: unknown) {
   return html`<!doctype html>
@@ -129,6 +139,7 @@ function pagina(titulo: string, cuerpo: unknown) {
         <link rel="apple-touch-icon" href="/icono-180.png" />
         <title>${titulo} · Prueba de Calderilla</title>
         <link rel="stylesheet" href="/estilos.css" />
+        <script src="/htmx.min.js" defer></script>
         <script src="/pagina.js" defer></script>
       </head>
       <body>
@@ -141,8 +152,16 @@ function pagina(titulo: string, cuerpo: unknown) {
     </html>`;
 }
 
+// Los importes se escriben y se leen con el mismo código que en el PC: se comprueba que el móvil da lo mismo que Node
+const FORMATO: [number, string][] = [
+  [123450, "1.234,50\u00a0€"],
+  [-5430, "-54,30\u00a0€"],
+  [1234567, "12.345,67\u00a0€"],
+];
+
 app.get("/", async (c) => {
   const m = await motor();
+  const formatoIgual = FORMATO.every(([centimos, texto]) => euros(centimos) === texto);
   const filas = m.db.selectObjects("SELECT fecha, importe, concepto FROM apuntes ORDER BY id DESC LIMIT 10");
   const total = m.db.selectValue("SELECT count(*) FROM apuntes");
   return c.html(
@@ -160,12 +179,15 @@ app.get("/", async (c) => {
         <h2>Apunta algo (${total} apuntes guardados)</h2>
         <form method="post" action="/apuntes">
           <input name="concepto" placeholder="Concepto" required />
-          <input name="importe" inputmode="decimal" placeholder="Importe" required />
+          <input name="importe" inputmode="decimal" placeholder="Importe, por ejemplo 1.234,56" required />
           <button type="submit">Guardar (formulario normal)</button>
         </form>
         <ul>
-          ${filas.map((f: any) => html`<li>${f.fecha} · ${f.concepto} · ${(f.importe / 100).toFixed(2)} €</li>`)}
+          ${filas.map((f: any) => html`<li>${f.fecha} · ${f.concepto} · ${euros(f.importe)}</li>`)}
         </ul>
+        <div data-formato>
+          ${bien(formatoIgual, "Los importes salen como en el PC", html`Los importes no salen como en el PC: ${FORMATO.map(([centimos]) => euros(centimos)).join(" · ")}`)}
+        </div>
         <p class="nota">Cierra la app del todo (deslizando hacia arriba), vuelve a abrirla y mira que siguen aquí. Prueba también sin conexión.</p>`,
     ),
   );
@@ -174,7 +196,7 @@ app.get("/", async (c) => {
 app.post("/apuntes", async (c) => {
   const m = await motor();
   const f = await c.req.parseBody();
-  const importe = Math.round(Number(String(f.importe ?? "0").replace(",", ".")) * 100);
+  const importe = leerImporte(String(f.importe ?? "")) ?? 0;
   m.db.exec({ sql: "INSERT INTO apuntes (fecha, importe, concepto) VALUES (?, ?, ?)", bind: [new Date().toISOString().slice(0, 16).replace("T", " "), importe, String(f.concepto ?? "")] });
   await persistir(m);
   return c.redirect("/?guardado=1", 303);
@@ -213,7 +235,7 @@ app.post("/tiempos/llenar", async (c) => {
   return c.redirect("/tiempos", 303);
 });
 
-// S3: lo que ve el service worker de cada petición (para elegir cómo protegerse sin cookies)
+// S3: guardar y redirigir, sin htmx y con él, y lo que ve el service worker de cada petición (para protegerse sin cookies)
 function cabecerasDe(original: Request) {
   const filas: [string, string][] = [
     ["método", original.method],
@@ -223,44 +245,87 @@ function cabecerasDe(original: Request) {
     ["credentials", original.credentials],
     ...[...original.headers.entries()].map(([k, v]) => [`cabecera ${k}`, v] as [string, string]),
   ];
-  return html`<table>${filas.map(([k, v]) => html`<tr><td>${k}</td><td>${v || "—"}</td></tr>`)}</table>`;
+  return html`<details>
+    <summary>Ver lo que vio el service worker</summary>
+    <table>${filas.map(([k, v]) => html`<tr><td>${k}</td><td>${v || "—"}</td></tr>`)}</table>
+  </details>`;
 }
+const deLaApp = (original: Request) => original.referrer.startsWith(`${self.location.origin}/`);
+const hora = () => new Date().toLocaleTimeString("es-ES");
+
 app.get("/cabeceras", (c) =>
   c.html(
     pagina(
       "Guardar y redirigir",
-      html`<p>Esta petición (GET de navegación):</p>
-        ${cabecerasDe(c.env.original)}
-        <h2>Con un formulario normal</h2>
-        <form method="post" action="/cabeceras/enviado"><input name="dato" value="hola" /><button type="submit">Enviar (navegación)</button></form>
-        <h2>Con htmx</h2>
-        <form data-htmx-prueba><input name="dato" value="hola" /><button type="submit">Enviar (fetch, como htmx)</button></form>
-        <div data-resultado-fetch></div>`,
+      html`<p>Tres formas de guardar un formulario. Cada una dice debajo si ha funcionado.</p>
+        <h2>A · Formulario normal</h2>
+        <p class="nota">Cambia de página y dice si el service worker sabe que viene de la app.</p>
+        <form method="post" action="/cabeceras/enviado"><input name="dato" value="hola" /><button type="submit">Enviar (formulario normal)</button></form>
+        <h2>B · Con htmx, cambiando solo un trozo</h2>
+        <p class="nota">No cambia de página: debajo del botón tiene que salir un ✓ con la hora.</p>
+        <form hx-post="/cabeceras/htmx" hx-target="#resultado-htmx"><input name="dato" value="hola" /><button type="submit">Enviar con htmx</button></form>
+        <div id="resultado-htmx"></div>
+        <h2>C · Con htmx, como guarda la app</h2>
+        <p class="nota">Guarda y lleva a otra página sin recargar, como al guardar un gasto en el PC.</p>
+        <div hx-boost="true">
+          <form method="post" action="/cabeceras/guardar"><input name="dato" value="hola" /><button type="submit">Guardar con htmx</button></form>
+        </div>`,
     ),
   ),
 );
-app.post("/cabeceras/enviado", (c) => {
-  const info = cabecerasDe(c.env.original);
-  if (c.env.original.mode !== "navigate") return c.html(html`<h2>Lo que vio el service worker (fetch)</h2>${info}`);
-  return c.html(pagina("Lo que vio el service worker (formulario)", html`${info}<p><a href="/cabeceras/redirigir">Probar ahora una redirección 303</a></p>`));
-});
-app.get("/cabeceras/redirigir", (c) => c.redirect("/cabeceras/llegada?desde=redireccion", 303));
-app.get("/cabeceras/llegada", (c) =>
-  c.html(pagina("Redirección", html`<p class="ok">Has llegado tras una redirección del service worker (${c.req.query("desde")}).</p><p>¿Se ve bien la dirección de arriba en el navegador?</p>`)),
+app.post("/cabeceras/enviado", (c) =>
+  c.html(
+    pagina(
+      "A · Formulario normal",
+      html`${bien(c.env.original.mode === "navigate", "Ha llegado como un formulario normal", `Ha llegado como «${c.env.original.mode}»`)}
+        ${bien(deLaApp(c.env.original), "El service worker sabe que viene de una página de la app", "El service worker no sabe de dónde viene")}
+        ${cabecerasDe(c.env.original)}
+        <p><a href="/cabeceras/redirigir">Probar ahora una redirección</a> · <a href="/cabeceras">Volver</a></p>`,
+    ),
+  ),
 );
+app.post("/cabeceras/htmx", (c) =>
+  c.html(
+    html`${bien(c.req.header("hx-request") === "true", `htmx funciona: el service worker ha contestado sin recargar la página (${hora()})`, "Ha llegado, pero no como htmx")}
+    ${bien(deLaApp(c.env.original), "El service worker sabe que viene de una página de la app", "El service worker no sabe de dónde viene")}
+    ${cabecerasDe(c.env.original)}`,
+  ),
+);
+app.post("/cabeceras/guardar", (c) => c.redirect("/cabeceras/llegada?desde=htmx", 303));
+app.get("/cabeceras/redirigir", (c) => c.redirect("/cabeceras/llegada?desde=redireccion", 303));
+app.get("/cabeceras/llegada", (c) => {
+  const desde = c.req.query("desde");
+  const conHtmx = c.req.header("hx-request") === "true";
+  return c.html(
+    pagina(
+      "Has llegado",
+      html`${desde === "htmx"
+          ? bien(conHtmx, "Guardado con htmx y redirigido sin recargar la página", "Has llegado, pero recargando la página entera")
+          : bien(true, "La redirección funciona", "")}
+        <div data-direccion data-esperada="/cabeceras/llegada?desde=${desde}"></div>
+        <p><a href="/cabeceras">Volver</a></p>`,
+    ),
+  );
+});
 
-// S5: subir un archivo, en multipart (lo normal) y en crudo (leído en la página)
+// S5: subir un archivo, en multipart (lo normal) y en crudo (leído en la página). Lo que acepta, como en el PC
+const ACEPTA = ".csv,.txt,.xls,.xlsx,.ods";
 app.get("/subir", (c) =>
   c.html(
     pagina(
       "Subir un archivo",
-      html`<h2>A · Formulario normal (multipart)</h2>
+      html`<p>Elige el extracto que descargas de la web de tu banco (.xls, .xlsx o .csv). Si no tienes ninguno en el móvil, vale cualquier .csv o .txt.</p>
+        <p class="nota">El archivo no sale del móvil: la prueba solo mira que llega entero y no lo guarda.</p>
+        <h2>A · Formulario normal</h2>
+        <p class="nota">En iPhone puede fallar: por eso está la B, que es como lo hará la app.</p>
         <form method="post" action="/subir/multipart" enctype="multipart/form-data">
-          <input type="file" name="archivo" accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" required />
+          <input type="file" name="archivo" accept="${ACEPTA}" required data-medir />
+          <input type="hidden" name="tamano" />
           <button type="submit">Subir</button>
         </form>
-        <h2>B · Leído en la página y enviado en crudo</h2>
-        <input type="file" data-subir-crudo accept=".csv,.xlsx,.xls,text/csv,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" />
+        <h2>B · Como lo hará la app</h2>
+        <p class="nota">Se sube nada más elegirlo.</p>
+        <input type="file" data-subir-crudo accept="${ACEPTA}" />
         <div data-resultado-crudo></div>`,
     ),
   ),
@@ -269,33 +334,51 @@ app.post("/subir/multipart", async (c) => {
   try {
     const f = await c.req.parseBody();
     const archivo = f.archivo as File | undefined;
-    return c.html(pagina("Multipart", archivo && typeof archivo !== "string" ? html`<p class="ok">Llegó «${archivo.name}»: ${archivo.size} bytes.</p>` : html`<p class="mal">No llegó el archivo (cuerpo vacío o sin campo).</p>`));
+    const llego = archivo && typeof archivo !== "string" ? archivo : null;
+    const tamano = Number(f.tamano);
+    return c.html(
+      pagina(
+        "A · Formulario normal",
+        html`${bien(Boolean(llego) && llego!.size === tamano, `Ha llegado entero: «${llego?.name}», ${llego?.size} bytes`, llego ? `Ha llegado «${llego.name}» con ${llego.size} bytes, y pesaba ${tamano}` : "No ha llegado el archivo")}
+          <p><a href="/subir">Volver</a></p>`,
+      ),
+    );
   } catch (error) {
-    return c.html(pagina("Multipart", html`<p class="mal">Falló al leer el formulario: ${String(error)}</p>`));
+    return c.html(pagina("A · Formulario normal", html`<p class="mal">✗ Falló al leer el formulario: ${String(error)}</p><p><a href="/subir">Volver</a></p>`));
   }
 });
 app.post("/subir/crudo", async (c) => {
   const bytes = new Uint8Array(await c.req.arrayBuffer());
   const nombre = decodeURIComponent(c.req.header("x-archivo") ?? "");
-  return c.json({ nombre, bytes: bytes.byteLength, primeros: [...bytes.slice(0, 8)] });
+  return c.json({ nombre, bytes: bytes.byteLength });
 });
 
-// S6: un archivo para compartir (como «Exportar todo»)
+// S6: sacar un archivo del móvil (como «Exportar a JSON»): compartirlo en JSON o en CSV, o descargarlo como en el PC
 app.get("/compartir", (c) =>
   c.html(
     pagina(
       "Compartir un archivo",
-      html`<p>Toca «Preparar» y luego «Compartir»: debería salir el menú de compartir del móvil con un archivo JSON («Guardar en Archivos», AirDrop, WhatsApp…).</p>
-        <button type="button" data-preparar-archivo>1 · Preparar</button>
-        <button type="button" data-compartir-archivo disabled>2 · Compartir</button>
-        <p data-resultado-compartir></p>`,
+      html`<p>Prueba los tres botones. Al compartir tiene que salir el menú del móvil (Drive, WhatsApp, «Guardar en Archivos»…); si lo cierras sin elegir nada también vale.</p>
+        <p data-preparado class="nota">Preparando el archivo…</p>
+        <p><button type="button" data-compartir="json" disabled>Compartir el JSON</button></p>
+        <p data-resultado-compartir="json"></p>
+        <p><button type="button" data-compartir="csv" disabled>Compartir en CSV</button></p>
+        <p data-resultado-compartir="csv"></p>
+        <p><a class="boton" href="/compartir/archivo?descargar=1">Descargar el JSON (como «Exportar» en el PC)</a></p>
+        <p class="nota">Al descargar, mira si aparece en Descargas o en la app Archivos.</p>`,
     ),
   ),
 );
+async function apuntesExportados() {
+  return (await motor()).db.selectObjects("SELECT fecha, importe, concepto FROM apuntes ORDER BY id") as { fecha: string; importe: number; concepto: string }[];
+}
 app.get("/compartir/archivo", async (c) => {
-  const m = await motor();
-  const filas = m.db.selectObjects("SELECT fecha, importe, concepto FROM apuntes ORDER BY id");
-  return c.json({ exportado: new Date().toISOString(), apuntes: filas });
+  if (c.req.query("descargar")) c.header("Content-Disposition", `attachment; filename="calderilla-prueba.json"`);
+  return c.json({ exportado: new Date().toISOString(), apuntes: await apuntesExportados() });
+});
+app.get("/compartir/archivo.csv", async (c) => {
+  const lineas = (await apuntesExportados()).map((a) => [a.fecha, a.concepto.replaceAll(";", ","), importeEditable(a.importe)].join(";"));
+  return c.body(["fecha;concepto;importe", ...lineas].join("\n"), 200, { "Content-Type": "text/csv; charset=utf-8" });
 });
 
 // S7: Google Drive (el ID de cliente se escribe aquí durante la prueba) y precios
@@ -405,17 +488,20 @@ app.post("/drive/precios", async (c) => {
   const probar = async (nombre: string, url: string) => {
     try {
       const r = await fetch(url);
-      return [nombre, `${r.status} · ${(await r.text()).slice(0, 120)}`];
+      return [nombre, r.ok, `${r.status} · ${(await r.text()).slice(0, 120)}`] as const;
     } catch (error) {
-      return [nombre, `falló: ${String(error)}`];
+      return [nombre, false, `falló: ${String(error)}`] as const;
     }
   };
   const filas = await Promise.all([
     probar("CoinGecko", "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=eur"),
     probar("BCE", "https://data-api.ecb.europa.eu/service/data/EXR/D.USD.EUR.SP00.A?lastNObservations=1&format=csvdata"),
-    probar("Frankfurter", "https://api.frankfurter.app/latest?from=USD&to=EUR"),
+    // Las mismas direcciones que usa el PC (src/precios/fuentes.ts)
+    probar("Frankfurter", "https://api.frankfurter.dev/v1/latest?base=EUR&symbols=USD"),
   ]);
-  return c.html(pagina("Precios desde el móvil", html`<table>${filas.map(([k, v]) => html`<tr><td>${k}</td><td>${v}</td></tr>`)}</table><p><a href="/drive">Volver</a></p>`));
+  return c.html(
+    pagina("Precios desde el móvil", html`<table>${filas.map(([k, ok, v]) => html`<tr><td class="${ok ? "ok" : "mal"}">${ok ? "✓" : "✗"} ${k}</td><td>${v}</td></tr>`)}</table><p><a href="/drive">Volver</a></p>`),
+  );
 });
 
 // S8: versión nueva
