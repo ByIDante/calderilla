@@ -1,6 +1,8 @@
 import type { Hono } from "hono";
 import type { Estado } from "./estado.ts";
+import { rutasAjustes } from "./rutas/ajustes.ts";
 import { rutasCalculadora } from "./rutas/calculadora.ts";
+import { rutasCopias } from "./rutas/copias.ts";
 import { rutasCuentas } from "./rutas/cuentas.ts";
 import { rutasGastos } from "./rutas/gastos.ts";
 import { rutasImportar } from "./rutas/importar.ts";
@@ -9,10 +11,15 @@ import { rutasMetas } from "./rutas/metas.ts";
 import { rutasMovimientos } from "./rutas/movimientos.ts";
 import { rutasOcio } from "./rutas/ocio.ts";
 import { rutasResumen } from "./rutas/resumen.ts";
-import { aviso, pagina } from "./vistas/comun.ts";
+import { aviso, pagina, type Html } from "./vistas/comun.ts";
+
+export interface OpcionesMontar {
+  /** Las tarjetas de Ajustes propias de la plataforma («Este ordenador» en el PC). */
+  tarjetasEquipo: () => Html;
+}
 
 /** La puerta de entrada y las pantallas que comparten el PC y el móvil, en el orden en que se registran. */
-export function montar(app: Hono, estado: Estado) {
+export function montar(app: Hono, estado: Estado, opciones: OpcionesMontar) {
   // Sin carpeta de datos solo se puede ir al asistente; con un conflicto pendiente, solo a resolverlo
   app.use(async (c, next) => {
     const ruta = c.req.path;
@@ -37,4 +44,6 @@ export function montar(app: Hono, estado: Estado) {
   rutasInversiones(app, estado);
   rutasMetas(app, estado);
   rutasCalculadora(app, estado);
+  rutasAjustes(app, estado, opciones.tarjetasEquipo);
+  rutasCopias(app, estado);
 }

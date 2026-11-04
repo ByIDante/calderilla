@@ -7,8 +7,8 @@ import type { Sincronizador } from "../datos/sync.ts";
 import { diasParaCaducar, leerBancos } from "../bancos/conexiones.ts";
 import { render, type Estado as EstadoComun } from "./estado.ts";
 import { montar } from "./montar.ts";
-import { rutasAjustes } from "./rutas/ajustes.ts";
 import { rutasBancos } from "./rutas/bancos.ts";
+import { rutasCarpeta, tarjetasEquipo } from "./rutas/carpeta.ts";
 import { seguridad } from "./seguridad.ts";
 import { aviso, botonAccion, pagina, type Banda } from "./vistas/comun.ts";
 
@@ -66,8 +66,8 @@ export function crearApp(estado: Estado): Hono {
     return c.body(readFileSync(rutaEstatico(estatico.archivo)), 200, { "Content-Type": estatico.tipo, "Cache-Control": "no-cache" });
   });
 
-  montar(app, estado);
-  rutasAjustes(app, estado);
+  montar(app, estado, { tarjetasEquipo: () => tarjetasEquipo(estado) });
+  rutasCarpeta(app, estado);
   rutasBancos(app, estado);
 
   app.get("/reiniciar", (c) =>
