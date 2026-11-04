@@ -16,6 +16,9 @@
     "prepare": "git config core.hooksPath .githooks || exit 0",
     "revisar-pantallas": "node scripts/revisar-pantallas.ts",
     "probar-recorridos": "node scripts/probar-recorridos.ts",
+    "movil:construir": "node scripts/movil/construir.ts",
+    "movil:servir": "node scripts/movil/servir.ts",
+    "movil:probar": "node scripts/movil/probar.ts",
     "paquete-windows": "node scripts/paquete-windows.ts"
   },
   "dependencies": {

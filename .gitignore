@@ -10,3 +10,5 @@ config.json
 /VERSION
 /.actualizacion/
 /.actualizacion-anterior/
+/dist-movil/
+/dist-prueba/
