@@ -64,22 +64,23 @@ function medir() {
 }
 
 function subirCrudo() {
-  const entrada = $<HTMLInputElement>("[data-subir-crudo]");
-  entrada?.addEventListener("change", async () => {
-    const archivo = entrada.files?.[0];
-    const hueco = $<HTMLElement>("[data-resultado-crudo]")!;
-    if (!archivo) return;
-    try {
-      const respuesta = await fetch("/subir/crudo", { method: "POST", body: await archivo.arrayBuffer(), headers: { "Content-Type": "application/octet-stream", "X-Archivo": encodeURIComponent(archivo.name) } });
-      const llego: { nombre: string; bytes: number } = await respuesta.json();
-      hueco.innerHTML =
-        llego.bytes === archivo.size && llego.nombre === archivo.name
-          ? `<p class="ok">✓ Ha llegado entero: «${llego.nombre}», ${llego.bytes} bytes</p>`
-          : `<p class="mal">✗ Ha llegado «${llego.nombre}» con ${llego.bytes} bytes, y pesaba ${archivo.size}</p>`;
-    } catch (error) {
-      hueco.innerHTML = `<p class="mal">✗ No se pudo subir: ${String(error)}</p>`;
-    }
-  });
+  for (const entrada of document.querySelectorAll<HTMLInputElement>("[data-subir-crudo]")) {
+    const hueco = $<HTMLElement>(`[data-resultado-crudo="${entrada.dataset.subirCrudo}"]`)!;
+    entrada.addEventListener("change", async () => {
+      const archivo = entrada.files?.[0];
+      if (!archivo) return;
+      try {
+        const respuesta = await fetch("/subir/crudo", { method: "POST", body: await archivo.arrayBuffer(), headers: { "Content-Type": "application/octet-stream", "X-Archivo": encodeURIComponent(archivo.name) } });
+        const llego: { nombre: string; bytes: number } = await respuesta.json();
+        hueco.innerHTML =
+          llego.bytes === archivo.size && llego.nombre === archivo.name
+            ? `<p class="ok">✓ Ha llegado entero: «${llego.nombre}», ${llego.bytes} bytes (tipo «${archivo.type || "ninguno"}»)</p>`
+            : `<p class="mal">✗ Ha llegado «${llego.nombre}» con ${llego.bytes} bytes, y pesaba ${archivo.size}</p>`;
+      } catch (error) {
+        hueco.innerHTML = `<p class="mal">✗ No se pudo subir: ${String(error)}</p>`;
+      }
+    });
+  }
 }
 
 // Los archivos se preparan al abrir la página: compartir exige que se llame justo al tocar el botón

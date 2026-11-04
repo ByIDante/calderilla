@@ -308,25 +308,37 @@ app.get("/cabeceras/llegada", (c) => {
   );
 });
 
-// S5: subir un archivo, en multipart (lo normal) y en crudo (leído en la página). Lo que acepta, como en el PC
-const ACEPTA = ".csv,.txt,.xls,.xlsx,.ods";
+// S5: subir un archivo, en multipart (lo normal) y en crudo (leído en la página). A usa el filtro del PC; Android a veces
+// da a los CSV otro tipo («text/comma-separated-values») y los deja sin poder elegir, así que B prueba un filtro con los
+// tipos además de las extensiones, y C ninguno
+const ACEPTA_PC = ".csv,.txt,.xls,.xlsx,.ods";
+const ACEPTA_AMPLIO = [
+  ACEPTA_PC,
+  "text/csv,text/comma-separated-values,application/csv,text/plain",
+  "application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.oasis.opendocument.spreadsheet",
+].join(",");
 app.get("/subir", (c) =>
   c.html(
     pagina(
       "Subir un archivo",
-      html`<p>Elige el extracto que descargas de la web de tu banco (.xls, .xlsx o .csv). Si no tienes ninguno en el móvil, vale cualquier .csv o .txt.</p>
+      html`<p>Elige el extracto que descargas de la web de tu banco (.xls, .xlsx o .csv). Si no tienes ninguno, en <a href="/compartir">S6 · Compartir</a> pulsa «Descargar en CSV» y te queda uno en Descargas.</p>
         <p class="nota">El archivo no sale del móvil: la prueba solo mira que llega entero y no lo guarda.</p>
-        <h2>A · Formulario normal</h2>
-        <p class="nota">En iPhone puede fallar: por eso está la B, que es como lo hará la app.</p>
+        <p>Prueba las tres y apunta en cuáles <b>te deja elegir el archivo</b>: es lo que más me interesa.</p>
+        <h2>A · Formulario normal, con el filtro del PC</h2>
+        <p class="nota">En iPhone puede fallar al subir: por eso están la B y la C, que son como lo hará la app.</p>
         <form method="post" action="/subir/multipart" enctype="multipart/form-data">
-          <input type="file" name="archivo" accept="${ACEPTA}" required data-medir />
+          <input type="file" name="archivo" accept="${ACEPTA_PC}" required data-medir />
           <input type="hidden" name="tamano" />
           <button type="submit">Subir</button>
         </form>
-        <h2>B · Como lo hará la app</h2>
+        <h2>B · Como lo hará la app, con un filtro más amplio</h2>
         <p class="nota">Se sube nada más elegirlo.</p>
-        <input type="file" data-subir-crudo accept="${ACEPTA}" />
-        <div data-resultado-crudo></div>`,
+        <input type="file" data-subir-crudo="amplio" accept="${ACEPTA_AMPLIO}" />
+        <div data-resultado-crudo="amplio"></div>
+        <h2>C · Como lo hará la app, sin filtro</h2>
+        <p class="nota">Deja elegir cualquier archivo.</p>
+        <input type="file" data-subir-crudo="todo" />
+        <div data-resultado-crudo="todo"></div>`,
     ),
   ),
 );
@@ -358,14 +370,15 @@ app.get("/compartir", (c) =>
   c.html(
     pagina(
       "Compartir un archivo",
-      html`<p>Prueba los tres botones. Al compartir tiene que salir el menú del móvil (Drive, WhatsApp, «Guardar en Archivos»…); si lo cierras sin elegir nada también vale.</p>
+      html`<p>Prueba los cuatro botones. Al compartir tiene que salir el menú del móvil (Drive, WhatsApp, «Guardar en Archivos»…); si lo cierras sin elegir nada también vale.</p>
         <p data-preparado class="nota">Preparando el archivo…</p>
         <p><button type="button" data-compartir="json" disabled>Compartir el JSON</button></p>
         <p data-resultado-compartir="json"></p>
         <p><button type="button" data-compartir="csv" disabled>Compartir en CSV</button></p>
         <p data-resultado-compartir="csv"></p>
         <p><a class="boton" href="/compartir/archivo?descargar=1">Descargar el JSON (como «Exportar» en el PC)</a></p>
-        <p class="nota">Al descargar, mira si aparece en Descargas o en la app Archivos.</p>`,
+        <p><a class="boton" href="/compartir/archivo.csv?descargar=1">Descargar en CSV</a></p>
+        <p class="nota">Al descargar, mira si aparece en Descargas o en la app Archivos. El JSON es una copia de lo apuntado, no un extracto: para probar «Subir» usa el CSV.</p>`,
     ),
   ),
 );
@@ -377,6 +390,7 @@ app.get("/compartir/archivo", async (c) => {
   return c.json({ exportado: new Date().toISOString(), apuntes: await apuntesExportados() });
 });
 app.get("/compartir/archivo.csv", async (c) => {
+  if (c.req.query("descargar")) c.header("Content-Disposition", `attachment; filename="calderilla-prueba.csv"`);
   const lineas = (await apuntesExportados()).map((a) => [a.fecha, a.concepto.replaceAll(";", ","), importeEditable(a.importe)].join(";"));
   return c.body(["fecha;concepto;importe", ...lineas].join("\n"), 200, { "Content-Type": "text/csv; charset=utf-8" });
 });

@@ -74,14 +74,18 @@ await pagina.setInputFiles("form[enctype] input[type=file]", csv);
 await pagina.click("form[enctype] button");
 comprobar(/✓ Ha llegado entero: «prueba-calderilla\.csv», 54 bytes/.test(await textoDe()), "subir un archivo con un formulario multipart (en Chrome)");
 await pagina.goto(`${base}/subir`);
-await pagina.setInputFiles("[data-subir-crudo]", csv);
-await pagina.waitForSelector("[data-resultado-crudo] p");
-comprobar(/✓ Ha llegado entero/.test(await textoDe("[data-resultado-crudo]")), "subir un archivo leído en la página y enviado en crudo");
+for (const filtro of ["amplio", "todo"]) {
+  await pagina.setInputFiles(`[data-subir-crudo="${filtro}"]`, csv);
+  await pagina.waitForSelector(`[data-resultado-crudo="${filtro}"] p`);
+  comprobar(/✓ Ha llegado entero/.test(await textoDe(`[data-resultado-crudo="${filtro}"]`)), `subir un archivo leído en la página y enviado en crudo (filtro ${filtro})`);
+}
 
 await pagina.goto(`${base}/compartir`);
 await pagina.waitForSelector("text=/Listo para compartir|no tiene el menú/");
 const [descarga] = await Promise.all([pagina.waitForEvent("download"), pagina.click("text=Descargar el JSON")]);
 comprobar(descarga.suggestedFilename() === "calderilla-prueba.json", "descargar el JSON como «Exportar» del PC");
+const [descargaCsv] = await Promise.all([pagina.waitForEvent("download"), pagina.click("text=Descargar en CSV")]);
+comprobar(descargaCsv.suggestedFilename() === "calderilla-prueba.csv", "descargar en CSV");
 const enCsv = await pagina.evaluate(async () => (await fetch("/compartir/archivo.csv")).text());
 comprobar(/^fecha;concepto;importe\n.*;Café;1234,50$/.test(enCsv), "el CSV para compartir sale con los apuntes");
 
