@@ -10,15 +10,18 @@ import { bd, render, type Estado } from "../estado.ts";
 import { Formulario, idDe, redirigir } from "../formulario.ts";
 import { botonAccion, campo, casilla, eur, selector, vacio } from "../vistas/comun.ts";
 
-interface Pendiente {
+export interface Pendiente {
   archivo: string;
   filas: Filas;
   cuentaId: number | null;
   creado: number;
 }
 
-/** Extractos subidos a la espera de confirmar las columnas (solo en memoria, 1 hora). */
-const pendientes = new Map<string, Pendiente>();
+/**
+ * Extractos subidos a la espera de confirmar las columnas (solo en memoria, 1 hora). Se exporta para el móvil,
+ * que tiene que guardarlos aparte: el sistema puede parar la app entre subir el archivo y confirmar.
+ */
+export const pendientes = new Map<string, Pendiente>();
 const CADUCIDAD_MS = 3_600_000;
 const TAMANO_MAXIMO = 10 * 1024 * 1024;
 
