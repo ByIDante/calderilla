@@ -1,17 +1,18 @@
-import { readdirSync, readFileSync } from "node:fs";
-import path from "node:path";
 import { DatabaseSync, type SQLInputValue } from "node:sqlite";
+import { migraciones } from "./migraciones.ts";
 
 export type Valor = SQLInputValue;
 
-const CARPETA_MIGRACIONES = path.join(import.meta.dirname, "migraciones");
-
-/** Migraciones en orden: 001_inicial.sql, 002_….sql. Su número es la versión del esquema (PRAGMA user_version). */
-function migraciones(): { version: number; sql: string }[] {
-  return readdirSync(CARPETA_MIGRACIONES)
-    .filter((archivo) => /^\d{3}_.+\.sql$/.test(archivo))
-    .sort()
-    .map((archivo) => ({ version: Number(archivo.slice(0, 3)), sql: readFileSync(path.join(CARPETA_MIGRACIONES, archivo), "utf8") }));
+/** Lo que BaseDatos necesita de un motor de SQLite: node:sqlite en el PC, SQLite en WebAssembly en el móvil. */
+export interface Motor {
+  exec(sql: string): void;
+  prepare(sql: string): {
+    all(...parametros: Valor[]): unknown[];
+    get(...parametros: Valor[]): unknown;
+    run(...parametros: Valor[]): { changes: number | bigint; lastInsertRowid: number | bigint };
+  };
+  readonly isOpen: boolean;
+  close(): void;
 }
 
 export const VERSION_ESQUEMA = Math.max(0, ...migraciones().map((m) => m.version));
@@ -21,12 +22,13 @@ export class VersionNuevaError extends Error {}
 /** Envoltorio fino sobre node:sqlite, para poder cambiar de motor sin tocar el resto. */
 export class BaseDatos {
   readonly ruta: string;
-  readonly #db: DatabaseSync;
+  readonly #db: Motor;
   #profundidad = 0;
 
-  constructor(ruta: string, opciones: { soloLectura?: boolean } = {}) {
+  /** Con `motor`, usa ese (ya abierto) en lugar de abrir el archivo de `ruta`, que entonces solo sirve de nombre. */
+  constructor(ruta: string, opciones: { soloLectura?: boolean; motor?: Motor } = {}) {
     this.ruta = ruta;
-    this.#db = new DatabaseSync(ruta, { readOnly: opciones.soloLectura ?? false });
+    this.#db = opciones.motor ?? new DatabaseSync(ruta, { readOnly: opciones.soloLectura ?? false });
     if (opciones.soloLectura) return;
     // Sin WAL: la base es un único archivo que se puede copiar con seguridad cuando no hay transacciones abiertas
     this.#db.exec("PRAGMA journal_mode = DELETE; PRAGMA foreign_keys = ON;");
