@@ -114,6 +114,18 @@ async function compartir() {
   }
 }
 
+// Los formularios que tardan (Drive) se envían una sola vez: un segundo toque lanzaría otra prueba a medias
+function unaVez() {
+  for (const formulario of document.querySelectorAll<HTMLFormElement>("[data-una-vez]")) {
+    formulario.addEventListener("submit", () => {
+      const boton = formulario.querySelector<HTMLButtonElement>("button");
+      if (!boton) return;
+      setTimeout(() => (boton.disabled = true));
+      boton.textContent = "Probando… tarda unos segundos";
+    });
+  }
+}
+
 async function vueltaDeGoogle() {
   const hueco = $<HTMLElement>("[data-vuelta-google]");
   if (!hueco) return;
@@ -134,5 +146,6 @@ document.addEventListener("DOMContentLoaded", () => {
   medir();
   subirCrudo();
   compartir();
+  unaVez();
   vueltaDeGoogle();
 });

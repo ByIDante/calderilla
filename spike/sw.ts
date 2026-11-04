@@ -412,7 +412,7 @@ app.get("/drive", async (c) => {
               <p>${vigente ? html`<span class="ok">Conectado (caduca a las ${new Date(token!.caduca).toLocaleTimeString("es-ES")})</span>` : "Sin conectar"}</p>`
           : html`<p class="nota">Pon primero el ID de cliente de Google.</p>`}
         ${vigente
-          ? html`<form method="post" action="/drive/probar"><button type="submit">Buscar mis carpetas «copias» y probar leer, subir, renombrar y borrar</button></form>`
+          ? html`<form method="post" action="/drive/probar" data-una-vez><button type="submit">Buscar mis carpetas «copias» y probar leer, subir, renombrar y borrar</button></form>`
           : ""}
         <h2>Precios desde el móvil</h2>
         <form method="post" action="/drive/precios"><button type="submit">Probar CoinGecko, BCE y Frankfurter</button></form>`,
@@ -455,48 +455,70 @@ async function drive(ruta: string, opciones: RequestInit = {}): Promise<Response
   const token = await leer<{ valor: string }>("token");
   return fetch(`https://www.googleapis.com${ruta}`, { ...opciones, headers: { ...(opciones.headers as Record<string, string>), Authorization: `Bearer ${token?.valor}` } });
 }
+const enJson = async (r: Response) => ({ ok: r.ok, estado: r.status, datos: await r.json().catch(() => ({})) });
+const esPrueba = (nombre: string) => nombre.startsWith("prueba-movil-");
+
 app.post("/drive/probar", async (c) => {
-  const pasos: [string, string][] = [];
-  const paso = (que: string, resultado: string) => pasos.push([que, resultado]);
+  const pasos: [boolean, string, string][] = [];
+  const paso = (ok: boolean, que: string, resultado: string) => pasos.push([ok, que, resultado]);
+  const tabla = () =>
+    c.html(
+      pagina(
+        "Prueba de Drive",
+        html`<table>${pasos.map(([ok, k, v]) => html`<tr><td class="${ok ? "ok" : "mal"}">${ok ? "✓" : "✗"} ${k}</td><td>${v}</td></tr>`)}</table><p><a href="/drive">Volver</a></p>`,
+      ),
+    );
   try {
+    // Cada carpeta «copias», con el nombre de la carpeta que la contiene y sus copias: se elige la que tiene la copia más nueva
     const q = encodeURIComponent("name = 'copias' and mimeType = 'application/vnd.google-apps.folder' and trashed = false");
-    const carpetas = await (await drive(`/drive/v3/files?q=${q}&fields=files(id,name,parents)&pageSize=20`)).json();
-    paso("Carpetas «copias»", JSON.stringify(carpetas.files ?? carpetas));
-    const carpeta = carpetas.files?.[0];
-    if (carpeta) {
+    const carpetas = await enJson(await drive(`/drive/v3/files?q=${q}&fields=files(id,parents)&pageSize=20`));
+    if (!carpetas.ok) return (paso(false, "Buscar carpetas «copias»", `${carpetas.estado} · ${JSON.stringify(carpetas.datos)}`), tabla());
+    const encontradas: { id: string; ruta: string; copias: { id: string; name: string; size: string }[]; pruebas: { id: string; name: string }[] }[] = [];
+    for (const carpeta of carpetas.datos.files ?? []) {
+      const padre = carpeta.parents?.[0] ? (await enJson(await drive(`/drive/v3/files/${carpeta.parents[0]}?fields=name`))).datos.name : null;
       const q2 = encodeURIComponent(`'${carpeta.id}' in parents and trashed = false`);
-      const lista = await (await drive(`/drive/v3/files?q=${q2}&fields=files(id,name,size)&orderBy=name desc&pageSize=5`)).json();
-      paso("Últimas copias", (lista.files ?? []).map((f: any) => `${f.name} (${f.size} B)`).join(" · ") || JSON.stringify(lista));
-      const ultima = lista.files?.find((f: any) => f.name.endsWith(".db"));
-      if (ultima) {
-        const t0 = performance.now();
-        const bytes = new Uint8Array(await (await drive(`/drive/v3/files/${ultima.id}?alt=media`)).arrayBuffer());
-        paso("Descargar la última", `${bytes.byteLength} bytes en ${ms(performance.now() - t0)}; empieza por «${new TextDecoder().decode(bytes.slice(0, 15))}»`);
-        // Se abre con SQLite para ver que se lee (sin tocar tu base de la prueba)
-        const m = await motor();
-        const otra = new m.sqlite3.oo1.DB(":memory:");
-        const p = m.sqlite3.wasm.allocFromTypedArray(bytes);
-        otra.checkRc(m.sqlite3.capi.sqlite3_deserialize(otra.pointer, "main", p, bytes.byteLength, bytes.byteLength, m.sqlite3.capi.SQLITE_DESERIALIZE_FREEONCLOSE));
-        paso("Abrirla con SQLite", `${otra.selectValue("SELECT count(*) FROM apuntes")} apuntes, esquema ${otra.selectValue("PRAGMA user_version")}`);
-        otra.close();
-      }
-      // Subir, renombrar y mandar a la papelera un archivo de prueba (no toca las copias)
-      const limite = "calderilla" + Math.random().toString(36).slice(2);
-      const meta = { name: `prueba-movil-${Date.now()}.txt`, parents: [carpeta.id] };
-      const cuerpo = `--${limite}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${limite}\r\nContent-Type: text/plain\r\n\r\nPrueba de Calderilla desde el móvil\r\n--${limite}--`;
-      const subido = await (await drive("/upload/drive/v3/files?uploadType=multipart&fields=id,name", { method: "POST", headers: { "Content-Type": `multipart/related; boundary=${limite}` }, body: cuerpo })).json();
-      paso("Subir un archivo de prueba", JSON.stringify(subido));
-      if (subido.id) {
-        const renombrado = await (await drive(`/drive/v3/files/${subido.id}?fields=name`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: `${meta.name}.renombrado` }) })).json();
-        paso("Renombrarlo", JSON.stringify(renombrado));
-        const papelera = await (await drive(`/drive/v3/files/${subido.id}?fields=trashed`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trashed: true }) })).json();
-        paso("Mandarlo a la papelera", JSON.stringify(papelera));
-      }
+      const archivos = (await enJson(await drive(`/drive/v3/files?q=${q2}&fields=files(id,name,size)&orderBy=name desc&pageSize=200`))).datos.files ?? [];
+      encontradas.push({ id: carpeta.id, ruta: `${padre ?? "?"}/copias`, copias: archivos.filter((f: any) => f.name.endsWith(".db")), pruebas: archivos.filter((f: any) => esPrueba(f.name)) });
     }
+    paso(encontradas.length > 0, "Carpetas «copias»", encontradas.map((f) => `${f.ruta} (${f.copias.length} ${f.copias.length === 1 ? "copia" : "copias"})`).join(" · ") || "ninguna");
+    const carpeta = encontradas.filter((f) => f.copias.length).sort((x, y) => y.copias[0]!.name.localeCompare(x.copias[0]!.name))[0];
+    if (!carpeta) return tabla();
+    paso(true, "La que se usa", `${carpeta.ruta}: la última es ${carpeta.copias[0]!.name}`);
+
+    // Los archivos de prueba que quedaron de otras veces (por ejemplo, si se tocó el botón dos veces) van a la papelera
+    if (carpeta.pruebas.length) {
+      const limpias = await Promise.all(carpeta.pruebas.map(async (f) => (await drive(`/drive/v3/files/${f.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trashed: true }) })).ok));
+      paso(limpias.every(Boolean), "Limpiar pruebas anteriores", `${limpias.filter(Boolean).length} de ${limpias.length} archivos a la papelera`);
+    }
+
+    const ultima = carpeta.copias[0]!;
+    const t0 = performance.now();
+    const bytes = new Uint8Array(await (await drive(`/drive/v3/files/${ultima.id}?alt=media`)).arrayBuffer());
+    const cabecera = new TextDecoder().decode(bytes.slice(0, 15));
+    paso(cabecera === "SQLite format 3", "Descargar la última", `${bytes.byteLength} bytes en ${ms(performance.now() - t0)}`);
+    // Se abre con SQLite para ver que se lee (sin tocar la base de la prueba)
+    const m = await motor();
+    const otra = new m.sqlite3.oo1.DB(":memory:");
+    const p = m.sqlite3.wasm.allocFromTypedArray(bytes);
+    otra.checkRc(m.sqlite3.capi.sqlite3_deserialize(otra.pointer, "main", p, bytes.byteLength, bytes.byteLength, m.sqlite3.capi.SQLITE_DESERIALIZE_FREEONCLOSE));
+    paso(true, "Abrirla con SQLite", `${otra.selectValue("SELECT count(*) FROM apuntes")} apuntes, esquema ${otra.selectValue("PRAGMA user_version")}`);
+    otra.close();
+
+    // Subir, renombrar y mandar a la papelera un archivo de prueba (no toca las copias)
+    const limite = "calderilla" + Math.random().toString(36).slice(2);
+    const meta = { name: `prueba-movil-${Date.now()}.txt`, parents: [carpeta.id] };
+    const cuerpo = `--${limite}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${limite}\r\nContent-Type: text/plain\r\n\r\nPrueba de Calderilla desde el móvil\r\n--${limite}--`;
+    const subido = await enJson(await drive("/upload/drive/v3/files?uploadType=multipart&fields=id,name", { method: "POST", headers: { "Content-Type": `multipart/related; boundary=${limite}` }, body: cuerpo }));
+    paso(subido.ok, "Subir un archivo de prueba", subido.ok ? subido.datos.name : `${subido.estado} · ${JSON.stringify(subido.datos)}`);
+    if (!subido.ok) return tabla();
+    const renombrado = await enJson(await drive(`/drive/v3/files/${subido.datos.id}?fields=name`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ name: `${meta.name}.renombrado` }) }));
+    paso(renombrado.datos.name === `${meta.name}.renombrado`, "Renombrarlo", renombrado.ok ? renombrado.datos.name : `${renombrado.estado} · ${JSON.stringify(renombrado.datos)}`);
+    const papelera = await enJson(await drive(`/drive/v3/files/${subido.datos.id}?fields=trashed`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ trashed: true }) }));
+    paso(papelera.datos.trashed === true, "Mandarlo a la papelera", papelera.datos.trashed === true ? "hecho" : `${papelera.estado} · ${JSON.stringify(papelera.datos)}`);
   } catch (error) {
-    paso("Error", String(error));
+    paso(false, "Error", String(error));
   }
-  return c.html(pagina("Prueba de Drive", html`<table>${pasos.map(([k, v]) => html`<tr><td>${k}</td><td>${v}</td></tr>`)}</table><p><a href="/drive">Volver</a></p>`));
+  return tabla();
 });
 app.post("/drive/precios", async (c) => {
   const probar = async (nombre: string, url: string) => {
